@@ -1,6 +1,5 @@
-from PySide6.QtWidgets import  QWidget, QVBoxLayout, QScrollArea, QLabel
+from PySide6.QtWidgets import  QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy
 from PySide6.QtCore import Qt
-
 
 from app.Plotting.line import SpectrumPlot, TRPLPlot
 from app.Plotting.map import MapPlot
@@ -13,6 +12,10 @@ class PlotArea(QWidget):
         self.spectrum = None
         self.trpl = None
         self.map = None
+        self.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Preferred
+        )
         self._build()
 
     def _build(self):
@@ -21,7 +24,7 @@ class PlotArea(QWidget):
 
         # Scroll area
         self.scroll = ScrollArea()
-        self.scroll.setWidgetResizable(False)
+        self.scroll.setWidgetResizable(True)
         # self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         # Widget inside the scroll area
@@ -40,24 +43,19 @@ class PlotArea(QWidget):
     def _get_or_create(self, plot_type):
         if plot_type == 'spectrum' and self.spectrum is None:
             self.spectrum = SpectrumPlot(self.main)
-            self.spectrum.setFixedSize(1280, 960)
+            # self.spectrum.setFixedSize(1280, 960)
             self.layout.addWidget(self.spectrum,alignment=Qt.AlignHCenter)
             
         elif plot_type == 'trpl' and self.trpl is None:
             self.trpl = TRPLPlot(self.main)
-            self.trpl.setFixedSize(1280, 960)
+            # self.trpl.setFixedSize(1280, 960)
             self.layout.addWidget(self.trpl,alignment=Qt.AlignHCenter)
             
         elif plot_type == 'map' and self.map is None:
             self.map = MapPlot(self.main)
             self.map.setFixedSize(800, 500)
             self.layout.addWidget(self.map,alignment=Qt.AlignHCenter)
-            
-    def scroll_fix(self):
-        self.layout.invalidate()
-        self.layout.activate()
-        self.scroll.widget().adjustSize()
-        self.scroll.widget().updateGeometry()
+        self.layout.addStretch()
         
     def add(self, filepath, dataset):
         self._get_or_create(dataset.measure_type)
@@ -68,7 +66,6 @@ class PlotArea(QWidget):
             self.trpl.add(filepath, dataset)
         elif dataset.measure_type == 'map':
             self.map.add(filepath, dataset)
-        self.scroll_fix()
 
     def remove(self, filepath, dataset):
         if dataset.measure_type == 'spectrum' and self.spectrum:
@@ -91,7 +88,6 @@ class PlotArea(QWidget):
                 self.layout.removeWidget(self.map)
                 self.map.deleteLater()
                 self.map = None
-        self.scroll_fix()
 
 
 class ScrollArea(QScrollArea):

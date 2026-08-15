@@ -7,8 +7,8 @@ from app.ui.plot_area import PlotArea
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("My App")
-        self.resize(1200, 800)
+        self.setWindowTitle("PL ViewerV2")
+        # self.resize(1200, 800)
 
         self.selected_files = []
         self.datasets = {}

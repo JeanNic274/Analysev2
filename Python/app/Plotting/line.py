@@ -1,12 +1,17 @@
 
 
 import numpy as np
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy
 from PySide6.QtCore import QSize
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from app.Plotting.utils import *
+import matplotlib.pyplot as plt
+plt.rcParams.update({
+    "font.size": 16,
+    "legend.fontsize": 11,
+})
 
 class SpectrumPlot(QWidget):
     def __init__(self, main_window):
@@ -14,8 +19,15 @@ class SpectrumPlot(QWidget):
         self.main = main_window
         self.lines = {} 
         self.original_y = {}
+        sizePolicy = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        sizePolicy.setHeightForWidth(True)
+        self.setSizePolicy(sizePolicy)
         self._build()
         
+    def sizeHint(self):
+        return QSize(1200,800)
+    def heightForWidth(self, width):
+        return width * 0.75
     
     def _build(self):
         main_layout = QHBoxLayout(self)
@@ -52,7 +64,6 @@ class SpectrumPlot(QWidget):
         self.ax.set_xlabel("Wavelength (nm)")
         self.ax.set_ylabel("Intensity (a.u.)")
         self.ax.set_title("Spectrum")
-
         graph_layout.addWidget(self.toolbar)
         graph_layout.addWidget(self.canvas)
 
@@ -106,7 +117,15 @@ class TRPLPlot(QWidget):
         super().__init__()
         self.main = main_window
         self.lines = {}   # { filepath: Line2D }
+        sizePolicy = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        sizePolicy.setHeightForWidth(True)
+        self.setSizePolicy(sizePolicy)
         self._build()
+        
+    def sizeHint(self):
+        return QSize(1200,800)
+    def heightForWidth(self, width):
+        return width * 0.75
 
     def _build(self):
         layout = QVBoxLayout(self)
