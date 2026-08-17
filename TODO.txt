@@ -1,0 +1,6 @@
+Buttons:
+    log
+    save
+    fit
+ok title
+    hlines vlines

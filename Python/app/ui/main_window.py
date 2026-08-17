@@ -20,9 +20,9 @@ class MainWindow(QMainWindow):
         self.layout.setContentsMargins(0, 0, 0, 0)
 
         self.sidebar = Sidebar(self)
-        self.plot_area = PlotArea(self)  # add when ready
-        self.toolbar = Toolbar(self)  # add when ready
+        self.plot_area = PlotArea(self)  
+        self.toolbar = Toolbar(self)  
 
         self.layout.addWidget(self.sidebar)
         self.layout.addWidget(self.plot_area)
-        self.layout.addWidget(self.toolbar)
+        self.layout.addWidget(self.toolbar)#
