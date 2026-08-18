@@ -7,6 +7,7 @@ import re
 
 from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
 from app.Processing.data_import import Data_Set_Import
+from app.Processing.misc import reset_idx
 
             
 
@@ -95,7 +96,6 @@ class Sidebar(QWidget):
 
         path = self.fs_model.filePath(source_index)
 
-        self._update_label()
         if path in self.main.selected_files:
             self.main.selected_files.remove(path)
             dataset = self.main.datasets.pop(path)
@@ -105,11 +105,15 @@ class Sidebar(QWidget):
             self.main.selected_files.append(path)
             self.main.datasets[path] = dataset
             self.main.plot_area.add(path, dataset)
+        self._update_label()
         
     def _clear_selection(self):
         self.main.selected_files = []
         self.tree.clearSelection()
         self._update_label()
+        for filepath in self.main.selected_files.copy():
+            self.remove(filepath)
+        reset_idx()
 
     # def _on_plot(self):
     #     self.main.plot_area.plot(self.main.selected_files)

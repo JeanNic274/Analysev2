@@ -27,15 +27,19 @@ class SpectrumPlot(QWidget):
         self.yaxis='count_cor'
         self.x_lab="Wavelength (nm)"
         self.y_lab="Counts/s"
+        self.xlim=None
+        self.ylim=None
         self.title=0
         self.datasets={}
+        self.vlines=[]
+        self.hlines=[]
         self.colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
         self.available_colors = list(self.colors)
         self.used_colors = {}
         super().__init__()
         self.main = main_window
         self.lines = {} 
-        self.original_y = {}
+        self.original_d = {}
         sizePolicy = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
         sizePolicy.setHeightForWidth(True)
         self.setSizePolicy(sizePolicy)
@@ -64,10 +68,23 @@ class SpectrumPlot(QWidget):
         btn_ev_nm_swap.clicked.connect(self.ev_nm_swap)
         btn_title = QPushButton("Set Title")
         btn_title.clicked.connect(self.set_title)
+        btn_xlim = QPushButton("Set x lim")
+        btn_xlim.clicked.connect(self.set_xlim)
+        btn_ylim = QPushButton("Set y lim")
+        btn_ylim.clicked.connect(self.set_ylim)
+        btn_axvline = QPushButton("Ax V Line")
+        btn_axvline.clicked.connect(self.axvline)
+        btn_axhline = QPushButton("Ax H Line")
+        btn_axhline.clicked.connect(self.axhline)
+
 
         button_layout.addWidget(btn_normalize)
         button_layout.addWidget(btn_ev_nm_swap)
         button_layout.addWidget(btn_title)
+        button_layout.addWidget(btn_xlim)
+        button_layout.addWidget(btn_ylim)
+        button_layout.addWidget(btn_axvline)
+        button_layout.addWidget(btn_axhline)
         button_layout.addStretch()
 
         # -----------------
@@ -82,10 +99,6 @@ class SpectrumPlot(QWidget):
         self.ax.margins(0,0.01)
     
         self.gen_axis() 
-
-        if self.title:
-            set_fig_title(self.figure,self.title,self.lines.values()[0])
-        # self.ax.set_title("Spectrum")
         
         self.figure.set_layout_engine('tight')
         
@@ -98,37 +111,88 @@ class SpectrumPlot(QWidget):
         main_layout.addLayout(button_layout)
         main_layout.addLayout(graph_layout, 1)
         
-    def add(self, filepath, dataset):
-        if not self.available_colors:
-            # Reuse colors after cycle
-            self.available_colors = list(self.colors)
-            
-        color = self.available_colors.pop(0)
-        self.datasets[filepath]=dataset
-        label = filepath.replace("\\", "/").split("/")[-1]
-        line, = self.ax.plot(dataset.data[self.xaxis], dataset.data[self.yaxis],color=color, label=label)
-        self.lines[filepath] = line
-        self.used_colors[filepath] = color
-        self.original_y[filepath] = dataset.data[self.yaxis].copy()
-        self._refresh()
+    def axhline(self):
+        text, ok = QInputDialog.getText(self,"AxHLine", "Enter y coordinates separated by commas:")
 
-    def remove(self, filepath):
-        if filepath not in self.lines:
+        if not ok:
             return
 
-        self.lines[filepath].remove()
+        # Remove existing lines
+        for line in self.hlines:
+            line.remove()
 
-        color = self.used_colors.pop(filepath)
-        self.available_colors.insert(0, color)
+        self.hlines.clear()
 
-        del self.lines[filepath]
-        self._refresh()
+        if not text.strip():
+            self._refresh()
+            return
+
+        try:
+            y_values = [
+                float(y.strip())
+                for y in text.split(',')
+                if y.strip()
+            ]
+        except ValueError:
+            return
+        for y in y_values:
+            self.hlines.append(self.ax.axhline(y,color='k',alpha=0.7))
+        self._refresh()     
+         
+    def axvline(self):
+        text, ok = QInputDialog.getText(self,"AxVLine", "Enter x coordinates separated by commas:")
+
+        if not ok:
+            return
+
+        # Remove existing lines
+        for line in self.vlines:
+            line.remove()
+
+        self.vlines.clear()
+
+        if not text.strip():
+            self._refresh()
+            return
+
+        try:
+            x_values = [
+                float(x.strip())
+                for x in text.split(',')
+                if x.strip()
+            ]
+        except ValueError:
+            return
+        for x in x_values:
+            self.vlines.append(self.ax.axvline(x,color='k',alpha=0.7))
+        self._refresh()      
 
     def normalize(self):
-        normalize_lines(self.lines,self.original_y)
+        normalize_lines(self.lines,self.original_d,xlim=self.xlim,xaxis=self.xaxis,yaxis=self.yaxis)
         self._refresh()
-
-
+        
+    def set_title(self):
+        title, ok = QInputDialog.getText(self, 'Title', 'Enter title, if multiple attributes, separate with a comma.')
+        if title and ok:
+            set_fig_title(self.figure,title,[*self.datasets.values()][0])
+            self._refresh()
+               
+    def set_xlim(self):
+        self.xlim, ok = QInputDialog.getText(self, 'Set x axis limits', 'Enter x axis limits, seperated by comma. \nLeave a side empty for no change.')
+        if self.xlim and ok:
+            set_ax_lim(self.ax,self.xlim,x=True)
+        self._refresh()         
+        self.xlim=self.ax.get_xlim()   
+         
+    def set_ylim(self):
+        self.ylim, ok = QInputDialog.getText(self, 'Set y axis limits', 'Enter y axis limits, seperated by comma. \nLeave a side empty for no change.')
+        if self.ylim and ok:
+            set_ax_lim(self.ax,self.ylim,y=True)
+        self._refresh() 
+        self.ylim=self.ax.get_ylim() 
+        
+    def y_offset(self):
+        return
 
     def _refresh(self):
         if self.lines:
@@ -136,8 +200,10 @@ class SpectrumPlot(QWidget):
         else:
             self.ax.legend().remove() if self.ax.get_legend() else None
         self.ax.relim()
-        self.ax.autoscale(enable=True, axis='x')
-        self.ax.autoscale(enable=True, axis='y')
+        if not self.xlim:
+            self.ax.autoscale(enable=True, axis='x')
+        if not self.ylim:
+            self.ax.autoscale(enable=True, axis='y')
         self.ax.autoscale_view()
         self.canvas.draw()
         self.canvas.flush_events()
@@ -206,11 +272,32 @@ class SpectrumPlot(QWidget):
                 self.ax_ev.xaxis.set_minor_locator(ticker.MultipleLocator(5))
                 self.ax.xaxis.set_minor_locator(ticker.MultipleLocator(0.02))
         
-    def set_title(self):
-        title, ok = QInputDialog.getText(self, 'Title', 'Enter title, if multiple attributes, separate with a comma.')
-        set_fig_title(self.figure,title,[*self.datasets.values()][0])
+    def add(self, filepath, dataset):
+        if not self.available_colors:
+            # Reuse colors after cycle
+            self.available_colors = list(self.colors)
+            
+        color = self.available_colors.pop(0)
+        self.datasets[filepath]=dataset
+        label = filepath.replace("\\", "/").split("/")[-1]
+        label = dataset.number +', ' + dataset.name
+        line, = self.ax.plot(dataset.data[self.xaxis], dataset.data[self.yaxis],color=color, label=label)
+        self.lines[filepath] = line
+        self.used_colors[filepath] = color
+        self.original_d[filepath] = dataset.data.copy()
         self._refresh()
-        
+
+    def remove(self, filepath):
+        if filepath not in self.lines:
+            return
+
+        self.lines[filepath].remove()
+
+        color = self.used_colors.pop(filepath)
+        self.available_colors.insert(0, color)
+
+        del self.lines[filepath]
+        self._refresh()
         
         
         

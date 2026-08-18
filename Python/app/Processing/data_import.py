@@ -75,7 +75,7 @@ class Data_Set_Import:
         self.filepath = file_paths
         self.name=os.path.basename(file_paths[0])[:-4]
         if self.name.startswith('Data_'):
-            self.name=self.name[5:]
+            self.name=self.name#[5:]
         if self.name.startswith('300gr-325nm_0-1pourcent_x74_10sx1_'):
             self.name=self.name[34:]
         if self.name.startswith('plmap_data_'):
