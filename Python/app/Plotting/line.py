@@ -40,15 +40,29 @@ class SpectrumPlot(QWidget):
         self.main = main_window
         self.lines = {} 
         self.original_d = {}
-        sizePolicy = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
-        sizePolicy.setHeightForWidth(True)
+        self.aspect_ratio = 0.7  # height / width
+        sizePolicy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setSizePolicy(sizePolicy)
         self._build()
         
-    def sizeHint(self):
-        return QSize(1200,800)
-    def heightForWidth(self, width):
-        return width * 0.75
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        w = event.size().width()
+        h = int(w * self.aspect_ratio)
+        if w>1000:
+            right_margin = int(w*0.15)
+        else:
+            right_margin = 0
+        self.layout().setContentsMargins(int(0.3*right_margin), 0, right_margin, 0)
+        usable_w = w - right_margin
+        h = int(usable_w * self.aspect_ratio)
+        if h > 0 and self.height() != h:
+            self.setFixedHeight(h)
+            
+    # def sizeHint(self):
+    #     return QSize(800,600)
+    # def heightForWidth(self, width):
+    #     return width * 0.75
     
     def _build(self):
         main_layout = QHBoxLayout(self)
@@ -88,11 +102,11 @@ class SpectrumPlot(QWidget):
         button_layout.addStretch()
 
         # -----------------
-        # Right: matplotlib
+        # Middle: matplotlib
         # -----------------
         graph_layout = QVBoxLayout()
 
-        self.figure = Figure(figsize=(8, 4))
+        self.figure = Figure()
         self.canvas = FigureCanvas(self.figure)
         self.toolbar = NavigationToolbar(self.canvas, self)
         self.ax = self.figure.add_subplot(111)
@@ -102,14 +116,24 @@ class SpectrumPlot(QWidget):
         
         self.figure.set_layout_engine('tight')
         
+        
+        # -----------------
+        # Right: margin
+        # -----------------
+        # margin_layout = QVBoxLayout()
+        # margin_layout.setContentsMargins(4, 4, 4, 4)
+        # margin_layout.setSpacing(5)
+        # margin_layout.addStretch(100)
+        
         #--------------------------------------------------------#
         
         graph_layout.addWidget(self.toolbar)
         graph_layout.addWidget(self.canvas)
 
-        # Add both sides
+        # Add layouts
         main_layout.addLayout(button_layout)
         main_layout.addLayout(graph_layout, 1)
+        # main_layout.addLayout(margin_layout)
         
     def axhline(self):
         text, ok = QInputDialog.getText(self,"AxHLine", "Enter y coordinates separated by commas:")

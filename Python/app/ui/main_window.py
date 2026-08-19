@@ -1,6 +1,9 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout
+print('importing sidebar')
 from app.ui.sidebar import Sidebar
+print('importing toolbar')
 from app.ui.toolbar import Toolbar
+print('importing PlotArea')
 from app.ui.plot_area import PlotArea
 
 

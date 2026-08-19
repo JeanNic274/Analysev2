@@ -34,27 +34,23 @@ class PlotArea(QWidget):
         self.layout = QVBoxLayout(self.container)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(10)
-        self.layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignTop)
-        
+        self.layout.setAlignment(Qt.AlignTop)
         self.scroll.setWidget(self.container)
-        self.container.setMinimumWidth(800)
+        self.container.setMinimumWidth(400)
         outer_layout.addWidget(self.scroll)
 
     def _get_or_create(self, plot_type):
         if plot_type == 'spectrum' and self.spectrum is None:
             self.spectrum = SpectrumPlot(self.main)
-            # self.spectrum.setFixedSize(1280, 960)
-            self.layout.addWidget(self.spectrum,alignment=Qt.AlignHCenter)
+            self.layout.addWidget(self.spectrum)
             
         elif plot_type == 'trpl' and self.trpl is None:
             self.trpl = TRPLPlot(self.main)
-            # self.trpl.setFixedSize(1280, 960)
-            self.layout.addWidget(self.trpl,alignment=Qt.AlignHCenter)
+            self.layout.addWidget(self.trpl)
             
         elif plot_type == 'map' and self.map is None:
             self.map = MapPlot(self.main)
-            self.map.setFixedSize(800, 500)
-            self.layout.addWidget(self.map,alignment=Qt.AlignHCenter)
+            self.layout.addWidget(self.map)
         self.layout.addStretch()
         
     def add(self, filepath, dataset):
