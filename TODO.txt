@@ -23,3 +23,4 @@ Buttons:
 - [ ] add file manager check box for legend to all lines (eg power, name, number, etc)
 - [ ] add trpl x start delay to file manager? to line up different power
 - [ ] add map group for different cmaps (viridis + red transp) and/or new graph
+- [ ] make custom file tree

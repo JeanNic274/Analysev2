@@ -1,15 +1,26 @@
+# import time
+# t=time.time()
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QLineEdit, QTreeView, QSizePolicy, QFileSystemModel
 )
+# print('imported QTWidget', time.time()-t)
+# t=time.time()
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel
+# print('imported QtCore', time.time()-t)
+# t=time.time()
 import re
+# print('imported re', time.time()-t)
 
+# t=time.time()
 from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
+# print('imported config', time.time()-t)
+# t=time.time()
 from app.Processing.data_import import Data_Set_Import
+# print('imported Data_Set_Import', time.time()-t)
+# t=time.time()
 from app.Processing.misc import reset_idx
-
-            
+# print('imported reset_idx', time.time()-t)
 
 class Sidebar(QWidget):
     def __init__(self, main_window):
@@ -138,7 +149,6 @@ class CustomSortModel(QSortFilterProxyModel):
         # split "..._0_10.txt" into ["..._", 0, "_", 10, ".txt"]
         parts = re.split(r'(\d+)', name.lower())
         return [int(p) if p.isdigit() else p for p in parts]
-
     def lessThan(self, left, right):
         model = self.sourceModel()
 

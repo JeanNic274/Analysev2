@@ -1,11 +1,15 @@
+import time
+t=time.time()
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout
-print('importing sidebar')
+print('---------------- imported QtWidgets',time.time()-t,' --------------------')
+t=time.time()
 from app.ui.sidebar import Sidebar
-print('importing toolbar')
+print('---------------- imported sidebar',time.time()-t,' --------------------')
+t=time.time()
 from app.ui.toolbar import Toolbar
-print('importing PlotArea')
+print('---------------- imported toolbar',time.time()-t,' --------------------')
 from app.ui.plot_area import PlotArea
-
+print('---------------- imported PlotArea',time.time()-t,' --------------------')
 
 class MainWindow(QMainWindow):
     def __init__(self):

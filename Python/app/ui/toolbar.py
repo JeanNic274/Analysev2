@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QTreeView, QSizePolicy, QFileSystemModel
 )
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel
+from app.ui.DialogWindow import SpectrumFileManager
 
 class Toolbar(QWidget):
     def __init__(self, main_window):
@@ -62,6 +63,9 @@ class Toolbar(QWidget):
 
     def _open_file_mng(self):
         print("_open_file_mng")
+        dialog = SpectrumFileManager(self.main)
+
+        dialog.exec()
         
     def _save_exp(self):
         print("_save_exp")

@@ -1,11 +1,22 @@
+import time
+t=time.time()
 import numpy as np
+print('imported np', time.time()-t)
+t=time.time()
 import os
+print('imported os', time.time()-t)
+t=time.time()
 import pandas as pd
+print('imported pd', time.time()-t)
+t=time.time()
 import re
-from scipy.interpolate import interp1d
-from lmfit import Model, Parameters
-from lmfit import models
+print('imported re', time.time()-t)
+t=time.time()
+from lmfit import Model, Parameters, models
+print('imported lmfit', time.time()-t)
+t=time.time()
 from app.Processing.misc import header_extract
+print('imported header_extract', time.time()-t)
 
 col_names = {
     'Unknown' :                 [str(i) for i in range(20)],
@@ -42,15 +53,15 @@ class Data_Set_Import:
 
 
     def import_data(self): # Imports data from file path, if spectrum, allows merging of multiple wavelength range
-        data_sets={}
+        # data_sets={}
         for scan_nb,file_path in enumerate(self.file_paths):
-            if self.file_type == 'spectre w/o bg' or self.file_type == 'spectre w/ bg':
-                data_sets[f'set_{scan_nb}']=pd.read_csv(file_path,comment="#",sep="\t",encoding="latin-1",names=col_names[self.file_type]).fillna(0)
-            else:
+            # if self.file_type == 'spectre w/o bg' or self.file_type == 'spectre w/ bg':
+            #     data_sets[f'set_{scan_nb}']=pd.read_csv(file_path,comment="#",sep="\t",encoding="latin-1",names=col_names[self.file_type]).fillna(0)
+            # else:
                 self.data=pd.read_csv(file_path,comment="#",sep="\t",encoding="latin-1",names=col_names[self.file_type]).fillna(0)
-        if self.file_type == 'spectre w/o bg' or self.file_type == 'spectre w/ bg':
-            self.data_sets=data_sets
-            self.data=merge_spectra(data_sets.values(),axis=col_merged[self.file_type])
+        # if self.file_type == 'spectre w/o bg' or self.file_type == 'spectre w/ bg':
+        #     self.data_sets=data_sets
+        #     self.data=merge_spectra(data_sets.values(),axis=col_merged[self.file_type])
         if self.measure_type=='spectrum':
             if 'nm' in self.data.columns:
                 self.data['ev']=1239.8/self.data['nm']
@@ -93,34 +104,7 @@ class Data_Set_Import:
         return self.name
             
 
-def merge_spectra(dfs,axis=['count_cor_raw','count_raw'],x_axis='nm',step=0.05):
-    min_wl,max_wl=2000,0
-    for df in dfs:
-        min_wl = min(df['nm'].min(),min_wl) 
-        max_wl = max(df['nm'].max(),max_wl) 
 
-    target_wavelengths = np.arange(min_wl, max_wl, step) 
-    target_df = pd.DataFrame({'nm':target_wavelengths})
-
-    def interpolate_spectrum(df, target_wls,yaxis, kind='slinear'):
-        f = interp1d(df[x_axis].values, df[yaxis].values, kind=kind, 
-                    bounds_error=False, fill_value=np.nan)
-        return pd.Series(f(target_wls))
-    for df_nb,df in enumerate(dfs):
-        target_df[f'{df_nb}'] = interpolate_spectrum(df, target_wavelengths,yaxis=axis[0])
-        if len(axis)-1:
-            target_df[f'{df_nb}_cor'] = interpolate_spectrum(df, target_wavelengths,yaxis=axis[1])
-
-    target_df[axis[0]] = target_df[[f'{nb}' for nb in range(df_nb+1)]].mean(axis=1)
-    if len(axis)-1:
-        target_df[axis[1]] = target_df[[f'{nb}' for nb in range(df_nb+1)]].mean(axis=1)
-        target_df['count_cor'] = target_df[[f'{nb}_cor' for nb in range(df_nb+1)]].mean(axis=1)
-
-        final_spectrum = target_df[[x_axis,axis[0],axis[1]]]
-    else:
-        final_spectrum = target_df[[x_axis,axis[0]]]
-    return final_spectrum 
-                     
             
 
 

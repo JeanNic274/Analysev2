@@ -30,6 +30,7 @@ class SpectrumPlot(QWidget):
         self.xlim=None
         self.ylim=None
         self.title=0
+        self.groups={str(i): [] for i in range(5)}
         self.datasets={}
         self.vlines=[]
         self.hlines=[]
@@ -160,7 +161,7 @@ class SpectrumPlot(QWidget):
         except ValueError:
             return
         for y in y_values:
-            self.hlines.append(self.ax.axhline(y,color='k',alpha=0.7))
+            self.hlines.append(self.ax.axhline(y,color='k',alpha=0.7,zorder=-10))
         self._refresh()     
          
     def axvline(self):
@@ -188,7 +189,7 @@ class SpectrumPlot(QWidget):
         except ValueError:
             return
         for x in x_values:
-            self.vlines.append(self.ax.axvline(x,color='k',alpha=0.7))
+            self.vlines.append(self.ax.axvline(x,color='k',alpha=0.7,zorder=-10))
         self._refresh()      
 
     def normalize(self):
@@ -310,6 +311,7 @@ class SpectrumPlot(QWidget):
         self.used_colors[filepath] = color
         self.original_d[filepath] = dataset.data.copy()
         self._refresh()
+        print(self.groups)
 
     def remove(self, filepath):
         if filepath not in self.lines:
@@ -322,7 +324,57 @@ class SpectrumPlot(QWidget):
 
         del self.lines[filepath]
         self._refresh()
+    
         
+    def update_groups(self):
+        # Remove existing plotted group lines
+        for line in self.lines.values():
+            line.remove()
+
+        self.lines.clear()
+
+        # Plot each non-empty group
+        for group_id, filepaths in self.groups.items():
+
+            if not filepaths:
+                continue
+
+            datasets = []
+
+            for filepath in filepaths:
+                if filepath in self.main.datasets:
+                    datasets.append(self.main.datasets[filepath].data)
+
+            if not datasets:
+                continue
+
+            # Merge the files in this group
+            merged = merge_spectra(
+                datasets,
+                # axis=col_merged['spectrum']
+            )
+
+            if merged is None:
+                continue
+
+            # Choose the y column you want
+            x = merged[self.xaxis]
+            y = merged[self.yaxis]
+
+            line, = self.ax.plot(
+                x,
+                y,
+                label=str(group_id)
+            )
+
+            self.lines[group_id] = line
+
+        self._refresh()
+        
+        
+        
+        
+    
         
         
         
