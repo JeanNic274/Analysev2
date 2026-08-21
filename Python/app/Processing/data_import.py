@@ -11,9 +11,9 @@ print('imported pd', time.time()-t)
 t=time.time()
 import re
 print('imported re', time.time()-t)
-t=time.time()
-from lmfit import Model, Parameters, models
-print('imported lmfit', time.time()-t)
+# t=time.time()
+# from lmfit import Model, Parameters, models
+# print('imported lmfit', time.time()-t)
 t=time.time()
 from app.Processing.misc import header_extract
 print('imported header_extract', time.time()-t)
@@ -118,6 +118,10 @@ def fit_data(df,parameters,graph,fit_idx):
     p0=parameters['p0'][fit_idx][2:]
     
     xfit0=0
+    
+    t=time.time()
+    from lmfit import Model, Parameters, models
+    print('imported lmfit', time.time()-t)
     
     if parameters['fit_model']=='Gaussian':
         nb_func=len(p0)//3

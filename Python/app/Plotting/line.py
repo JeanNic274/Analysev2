@@ -339,19 +339,24 @@ class SpectrumPlot(QWidget):
 
         # self.lines.clear()
         # Plot each non-empty group
-        for group_id, filepaths in self.groups.items():
-
-            if not filepaths:
-                continue
-
-            datasets = []
+        for group_id, filepaths in reversed(self.groups.items()):
             if group_id in self.lines:
                 self.remove(group_id,refresh=False)
 
             for filepath in reversed(filepaths):
                 if filepath in self.main.datasets:
-                    datasets.append(self.main.datasets[filepath])
                     self.remove(filepath,refresh=False)
+        print(self.used_colors)
+        print(self.available_colors,'\n')
+        for group_id, filepaths in self.groups.items():
+            if not filepaths:
+                continue
+
+            datasets = []
+
+            for filepath in reversed(filepaths):
+                if filepath in self.main.datasets:
+                    datasets.append(self.main.datasets[filepath])
 
             if not datasets:
                 continue
@@ -381,20 +386,21 @@ class SpectrumPlot(QWidget):
             )
 
             self.lines[group_id] = line
-
+        self.refresh_labels()
         self._refresh()
     
     def refresh_labels(self):
         for key, line in self.lines.items():
 
-            dataset = self.line_datasets.get(key)
+            dataset = self.datasets.get(key)
 
             if dataset is None:
                 continue
 
             line.set_label(
-                fetch_label(dataset)
+                fetch_label(dataset,"number, name, ayo")
             )
+            print('text',dataset.text)
 
         self.ax.legend()
         self.canvas.draw_idle()

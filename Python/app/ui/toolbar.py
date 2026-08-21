@@ -62,9 +62,7 @@ class Toolbar(QWidget):
         print("_open_save_mng")
 
     def _open_file_mng(self):
-        print("_open_file_mng")
         dialog = SpectrumFileManager(self.main)
-
         dialog.exec()
         
     def _save_exp(self):

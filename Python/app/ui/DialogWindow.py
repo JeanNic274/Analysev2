@@ -8,6 +8,9 @@ from PySide6.QtWidgets import (
     QPushButton,
     QInputDialog,
     QListWidgetItem,
+    QLineEdit,
+    QWidget,
+    QLabel,
 )
 from PySide6.QtCore import Qt
 
@@ -21,6 +24,8 @@ class SpectrumFileManager(QDialog):
 
         self.setWindowTitle("Spectrum File Manager")
         self.resize(700, 500)
+
+
 
         self._build()
         self._refresh()
@@ -92,10 +97,46 @@ class SpectrumFileManager(QDialog):
             self.groups.addItem(group_name)
 
         for filepath, dataset in self.main.datasets.items():
-            if getattr(dataset, "measure_type", None) == "spectrum":
-                item=QListWidgetItem(os.path.basename(filepath)[:-4])
-                item.setData(Qt.UserRole,filepath)
-                self.files.addItem(item)
+            if getattr(dataset, "measure_type", None) != "spectrum":
+                continue
+            
+            item=QListWidgetItem(os.path.basename(filepath)[:-4])
+            item.setData(Qt.UserRole,filepath)
+
+            # Widget containing filename + text box
+            widget = QWidget()
+            layout = QHBoxLayout(widget)
+            layout.setContentsMargins(2, 2, 2, 2)
+
+            # Filename
+            filename = QLabel(os.path.basename(filepath)[:-4])
+
+            # Custom text
+            edit = QLineEdit()
+
+            edit.setPlaceholderText("Custom Labels")
+
+            edit.setText(
+                self.main.plot_area.spectrum.datasets[filepath].text
+            )
+
+            # Save text when edited
+            edit.editingFinished.connect(
+                lambda filepath=filepath, edit=edit:
+                    self._custom_text_changed(filepath, edit)
+            )
+
+            layout.addWidget(filename)
+            layout.addWidget(edit)
+
+            # Put widget inside QListWidget item
+            self.files.addItem(item)
+            self.files.setItemWidget(item, widget)
+
+            # Give the item enough height
+            item.setSizeHint(widget.sizeHint())
+    def _custom_text_changed(self, filepath, edit):
+        self.main.plot_area.spectrum.datasets[filepath].text = edit.text()+", "
 
     def _new_group(self):
         group_id = 0
@@ -120,7 +161,7 @@ class SpectrumFileManager(QDialog):
             if filepath not in self.main.plot_area.spectrum.groups[group_name]:
                 self.main.plot_area.spectrum.groups[group_name].append(filepath)
         self._refresh()
-        self.main.plot_area.spectrum.update_groups()
+        # self.main.plot_area.spectrum.update_groups()
         
     def _remove_files(self):
         group_item = self.groups.currentItem()
