@@ -1,6 +1,7 @@
 
 import numpy as np
 import pandas as pd
+import re
 from scipy.interpolate import interp1d
 
 def normalize_lines(lines, original_d,xlim=None,xaxis='count',yaxis='nm'):
@@ -18,6 +19,16 @@ def evnm_swap(lines):
     for filepath, line in lines.items():
         line.set_xdata(1239.8/line.get_xdata())         
             
+def fetch_label(data,labels):
+    labels=data.text+labels
+    if labels=="":
+        return data.name
+    labels = re.split(', ', labels)
+    label=""
+    for lab in labels:
+        label+=getattr(data,lab,lab)+", "
+    return label[:-2]
+
             
             
             
@@ -52,8 +63,8 @@ def set_ax_lim(ax,lim,x=False,y=False):
 def merge_spectra(dfs,axis=['count','count_cor'],x_axis='nm',step=0.05):
     min_wl,max_wl=2000,0
     for df in dfs:
-        min_wl = min(df['nm'].min(),min_wl) 
-        max_wl = max(df['nm'].max(),max_wl) 
+        min_wl = min(df.data['nm'].min(),min_wl) 
+        max_wl = max(df.data['nm'].max(),max_wl) 
 
     target_wavelengths = np.arange(min_wl, max_wl, step) 
     target_df = pd.DataFrame({'nm':target_wavelengths})
@@ -63,9 +74,9 @@ def merge_spectra(dfs,axis=['count','count_cor'],x_axis='nm',step=0.05):
                     bounds_error=False, fill_value=np.nan)
         return pd.Series(f(target_wls))
     for df_nb,df in enumerate(dfs):
-        target_df[f'{df_nb}'] = interpolate_spectrum(df, target_wavelengths,yaxis=axis[0])
+        target_df[f'{df_nb}'] = interpolate_spectrum(df.data, target_wavelengths,yaxis=axis[0])
         if len(axis)-1:
-            target_df[f'{df_nb}_cor'] = interpolate_spectrum(df, target_wavelengths,yaxis=axis[1])
+            target_df[f'{df_nb}_cor'] = interpolate_spectrum(df.data, target_wavelengths,yaxis=axis[1])
 
     target_df[axis[0]] = target_df[[f'{nb}' for nb in range(df_nb+1)]].mean(axis=1)
     if len(axis)>1:

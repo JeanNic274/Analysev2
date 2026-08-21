@@ -296,43 +296,48 @@ class SpectrumPlot(QWidget):
                 self.ax_ev.invert_xaxis()
                 self.ax_ev.xaxis.set_minor_locator(ticker.MultipleLocator(5))
                 self.ax.xaxis.set_minor_locator(ticker.MultipleLocator(0.02))
+                
         
     def add(self, filepath, dataset):
         if not self.available_colors:
             # Reuse colors after cycle
             self.available_colors = list(self.colors)
-            
-        color = self.available_colors.pop(0)
+        
+        color=self._get_color(filepath)
+        # color = self.available_colors.pop(0)
         self.datasets[filepath]=dataset
-        label = filepath.replace("\\", "/").split("/")[-1]
-        label = dataset.number +', ' + dataset.name
+        lab = "number, name"
+        label = fetch_label(dataset,lab)
         line, = self.ax.plot(dataset.data[self.xaxis], dataset.data[self.yaxis],color=color, label=label)
         self.lines[filepath] = line
-        self.used_colors[filepath] = color
+        # self.used_colors[filepath] = color
         self.original_d[filepath] = dataset.data.copy()
         self._refresh()
-        print(self.groups)
 
-    def remove(self, filepath):
+    def remove(self, filepath,refresh=True):
         if filepath not in self.lines:
             return
 
         self.lines[filepath].remove()
 
-        color = self.used_colors.pop(filepath)
+        color = self.used_colors.pop(filepath,None)
         self.available_colors.insert(0, color)
 
         del self.lines[filepath]
-        self._refresh()
+        if refresh:
+            self._refresh()
     
+    def _get_color(self, key):
+        if key not in self.used_colors:
+            self.used_colors[key] = self.available_colors.pop(0)
+        return self.used_colors[key]
         
     def update_groups(self):
         # Remove existing plotted group lines
-        for line in self.lines.values():
-            line.remove()
+        # for line in self.lines.values():
+        #     line.remove()
 
-        self.lines.clear()
-
+        # self.lines.clear()
         # Plot each non-empty group
         for group_id, filepaths in self.groups.items():
 
@@ -340,10 +345,13 @@ class SpectrumPlot(QWidget):
                 continue
 
             datasets = []
+            if group_id in self.lines:
+                self.remove(group_id,refresh=False)
 
-            for filepath in filepaths:
+            for filepath in reversed(filepaths):
                 if filepath in self.main.datasets:
-                    datasets.append(self.main.datasets[filepath].data)
+                    datasets.append(self.main.datasets[filepath])
+                    self.remove(filepath,refresh=False)
 
             if not datasets:
                 continue
@@ -360,17 +368,37 @@ class SpectrumPlot(QWidget):
             # Choose the y column you want
             x = merged[self.xaxis]
             y = merged[self.yaxis]
+            
+            color=self._get_color(group_id)
 
+            lab = "number, name"
+            label = fetch_label(datasets[0],lab)
             line, = self.ax.plot(
                 x,
                 y,
-                label=str(group_id)
+                color=color,
+                label=label,
             )
 
             self.lines[group_id] = line
 
         self._refresh()
-        
+    
+    def refresh_labels(self):
+        for key, line in self.lines.items():
+
+            dataset = self.line_datasets.get(key)
+
+            if dataset is None:
+                continue
+
+            line.set_label(
+                fetch_label(dataset)
+            )
+
+        self.ax.legend()
+        self.canvas.draw_idle()
+    
         
         
         

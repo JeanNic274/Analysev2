@@ -91,7 +91,7 @@ class Data_Set_Import:
             self.name=self.name[34:]
         if self.name.startswith('plmap_data_'):
             self.name=self.name[10:20]
-            
+        self.text = ""
         self.file_paths=file_paths
         for k, v in header_extract(file_paths[0]).items():
             setattr(self, k, v)
