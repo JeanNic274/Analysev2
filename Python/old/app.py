@@ -18,7 +18,6 @@ from matplotlib.figure import Figure
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("My App")
         self.resize(1200, 800)
 
         # central widget

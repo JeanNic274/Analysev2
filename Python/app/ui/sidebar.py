@@ -112,7 +112,7 @@ class Sidebar(QWidget):
             dataset = self.main.datasets.pop(path)
             self.main.plot_area.remove(path, dataset)
         else:
-            dataset = Data_Set_Import([path])
+            dataset = Data_Set_Import(path)
             self.main.selected_files.append(path)
             self.main.datasets[path] = dataset
             self.main.plot_area.add(path, dataset)

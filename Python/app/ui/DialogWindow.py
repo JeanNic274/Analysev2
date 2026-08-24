@@ -57,16 +57,6 @@ class SpectrumFileManager(QDialog):
         btn_add.clicked.connect(self._add_files)
         btn_remove.clicked.connect(self._remove_files)
         btn_reset.clicked.connect(self._reset)
-
-        # Check Boxes
-        check_number = QCheckBox('Number')
-        check_number.setChecked(1)
-        check_name = QCheckBox('Name')
-        check_name.setChecked(1)
-        check_power = QCheckBox('Power')
-        check_pos = QCheckBox('Position (x,y)')
-        check_posf = QCheckBox('Position (x,y,z)')
-        check_filter = QCheckBox('Filter')
         
         # Layouts
         group_layout = QVBoxLayout()
@@ -80,12 +70,17 @@ class SpectrumFileManager(QDialog):
         file_layout.addWidget(btn_remove)
         
         check_layout = QHBoxLayout()
-        check_layout.addWidget(check_number)
-        check_layout.addWidget(check_name)
-        check_layout.addWidget(check_power)
-        check_layout.addWidget(check_pos)
-        check_layout.addWidget(check_posf)
-        check_layout.addWidget(check_filter)
+        for attribute, var in [('Number','number'),('Name','name'),('Power',"power"), ('Position (x,y)',"pos"),('Positition (x,y,z)','posf'), ('Filter',"filter")]:
+            checkbox = QCheckBox(attribute)
+
+            checkbox.toggled.connect(
+                lambda checked, attr=var:
+                    self._checkbox_attribute_label_change(attr, checked)
+            )
+            if self.main.plot_area.spectrum.labels[var]:
+                checkbox.setChecked(1)
+            check_layout.addWidget(checkbox)
+
 
         lists = QHBoxLayout()
         lists.addLayout(group_layout)
@@ -102,6 +97,9 @@ class SpectrumFileManager(QDialog):
         layout.addLayout(check_layout)
         layout.addWidget(qlab2)
         layout.addLayout(lists)
+        
+    def _checkbox_attribute_label_change(self,var,checked):
+        self.main.plot_area.spectrum.labels[var] = checked
 
     def _reset(self):
         self.force_refresh = 1
@@ -154,7 +152,8 @@ class SpectrumFileManager(QDialog):
             # Give the item enough height
             item.setSizeHint(widget.sizeHint())
     def _custom_text_changed(self, filepath, edit):
-        self.main.plot_area.spectrum.datasets[filepath].text = edit.text()+", "
+        if edit != "":
+            self.main.plot_area.spectrum.datasets[filepath].text = edit.text()+", "
 
     def _new_group(self):
         group_id = 0

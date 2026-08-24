@@ -1,16 +1,11 @@
 import time
 # t=time.time()
 import numpy as np
+from numpy.lib import recfunctions as rfn
 # print('imported np', time.time()-t)
 # t=time.time()
 import os
 # print('imported os', time.time()-t)
-# t=time.time()
-import pandas as pd
-# print('imported pd', time.time()-t)
-# t=time.time()
-import re
-# print('imported re', time.time()-t)
 # t=time.time()
 # from lmfit import Model, Parameters, models
 # print('imported lmfit', time.time()-t)
@@ -39,40 +34,37 @@ col_merged = {
 
 class Data_Set_Import:
 
-    def make_label(self,labels):
-        if labels=="":
-            return self.name
-        labels = re.split(', ', labels)
-        label=""
-        for lab in labels:
-            if hasattr(self,lab):
-                label+=self.lab+", "
-            else:
-                label+=lab+", "
-        return label[:-2]
-
-
-    def import_data(self): # Imports data from file path, if spectrum, allows merging of multiple wavelength range
-        # data_sets={}
-        for scan_nb,file_path in enumerate(self.file_paths):
-            # if self.file_type == 'spectre w/o bg' or self.file_type == 'spectre w/ bg':
-            #     data_sets[f'set_{scan_nb}']=pd.read_csv(file_path,comment="#",sep="\t",encoding="latin-1",names=col_names[self.file_type]).fillna(0)
-            # else:
-                self.data=pd.read_csv(file_path,comment="#",sep="\t",encoding="latin-1",names=col_names[self.file_type]).fillna(0)
-        # if self.file_type == 'spectre w/o bg' or self.file_type == 'spectre w/ bg':
-        #     self.data_sets=data_sets
-        #     self.data=merge_spectra(data_sets.values(),axis=col_merged[self.file_type])
+    def import_data(self,file_path):
+        
+        self.data=np.genfromtxt(file_path,comments="#",delimiter="\t",encoding="latin-1",names=col_names[self.file_type])
+        self.data = np.nan_to_num(self.data, nan=0)
+        
+    def init_data(self):
+        new_names = []
+        new_values = []
         if self.measure_type=='spectrum':
-            if 'nm' in self.data.columns:
-                self.data['ev']=1239.8/self.data['nm']
-            else:
-                self.data['nm']=1239.8/self.data['ev']
-        if 'count_raw' in self.data.columns:
-            self.data['count']=self.data['count_raw']/self.int_time
-        if 'count_cor_raw' in self.data.columns:
-            self.data['count_cor']=self.data['count_cor_raw']/self.int_time
-        if 'count1' in self.data.columns:
-            self.data['count']=(self.data['count1']+self.data['count2'])/self.int_time
+            if 'ev' in self.data.dtype.names:
+                new_names.append('nm')
+                new_values.append(1239.8/self.data['ev'])
+        if 'count_raw' in self.data.dtype.names:
+            new_names.append('count')
+            new_values.append(self.data['count_raw'] / self.int_time)
+
+        if 'count_cor_raw' in self.data.dtype.names:
+            new_names.append('count_cor')
+            new_values.append(self.data['count_cor_raw'] / self.int_time)
+            
+        if 'count1' in self.data.dtype.names:
+            new_names.append('count')
+            new_values.append((self.data['count1']+self.data['count2'])/self.int_time)
+
+        if new_names:
+            self.data = rfn.append_fields(
+                self.data,
+                new_names,
+                new_values,
+                usemask=False
+            ) 
         
 
     
@@ -80,11 +72,13 @@ class Data_Set_Import:
         self.data_fit={'xfit':0,'yfit':0,'yfit_init':0}
         self.fit_params=fit_data(self,fitOptions,graphOptions,fit_idx)
     
-    def __init__(self,file_paths):
+    def __init__(self,file_path=0,attrs=None,dataset=None,name=None):
         # if type(file_paths)==str:
         #     file_paths=[file_paths]
-        self.filepath = file_paths
-        self.name=os.path.basename(file_paths[0])[:-4]
+        if file_path:
+            self.name=os.path.basename(file_path)[:-4]
+        else:
+            self.name=name
         if self.name.startswith('Data_'):
             self.name=self.name#[5:]
         if self.name.startswith('300gr-325nm_0-1pourcent_x74_10sx1_'):
@@ -92,12 +86,21 @@ class Data_Set_Import:
         if self.name.startswith('plmap_data_'):
             self.name=self.name[10:20]
         self.text = ""
-        self.file_paths=file_paths
-        for k, v in header_extract(file_paths[0]).items():
+        if file_path:
+            self.attrs=header_extract(file_path)
+        elif attrs:
+            self.attrs=attrs
+            self.data=dataset
+        else:
+            print('Missing either filepath or attrs')
+        for k, v in self.attrs.items():
             setattr(self, k, v)
-        self.import_data()
+        if file_path:
+            self.import_data(file_path)
         if self.file_type=='Unknown':
                 print("Unknown Data File Type for "+self.name)
+        self.init_data()
+                
     def __str__(self):
         return self.name
     def __repr__(self):

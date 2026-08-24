@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from matplotlib import ticker
 
 from app.Plotting.utils import *
+from app.Processing.data_import import Data_Set_Import
 
 plt.rcParams.update({
     "font.size": 16,
@@ -27,6 +28,7 @@ class SpectrumPlot(QWidget):
         self.y_lab="Counts/s"
         self.xlim=None
         self.ylim=None
+        self.labels = {'number':1,'name':1,'power':0,'pos':0,'posf':0,'filter':0,}
         self.title=0
         self.groups={str(i): [] for i in range(5)}
         self.datasets={}
@@ -304,8 +306,7 @@ class SpectrumPlot(QWidget):
         color=self._get_color(filepath)
         # color = self.available_colors.pop(0)
         self.datasets[filepath]=dataset
-        lab = "number, name"
-        label = fetch_label(dataset,lab)
+        label = fetch_label(dataset,toggles=self.labels)
         line, = self.ax.plot(dataset.data[self.xaxis], dataset.data[self.yaxis],color=color, label=label)
         self.lines[filepath] = line
         # self.used_colors[filepath] = color
@@ -358,26 +359,18 @@ class SpectrumPlot(QWidget):
             if not datasets:
                 continue
 
-            # Merge the files in this group
-            merged = merge_spectra(
-                datasets,
-                # axis=col_merged['spectrum']
-            )
-
+            merged = merge_spectra(datasets)
             if merged is None:
                 continue
-
-            # Choose the y column you want
-            x = merged[self.xaxis]
-            y = merged[self.yaxis]
             
+            self.datasets[group_id] = Data_Set_Import(attrs=datasets[-1].attrs,dataset=merged,name=datasets[-1].name)
+            self.original_d[group_id] = self.datasets[group_id].data.copy()
             color=self._get_color(group_id)
 
-            lab = "number, name"
-            label = fetch_label(datasets[0],lab)
+            label = fetch_label(datasets[0],toggles=self.labels)
             line, = self.ax.plot(
-                x,
-                y,
+                merged[self.xaxis],
+                merged[self.yaxis],
                 color=color,
                 label=label,
             )
@@ -387,16 +380,14 @@ class SpectrumPlot(QWidget):
     
     def refresh_labels(self):
         for key, line in self.lines.items():
-
             dataset = self.datasets.get(key)
 
             if dataset is None:
                 continue
 
             line.set_label(
-                fetch_label(dataset,"number, name, ayo")
+                fetch_label(dataset,toggles=self.labels)
             )
-            print('text',dataset.text)
 
         self.ax.legend()
         self.canvas.draw_idle()

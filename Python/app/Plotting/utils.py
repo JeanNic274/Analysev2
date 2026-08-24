@@ -1,16 +1,18 @@
-
 import numpy as np
-import pandas as pd
 import re
 from scipy.interpolate import interp1d
 
-def normalize_lines(lines, original_d,xlim=None,xaxis='count',yaxis='nm'):
-    if not xlim:
-        xlim=[-np.inf,np.inf]
+def normalize_lines(lines,original_d,xlim=None,xaxis='nm',yaxis='count'):
+    if xlim is None:
+        xlim = [-np.inf, np.inf]
     for filepath, line in lines.items():
-        y=original_d[filepath][yaxis]
-        y_cut=np.array(original_d[filepath].loc[(original_d[filepath][xaxis] >= xlim[0]) & (original_d[filepath][xaxis] <= xlim[1]), yaxis])
-        if y_cut.max() != 0 and line.get_ydata().max()!=1:
+        data = original_d[filepath]
+        y = data[yaxis]
+        mask = ((data[xaxis] >= xlim[0]) &(data[xaxis] <= xlim[1]))
+        y_cut = y[mask]
+        if y_cut.size == 0:
+            continue
+        if y_cut.max() != 0 and line.get_ydata().max() != 1:
             line.set_ydata(y / y_cut.max())
         else:
             line.set_ydata(y)
@@ -19,8 +21,15 @@ def evnm_swap(lines):
     for filepath, line in lines.items():
         line.set_xdata(1239.8/line.get_xdata())         
             
-def fetch_label(data,labels):
+def fetch_label(data,labels='',toggles={}):
     labels=data.text+labels
+    _check_if=0
+    for (k,v) in toggles.items():
+        if v:
+            labels+=k+', '
+            _check_if=1
+    if _check_if:
+        labels=labels[:-2]
     if labels=="":
         return data.name
     labels = re.split(', ', labels)
@@ -59,32 +68,68 @@ def set_ax_lim(ax,lim,x=False,y=False):
     if y:
         ax.set_ylim(lim)
             
-              
-def merge_spectra(dfs,axis=['count','count_cor'],x_axis='nm',step=0.05):
-    min_wl,max_wl=2000,0
+def merge_spectra(dfs,axis=('count', 'count_cor'),x_axis='nm',step=0.05):
+    dfs = list(dfs)
+
+    if not dfs:
+        return None
+
+    min_wl = min(df.data[x_axis].min() for df in dfs)
+    max_wl = max(df.data[x_axis].max() for df in dfs)
+
+    target_wavelengths = np.arange(min_wl,max_wl,step)
+
+    spectra = []
+    spectra_cor = []
+
     for df in dfs:
-        min_wl = min(df.data['nm'].min(),min_wl) 
-        max_wl = max(df.data['nm'].max(),max_wl) 
 
-    target_wavelengths = np.arange(min_wl, max_wl, step) 
-    target_df = pd.DataFrame({'nm':target_wavelengths})
+        x = df.data[x_axis]
+        y = df.data[axis[0]]
 
-    def interpolate_spectrum(df, target_wls,yaxis, kind='slinear'):
-        f = interp1d(df[x_axis].values, df[yaxis].values, kind=kind, 
-                    bounds_error=False, fill_value=np.nan)
-        return pd.Series(f(target_wls))
-    for df_nb,df in enumerate(dfs):
-        target_df[f'{df_nb}'] = interpolate_spectrum(df.data, target_wavelengths,yaxis=axis[0])
-        if len(axis)-1:
-            target_df[f'{df_nb}_cor'] = interpolate_spectrum(df.data, target_wavelengths,yaxis=axis[1])
+        f = interp1d(x,y,kind='slinear',bounds_error=False,fill_value=np.nan)
 
-    target_df[axis[0]] = target_df[[f'{nb}' for nb in range(df_nb+1)]].mean(axis=1)
-    if len(axis)>1:
-        target_df[axis[0]] = target_df[[f'{nb}' for nb in range(df_nb+1)]].mean(axis=1)
-        target_df[axis[1]] = target_df[[f'{nb}_cor' for nb in range(df_nb+1)]].mean(axis=1)
+        spectra.append(f(target_wavelengths))
 
-        final_spectrum = target_df[[x_axis,axis[0],axis[1]]]
+        if len(axis) > 1:
+
+            y_cor = df.data[axis[1]]
+            f_cor = interp1d(x,y_cor,kind='slinear',bounds_error=False,fill_value=np.nan)
+
+            spectra_cor.append(f_cor(target_wavelengths))
+
+    spectra = np.array(spectra)
+
+    merged = np.nanmean(spectra,axis=0)
+
+    if len(axis) > 1:
+
+        spectra_cor = np.array(spectra_cor)
+        merged_cor = np.nanmean(spectra_cor,axis=0)
+
+        result = np.empty(
+            len(target_wavelengths),
+            dtype=[
+                (x_axis, 'f8'),
+                (axis[0], 'f8'),
+                (axis[1], 'f8')
+            ])
+
+        result[x_axis] = target_wavelengths
+        result[axis[0]] = merged
+        result[axis[1]] = merged_cor
+
     else:
-        final_spectrum = target_df[[x_axis,axis[0]]]
-    return final_spectrum 
+
+        result = np.empty(
+            len(target_wavelengths),
+            dtype=[
+                (x_axis, 'f8'),
+                (axis[0], 'f8')
+            ])
+
+        result[x_axis] = target_wavelengths
+        result[axis[0]] = merged
+
+    return result
                      
