@@ -1,22 +1,22 @@
 import time
-t=time.time()
+# t=time.time()
 import numpy as np
-print('imported np', time.time()-t)
-t=time.time()
+# print('imported np', time.time()-t)
+# t=time.time()
 import os
-print('imported os', time.time()-t)
-t=time.time()
+# print('imported os', time.time()-t)
+# t=time.time()
 import pandas as pd
-print('imported pd', time.time()-t)
-t=time.time()
+# print('imported pd', time.time()-t)
+# t=time.time()
 import re
-print('imported re', time.time()-t)
+# print('imported re', time.time()-t)
 # t=time.time()
 # from lmfit import Model, Parameters, models
 # print('imported lmfit', time.time()-t)
-t=time.time()
+# t=time.time()
 from app.Processing.misc import header_extract
-print('imported header_extract', time.time()-t)
+# print('imported header_extract', time.time()-t)
 
 col_names = {
     'Unknown' :                 [str(i) for i in range(20)],

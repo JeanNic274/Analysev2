@@ -1,6 +1,4 @@
-
-
-import numpy as np
+# import numpy as np
 from sys import float_info
 
 
@@ -247,7 +245,7 @@ class SpectrumPlot(QWidget):
         return ev
         
     def ev_nm_swap(self):
-        print('swaping')
+        print('Swaping axis')
         
         evnm_swap(self.lines)
         
@@ -346,8 +344,6 @@ class SpectrumPlot(QWidget):
             for filepath in reversed(filepaths):
                 if filepath in self.main.datasets:
                     self.remove(filepath,refresh=False)
-        print(self.used_colors)
-        print(self.available_colors,'\n')
         for group_id, filepaths in self.groups.items():
             if not filepaths:
                 continue
@@ -357,6 +353,7 @@ class SpectrumPlot(QWidget):
             for filepath in reversed(filepaths):
                 if filepath in self.main.datasets:
                     datasets.append(self.main.datasets[filepath])
+                    self.main.datasets[filepath].number = str(int(group_id)+1)
 
             if not datasets:
                 continue
@@ -386,7 +383,6 @@ class SpectrumPlot(QWidget):
             )
 
             self.lines[group_id] = line
-        self.refresh_labels()
         self._refresh()
     
     def refresh_labels(self):

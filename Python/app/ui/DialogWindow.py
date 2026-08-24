@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QListWidget,
     QPushButton,
+    QCheckBox,
     QInputDialog,
     QListWidgetItem,
     QLineEdit,
@@ -18,6 +19,7 @@ from PySide6.QtCore import Qt
 class SpectrumFileManager(QDialog):
 
     def __init__(self, main_window):
+        self.force_refresh=0
         super().__init__(main_window)
 
         self.main = main_window
@@ -35,27 +37,17 @@ class SpectrumFileManager(QDialog):
 
         layout = QVBoxLayout(self)
 
-        # -------------------------
         # Groups
-        # -------------------------
-
         self.groups = QListWidget()
 
-        # -------------------------
         # Files
-        # -------------------------
-
         self.files = QListWidget()
-
-        # Allow multiple file selection
-        self.files.setSelectionMode(
+        
+        self.files.setSelectionMode(# Allow multiple file selection
             QListWidget.MultiSelection
         )
 
-        # -------------------------
         # Buttons
-        # -------------------------
-
         btn_new = QPushButton("New Group")
         btn_add = QPushButton("Add Selected Files")
         btn_remove = QPushButton("Remove Files")
@@ -66,10 +58,17 @@ class SpectrumFileManager(QDialog):
         btn_remove.clicked.connect(self._remove_files)
         btn_reset.clicked.connect(self._reset)
 
-        # -------------------------
-        # Layout
-        # -------------------------
-
+        # Check Boxes
+        check_number = QCheckBox('Number')
+        check_number.setChecked(1)
+        check_name = QCheckBox('Name')
+        check_name.setChecked(1)
+        check_power = QCheckBox('Power')
+        check_pos = QCheckBox('Position (x,y)')
+        check_posf = QCheckBox('Position (x,y,z)')
+        check_filter = QCheckBox('Filter')
+        
+        # Layouts
         group_layout = QVBoxLayout()
         group_layout.addWidget(self.groups)
         group_layout.addWidget(btn_new)
@@ -79,14 +78,33 @@ class SpectrumFileManager(QDialog):
         file_layout.addWidget(self.files)
         file_layout.addWidget(btn_add)
         file_layout.addWidget(btn_remove)
+        
+        check_layout = QHBoxLayout()
+        check_layout.addWidget(check_number)
+        check_layout.addWidget(check_name)
+        check_layout.addWidget(check_power)
+        check_layout.addWidget(check_pos)
+        check_layout.addWidget(check_posf)
+        check_layout.addWidget(check_filter)
 
         lists = QHBoxLayout()
         lists.addLayout(group_layout)
         lists.addLayout(file_layout)
-
+        
+        # Title
+        qlab1 = QLabel('Curves label:')
+        qlab1.setStyleSheet('font-size: 16pt;')
+        # Title
+        qlab2 = QLabel('Merge spectra:')
+        qlab2.setStyleSheet('font-size: 12pt;')
+        
+        layout.addWidget(qlab1)
+        layout.addLayout(check_layout)
+        layout.addWidget(qlab2)
         layout.addLayout(lists)
 
     def _reset(self):
+        self.force_refresh = 1
         self.main.plot_area.spectrum.groups = {str(i): [] for i in range(5)}
     
     
@@ -160,6 +178,7 @@ class SpectrumFileManager(QDialog):
             filepath = item.data(Qt.UserRole)
             if filepath not in self.main.plot_area.spectrum.groups[group_name]:
                 self.main.plot_area.spectrum.groups[group_name].append(filepath)
+        self.force_refresh = 1
         self._refresh()
         # self.main.plot_area.spectrum.update_groups()
         
@@ -178,7 +197,10 @@ class SpectrumFileManager(QDialog):
                 self.main.plot_area.spectrum.groups[group_name].remove(filepath)
                 
     def closeEvent(self, event):
-        self.main.plot_area.spectrum.update_groups()
+        if self.force_refresh:
+            self.main.plot_area.spectrum.update_groups()
+            self.force_refresh = 0
+        self.main.plot_area.spectrum.refresh_labels()
         event.accept()
 
 

@@ -1,6 +1,7 @@
 Buttons:
 - [x] log
 - [ ] save
+- [x] fix number label when merged spectrum
 - [ ] fit
 - [x] title
 - [x] hlines vlines
@@ -8,6 +9,7 @@ Buttons:
 - [x] add xlim and make it so normalize toggle works with it
 - [ ] add import work (eg file_path with labels already done)
 - [x] add title
+- [ ] make normalize work for new curve
 - [x] add hlines/vlines
 - [ ] add trpl fit
 - [ ] add text/annotations
