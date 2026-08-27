@@ -2,7 +2,7 @@ import numpy as np
 import re
 from scipy.interpolate import interp1d
 
-def normalize_lines(lines,original_d,xlim=None,xaxis='nm',yaxis='count'):
+def normalize_lines(lines,original_d,xlim=None,xaxis='nm',yaxis='count',toggle=1):
     if xlim is None:
         xlim = [-np.inf, np.inf]
     for filepath, line in lines.items():
@@ -12,7 +12,7 @@ def normalize_lines(lines,original_d,xlim=None,xaxis='nm',yaxis='count'):
         y_cut = y[mask]
         if y_cut.size == 0:
             continue
-        if y_cut.max() != 0 and line.get_ydata().max() != 1:
+        if y_cut.max() != 0 and toggle:
             line.set_ydata(y / y_cut.max())
         else:
             line.set_ydata(y)

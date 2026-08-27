@@ -119,6 +119,7 @@ class Sidebar(QWidget):
         self._update_label()
         
     def _clear_selection(self):
+        self.main.plot_area.remove_all()
         self.main.selected_files = []
         self.tree.clearSelection()
         self._update_label()

@@ -1,5 +1,3 @@
-
-
 from PySide6.QtWidgets import  QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy
 from PySide6.QtCore import Qt
 
@@ -65,9 +63,9 @@ class PlotArea(QWidget):
         elif dataset.measure_type == 'map':
             self.map.add(filepath, dataset)
 
-    def remove(self, filepath, dataset):
+    def remove(self, filepath, dataset,refresh=True):
         if dataset.measure_type == 'spectrum' and self.spectrum:
-            self.spectrum.remove(filepath)
+            self.spectrum.remove(filepath,refresh=refresh)
             if not self.spectrum.lines:  # destroy if empty
                 self.layout.removeWidget(self.spectrum)
                 self.spectrum.deleteLater()
@@ -86,6 +84,10 @@ class PlotArea(QWidget):
                 self.layout.removeWidget(self.map)
                 self.map.deleteLater()
                 self.map = None
+    def remove_all(self):
+        self.spectrum.remove_all()
+        # self.trpl.remove_all
+        # self.maps.remove_all
 
 
 class ScrollArea(QScrollArea):

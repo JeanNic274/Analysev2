@@ -30,6 +30,7 @@ class SpectrumPlot(QWidget):
         self.ylim=None
         self.labels = {'number':1,'name':1,'power':0,'pos':0,'posf':0,'filter':0,}
         self.title=0
+        self.toggles = {'normalize':0,}
         self.groups={str(i): [] for i in range(5)}
         self.datasets={}
         self.vlines=[]
@@ -193,7 +194,8 @@ class SpectrumPlot(QWidget):
         self._refresh()      
 
     def normalize(self):
-        normalize_lines(self.lines,self.original_d,xlim=self.xlim,xaxis=self.xaxis,yaxis=self.yaxis)
+        self.toggles['normalize']=(self.toggles['normalize']+1)%2
+        normalize_lines(self.lines,self.original_d,xlim=self.xlim,xaxis=self.xaxis,yaxis=self.yaxis,toggle=self.toggles['normalize'])
         self._refresh()
         
     def set_title(self):
@@ -223,7 +225,7 @@ class SpectrumPlot(QWidget):
         if self.lines:
             self.ax.legend()
         else:
-            self.ax.legend().remove() if self.ax.get_legend() else None
+            self.ax.get_legend().remove() if self.ax.get_legend() else None
         self.ax.relim()
         if not self.xlim:
             self.ax.autoscale(enable=True, axis='x')
@@ -260,27 +262,14 @@ class SpectrumPlot(QWidget):
             
         self._refresh()
     
-    def gen_axis(self):     
+    def gen_axis(self):   
+        self.ax.set_ylabel('Counts/s')  
         if self.xaxis=='nm':
                 self.ax_ev = self.ax.secondary_xaxis('top', functions=(self.nm_to_ev, self.nm_to_ev))
-                self.ax_ev.set_xlabel("Energy (eV)")
-                self.ax.set_xlabel("Wavelength (nm)")
-                self.ax_ev.invert_xaxis()
-                # wl_ticks = ax.get_xticks()
-                # wl_ticks = preventDivisionByZero(wl_ticks)
-                # E_ticks = nm_to_ev(wl_ticks)
-                # ax_ev.set_xticks(E_ticks)
-                self.ax.xaxis.set_minor_locator(ticker.MultipleLocator(5))
-                self.ax_ev.xaxis.set_minor_locator(ticker.MultipleLocator(0.02))
-                # ax_ev.xaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
         if self.xaxis=='ev':
                 self.ax_ev = self.ax.secondary_xaxis('top', functions=(self.nm_to_ev, self.nm_to_ev))
-                self.ax.set_xlabel("Energy (eV)")
-                self.ax_ev.set_xlabel("Wavelength (nm)")
-                self.ax_ev.invert_xaxis()
-                self.ax_ev.xaxis.set_minor_locator(ticker.MultipleLocator(5))
-                self.ax.xaxis.set_minor_locator(ticker.MultipleLocator(0.02))
+        self.swap_axis()
     
     def swap_axis(self):     
         if self.xaxis=='nm':
@@ -288,14 +277,18 @@ class SpectrumPlot(QWidget):
                 self.ax.set_xlabel("Wavelength (nm)")
                 self.ax_ev.invert_xaxis()
                 self.ax.xaxis.set_minor_locator(ticker.MultipleLocator(5))
+                self.ax.xaxis.set_major_locator(plt.MaxNLocator(7))
                 self.ax_ev.xaxis.set_minor_locator(ticker.MultipleLocator(0.02))
+                self.ax_ev.xaxis.set_major_locator(plt.MaxNLocator(7))
 
         if self.xaxis=='ev':
                 self.ax.set_xlabel("Energy (eV)")
                 self.ax_ev.set_xlabel("Wavelength (nm)")
                 self.ax_ev.invert_xaxis()
                 self.ax_ev.xaxis.set_minor_locator(ticker.MultipleLocator(5))
+                self.ax_ev.xaxis.set_major_locator(plt.MaxNLocator(7))
                 self.ax.xaxis.set_minor_locator(ticker.MultipleLocator(0.02))
+                self.ax.xaxis.set_major_locator(plt.MaxNLocator(7))
                 
         
     def add(self, filepath, dataset):
@@ -307,7 +300,13 @@ class SpectrumPlot(QWidget):
         # color = self.available_colors.pop(0)
         self.datasets[filepath]=dataset
         label = fetch_label(dataset,toggles=self.labels)
-        line, = self.ax.plot(dataset.data[self.xaxis], dataset.data[self.yaxis],color=color, label=label)
+        norm_factor=1
+        if self.toggles['normalize']:
+            if self.xlim:
+                norm_factor =  dataset.data[self.yaxis][((dataset.data[self.xaxis] >= self.xlim[0]) &(dataset.data[self.xaxis] <= self.xlim[1]))].max()
+            else:
+                norm_factor=dataset.data[self.yaxis].max()
+        line, = self.ax.plot(dataset.data[self.xaxis], dataset.data[self.yaxis]/norm_factor,color=color, label=label)
         self.lines[filepath] = line
         # self.used_colors[filepath] = color
         self.original_d[filepath] = dataset.data.copy()
@@ -325,6 +324,10 @@ class SpectrumPlot(QWidget):
         del self.lines[filepath]
         if refresh:
             self._refresh()
+    def remove_all(self):
+        for filepath in self.lines.copy():
+            self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
+        self._refresh()
     
     def _get_color(self, key):
         if key not in self.used_colors:
@@ -344,7 +347,7 @@ class SpectrumPlot(QWidget):
 
             for filepath in reversed(filepaths):
                 if filepath in self.main.datasets:
-                    self.remove(filepath,refresh=False)
+                    self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
         for group_id, filepaths in self.groups.items():
             if not filepaths:
                 continue
@@ -364,6 +367,7 @@ class SpectrumPlot(QWidget):
                 continue
             
             self.datasets[group_id] = Data_Set_Import(attrs=datasets[-1].attrs,dataset=merged,name=datasets[-1].name)
+            self.datasets[group_id].number = group_id
             self.original_d[group_id] = self.datasets[group_id].data.copy()
             color=self._get_color(group_id)
 

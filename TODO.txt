@@ -27,5 +27,4 @@ Buttons:
 - [ ] add map group for different cmaps (viridis + red transp) and/or new graph
 - [ ] make custom file tree
 
-fix reset groups (doable??)
-fix delete all
+
