@@ -17,6 +17,15 @@ def normalize_lines(lines,original_d,xlim=None,xaxis='nm',yaxis='count',toggle=1
         else:
             line.set_ydata(y)
             
+            
+def offset_lines(GraphClass,xoffset=0,yoffset=0,xaxis='nm',yaxis='count'):
+    for filepath, line in GraphClass.lines.items():
+        data = GraphClass.original_d[filepath]
+        y = data[yaxis]
+        x = data[xaxis]
+        line.set_ydata(y+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(yoffset))
+        line.set_xdata(x+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(xoffset))
+            
 def evnm_swap(lines):
     for filepath, line in lines.items():
         line.set_xdata(1239.8/line.get_xdata())         

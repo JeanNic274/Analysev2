@@ -63,10 +63,10 @@ class PlotArea(QWidget):
         elif dataset.measure_type == 'map':
             self.map.add(filepath, dataset)
 
-    def remove(self, filepath, dataset,refresh=True):
+    def remove(self, filepath, dataset,refresh=True,keep=False):
         if dataset.measure_type == 'spectrum' and self.spectrum:
             self.spectrum.remove(filepath,refresh=refresh)
-            if not self.spectrum.lines:  # destroy if empty
+            if not self.spectrum.lines and not keep:  # destroy if empty
                 self.layout.removeWidget(self.spectrum)
                 self.spectrum.deleteLater()
                 self.spectrum = None

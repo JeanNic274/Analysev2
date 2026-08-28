@@ -9,15 +9,15 @@ Buttons:
 - [x] add xlim and make it so normalize toggle works with it
 - [ ] add import work (eg file_path with labels already done)
 - [x] add title
-- [ ] make normalize work for new curves
+- [x] make normalize work for new curves
 - [x] add hlines/vlines
 - [ ] add trpl fit
-- [ ] add text/annotations
-- [ ] add line offset (y decay)
-- [ ] add axis select
+- [x] add text/annotations
+- [x] add line offset (y decay)
+- [ ] make line offset work w/ normalize (and other data specifications) (refresh w/ toggles)
+- [x] add axis select
 - [ ] add focus sweep
 - [ ] add general line plot
-- [ ] add reset params for when error
 - [ ] add fr (axis label) to save manager
 - [ ] add colors (polar plot)
 - [ ] add meas.txt to know file type or something
@@ -26,5 +26,6 @@ Buttons:
 - [ ] add trpl x start delay to file manager? to line up different power
 - [ ] add map group for different cmaps (viridis + red transp) and/or new graph
 - [ ] make custom file tree
+- [ ] make new tab for each graph/new tab for new set of graphs (experiments)
 
 

@@ -19,7 +19,33 @@ plt.rcParams.update({
     "legend.fontsize": 11,
 })
 
-class SpectrumPlot(QWidget):
+class BasePlot(QWidget):
+    def __init__(self, main_window):
+        super().__init__()
+
+        self.main = main_window
+
+        self.lines = {}
+        self.datasets = {}
+        self.original_d = {}
+
+        self.vlines = []
+        self.hlines = []
+        self.annotations = []
+
+        self.colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        self.available_colors = list(self.colors)
+        self.used_colors = {}
+
+        self.xaxis = None
+        self.yaxis = None
+        self.xlim = None
+        self.ylim = None
+
+        self._build()
+
+
+class SpectrumPlot(BasePlot):
     def __init__(self, main_window):
         self.xaxis='nm'
         self.xaxisev='ev'
@@ -30,7 +56,7 @@ class SpectrumPlot(QWidget):
         self.ylim=None
         self.labels = {'number':1,'name':1,'power':0,'pos':0,'posf':0,'filter':0,}
         self.title=0
-        self.toggles = {'normalize':0,}
+        self.toggles = {'normalize':0,'annotations':[],'yoffset':0}
         self.groups={str(i): [] for i in range(5)}
         self.datasets={}
         self.vlines=[]
@@ -92,6 +118,10 @@ class SpectrumPlot(QWidget):
         btn_axvline.clicked.connect(self.axvline)
         btn_axhline = QPushButton("Ax H Line")
         btn_axhline.clicked.connect(self.axhline)
+        btn_yaxis_select = QPushButton("Set y axis")
+        btn_yaxis_select.clicked.connect(self.yaxis_select)
+        btn_y_offset = QPushButton("Set y offset")
+        btn_y_offset.clicked.connect(self.set_y_offset)
 
 
         button_layout.addWidget(btn_normalize)
@@ -101,6 +131,8 @@ class SpectrumPlot(QWidget):
         button_layout.addWidget(btn_ylim)
         button_layout.addWidget(btn_axvline)
         button_layout.addWidget(btn_axhline)
+        button_layout.addWidget(btn_yaxis_select)
+        button_layout.addWidget(btn_y_offset)
         button_layout.addStretch()
 
         # -----------------
@@ -110,6 +142,7 @@ class SpectrumPlot(QWidget):
 
         self.figure = Figure()
         self.canvas = FigureCanvas(self.figure)
+        self.canvas.mpl_connect("button_press_event",self._on_plot_double_click)
         self.toolbar = NavigationToolbar(self.canvas, self)
         self.ax = self.figure.add_subplot(111)
         self.ax.margins(0,0.01)
@@ -218,8 +251,31 @@ class SpectrumPlot(QWidget):
         self._refresh() 
         self.ylim=self.ax.get_ylim() 
         
-    def y_offset(self):
-        return
+    def set_y_offset(self):
+        yoffset, ok = QInputDialog.getText(self, 'Set y axis offset', 'Enter value.')
+        if yoffset == "":
+            yoffset = 0
+        if ok:
+            self.toggles['yoffset'] = yoffset
+            offset_lines(self,yoffset=self.toggles['yoffset'],xaxis=self.xaxis,yaxis=self.yaxis)
+        self._refresh()
+
+    def yaxis_select(self):
+        yaxis, ok = QInputDialog.getText(self, 'Set y axis', 'Enter y axis name.')
+        if yaxis and ok:
+            self.yaxis = yaxis
+        self._refresh() 
+
+    def _on_plot_double_click(self, event):
+        if event.dblclick and event.inaxes == self.ax:
+            text, ok = QInputDialog.getText(self,"Add Text","Enter text:")
+
+            if not ok or not text:
+                return
+            self.toggles['annotations'].append([event.xdata,event.ydata,text])
+            self.ax.text(event.xdata,event.ydata,text)
+            self.canvas.draw_idle()
+
 
     def _refresh(self):
         if self.lines:
@@ -335,19 +391,13 @@ class SpectrumPlot(QWidget):
         return self.used_colors[key]
         
     def update_groups(self):
-        # Remove existing plotted group lines
-        # for line in self.lines.values():
-        #     line.remove()
-
-        # self.lines.clear()
-        # Plot each non-empty group
         for group_id, filepaths in reversed(self.groups.items()):
             if group_id in self.lines:
                 self.remove(group_id,refresh=False)
 
             for filepath in reversed(filepaths):
                 if filepath in self.main.datasets:
-                    self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
+                    self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False,keep=True)
         for group_id, filepaths in self.groups.items():
             if not filepaths:
                 continue

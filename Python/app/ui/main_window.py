@@ -1,15 +1,15 @@
 import time
 t=time.time()
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout
-print('---------------- imported QtWidgets',time.time()-t,' --------------------')
+print(f'---------------- imported QtWidgets:{time.time()-t:.8f} --------------------')
 t=time.time()
 from app.ui.sidebar import Sidebar
-print('---------------- imported sidebar',time.time()-t,' --------------------')
+print(f'---------------- imported sidebar:  {time.time()-t:.8f} --------------------')
 t=time.time()
 from app.ui.toolbar import Toolbar
-print('---------------- imported toolbar',time.time()-t,' --------------------')
+print(f'---------------- imported toolbar:  {time.time()-t:.8f} --------------------')
 from app.ui.plot_area import PlotArea
-print('---------------- imported PlotArea',time.time()-t,' --------------------')
+print(f'---------------- imported PlotArea: {time.time()-t:.8f} --------------------')
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -33,3 +33,7 @@ class MainWindow(QMainWindow):
         self.layout.addWidget(self.sidebar)
         self.layout.addWidget(self.plot_area)
         self.layout.addWidget(self.toolbar)#
+                
+    def closeEvent(self, event):
+        print(f'Closing app. Runtime: {time.time()-t:.3f} s')
+        event.accept()
