@@ -42,56 +42,13 @@ class BasePlot(QWidget):
         self.xlim = None
         self.ylim = None
 
-        self._build()
 
-
-class SpectrumPlot(BasePlot):
-    def __init__(self, main_window):
-        self.xaxis='nm'
-        self.xaxisev='ev'
-        self.yaxis='count_cor'
-        self.x_lab="Wavelength (nm)"
-        self.y_lab="Counts/s"
-        self.xlim=None
-        self.ylim=None
-        self.labels = {'number':1,'name':1,'power':0,'pos':0,'posf':0,'filter':0,}
-        self.title=0
-        self.toggles = {'normalize':0,'annotations':[],'yoffset':0}
-        self.groups={str(i): [] for i in range(5)}
-        self.datasets={}
-        self.vlines=[]
-        self.hlines=[]
-        self.colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-        self.available_colors = list(self.colors)
-        self.used_colors = {}
-        super().__init__()
-        self.main = main_window
-        self.lines = {} 
-        self.original_d = {}
-        self.aspect_ratio = 0.7  # height / width
         sizePolicy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setSizePolicy(sizePolicy)
+        self.aspect_ratio = 0.7
+
         self._build()
-        
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        w = event.size().width()
-        h = int(w * self.aspect_ratio)
-        if w>1000:
-            right_margin = int(w*0.15)
-        else:
-            right_margin = 0
-        self.layout().setContentsMargins(int(0.3*right_margin), 0, right_margin, 0)
-        usable_w = w - right_margin
-        h = int(usable_w * self.aspect_ratio)
-        if h > 0 and self.height() != h:
-            self.setFixedHeight(h)
-            
-    # def sizeHint(self):
-    #     return QSize(800,600)
-    # def heightForWidth(self, width):
-    #     return width * 0.75
-    
+
     def _build(self):
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -169,7 +126,24 @@ class SpectrumPlot(BasePlot):
         main_layout.addLayout(button_layout)
         main_layout.addLayout(graph_layout, 1)
         # main_layout.addLayout(margin_layout)
+            
         
+        
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        w = event.size().width()
+        h = int(w * self.aspect_ratio)
+        if w>1000:
+            right_margin = int(w*0.15)
+        else:
+            right_margin = 0
+        self.layout().setContentsMargins(int(0.3*right_margin), 0, right_margin, 0)
+        usable_w = w - right_margin
+        h = int(usable_w * self.aspect_ratio)
+        if h > 0 and self.height() != h:
+            self.setFixedHeight(h)
+    
+
     def axhline(self):
         text, ok = QInputDialog.getText(self,"AxHLine", "Enter y coordinates separated by commas:")
 
@@ -290,6 +264,82 @@ class SpectrumPlot(BasePlot):
         self.ax.autoscale_view()
         self.canvas.draw()
         self.canvas.flush_events()
+
+  
+    def add(self, filepath, dataset):
+        if not self.available_colors:
+            # Reuse colors after cycle
+            self.available_colors = list(self.colors)
+        
+        color=self._get_color(filepath)
+        # color = self.available_colors.pop(0)
+        self.datasets[filepath]=dataset
+        label = fetch_label(dataset,toggles=self.labels)
+        norm_factor=1
+        if self.toggles['normalize']:
+            if self.xlim:
+                norm_factor =  dataset.data[self.yaxis][((dataset.data[self.xaxis] >= self.xlim[0]) &(dataset.data[self.xaxis] <= self.xlim[1]))].max()
+            else:
+                norm_factor=dataset.data[self.yaxis].max()
+        line, = self.ax.plot(dataset.data[self.xaxis], dataset.data[self.yaxis]/norm_factor,color=color, label=label)
+        self.lines[filepath] = line
+        # self.used_colors[filepath] = color
+        self.original_d[filepath] = dataset.data.copy()
+        self._refresh()
+
+    def remove(self, filepath,refresh=True):
+        if filepath not in self.lines:
+            return
+
+        self.lines[filepath].remove()
+
+        color = self.used_colors.pop(filepath,None)
+        self.available_colors.insert(0, color)
+
+        del self.lines[filepath]
+        if refresh:
+            self._refresh()
+    def remove_all(self):
+        for filepath in self.lines.copy():
+            self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
+        self._refresh()
+    
+    def _get_color(self, key):
+        if key not in self.used_colors:
+            self.used_colors[key] = self.available_colors.pop(0)
+        return self.used_colors[key]
+
+    def refresh_labels(self):
+        for key, line in self.lines.items():
+            dataset = self.datasets.get(key)
+
+            if dataset is None:
+                continue
+
+            line.set_label(
+                fetch_label(dataset,toggles=self.labels)
+            )
+
+        self.ax.legend()
+        self.canvas.draw_idle()
+
+
+
+class SpectrumPlot(BasePlot):
+    def __init__(self, main_window):
+        self.xaxis = 'nm'
+        self.yaxis = 'count_cor'
+
+        self.x_lab = "Wavelength (nm)"
+        self.y_lab = "Counts/s"
+
+        self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
+        self.groups = {str(i): [] for i in range(5)}
+        self.toggles = {'normalize':0,'annotations':[],'yoffset':0}
+        
+        super().__init__(main_window)
+            
+
         
     def nm_to_ev(self,wl):
         """Converts wavelength in nm to eV and inverse.
@@ -347,49 +397,6 @@ class SpectrumPlot(BasePlot):
                 self.ax.xaxis.set_major_locator(plt.MaxNLocator(7))
                 
         
-    def add(self, filepath, dataset):
-        if not self.available_colors:
-            # Reuse colors after cycle
-            self.available_colors = list(self.colors)
-        
-        color=self._get_color(filepath)
-        # color = self.available_colors.pop(0)
-        self.datasets[filepath]=dataset
-        label = fetch_label(dataset,toggles=self.labels)
-        norm_factor=1
-        if self.toggles['normalize']:
-            if self.xlim:
-                norm_factor =  dataset.data[self.yaxis][((dataset.data[self.xaxis] >= self.xlim[0]) &(dataset.data[self.xaxis] <= self.xlim[1]))].max()
-            else:
-                norm_factor=dataset.data[self.yaxis].max()
-        line, = self.ax.plot(dataset.data[self.xaxis], dataset.data[self.yaxis]/norm_factor,color=color, label=label)
-        self.lines[filepath] = line
-        # self.used_colors[filepath] = color
-        self.original_d[filepath] = dataset.data.copy()
-        self._refresh()
-
-    def remove(self, filepath,refresh=True):
-        if filepath not in self.lines:
-            return
-
-        self.lines[filepath].remove()
-
-        color = self.used_colors.pop(filepath,None)
-        self.available_colors.insert(0, color)
-
-        del self.lines[filepath]
-        if refresh:
-            self._refresh()
-    def remove_all(self):
-        for filepath in self.lines.copy():
-            self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
-        self._refresh()
-    
-    def _get_color(self, key):
-        if key not in self.used_colors:
-            self.used_colors[key] = self.available_colors.pop(0)
-        return self.used_colors[key]
-        
     def update_groups(self):
         for group_id, filepaths in reversed(self.groups.items()):
             if group_id in self.lines:
@@ -432,19 +439,6 @@ class SpectrumPlot(BasePlot):
             self.lines[group_id] = line
         self._refresh()
     
-    def refresh_labels(self):
-        for key, line in self.lines.items():
-            dataset = self.datasets.get(key)
-
-            if dataset is None:
-                continue
-
-            line.set_label(
-                fetch_label(dataset,toggles=self.labels)
-            )
-
-        self.ax.legend()
-        self.canvas.draw_idle()
     
         
         
