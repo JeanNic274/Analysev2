@@ -17,9 +17,9 @@ col_names = {
     'Unknown' :                 [str(i) for i in range(20)],
     'spectre w/o bg' :          ['pixel','nm','count_cor_raw'],
     'spectre w/ bg' :           ['pixel','nm','count_raw','countbg','count_cor_raw'],
-    'map APD MH' :              ["x","detx","y","dety","count1","count2","count_raw"],
-    'map APD DAQ' :             ["x","detx","y","dety","count1","count2","count_raw"],
-    'plmap' :                   ["x","y","detx","dety","count1","count2","count_raw"],
+    'map APD MH' :              ["x","detx","y","dety","count1_raw","count2_raw","count_raw"],
+    'map APD DAQ' :             ["x","detx","y","dety","count1_raw","count2_raw","count_raw"],
+    'plmap' :                   ["x","y","detx","dety","count1_raw","count2_raw","count_raw"],
     'focus scan MH' :           ["f","detf","count1","count2","count_raw"],
     'focus scan DAQ' :          ["f","detf","count1","count2","count_raw"],
     'trpl APD MH' :             ["ns","count1","count2"],
@@ -38,14 +38,12 @@ class Data_Set_Import:
         
         self.data=np.genfromtxt(file_path,comments="#",delimiter="\t",encoding="latin-1",names=col_names[self.file_type])
         self.data = np.nan_to_num(self.data, nan=0)
-        
     def init_data(self):
         new_names = []
         new_values = []
-        if self.measure_type=='spectrum':
-            if 'ev' in self.data.dtype.names:
-                new_names.append('nm')
-                new_values.append(1239.8/self.data['ev'])
+        if 'ev' in self.data.dtype.names:
+            new_names.append('nm')
+            new_values.append(1239.8/self.data['ev'])
         if 'count_raw' in self.data.dtype.names:
             new_names.append('count')
             new_values.append(self.data['count_raw'] / self.int_time)
@@ -65,7 +63,6 @@ class Data_Set_Import:
                 new_values,
                 usemask=False
             ) 
-        
 
     
     def fit(self,fitOptions,graphOptions,fit_idx):
@@ -116,8 +113,8 @@ def fit_data(df,parameters,graph,fit_idx):
     xaxis=graph['x_axis']
     axis=graph['axis']
     
-    yfit=np.array(df.data.loc[(df.data[xaxis] >= parameters['p0'][fit_idx][0]) & (df.data[xaxis] <= parameters['p0'][fit_idx][1]), axis])
-    xfit=np.array(df.data.loc[(df.data[xaxis] >= parameters['p0'][fit_idx][0]) & (df.data[xaxis] <= parameters['p0'][fit_idx][1]), xaxis])
+    yfit=np.array(df.data.loc[(df.data[xaxis]+df.x_offset >= parameters['p0'][fit_idx][0]) & (df.data[xaxis]+df.x_offset <= parameters['p0'][fit_idx][1]), axis])
+    xfit=np.array(df.data.loc[(df.data[xaxis]+df.x_offset >= parameters['p0'][fit_idx][0]) & (df.data[xaxis]+df.x_offset <= parameters['p0'][fit_idx][1]), xaxis]) + df.x_offset
     p0=parameters['p0'][fit_idx][2:]
     
     xfit0=0

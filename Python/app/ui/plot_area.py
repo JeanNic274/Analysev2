@@ -48,7 +48,7 @@ class PlotArea(QWidget):
             self.trpl = TRPLPlot(self.main)
             self.layout.addWidget(self.trpl)
             
-        elif plot_type == 'map' and self.map is None:
+        elif plot_type == 'maps' and self.map is None:
             self.map = MapPlot(self.main)
             self.layout.addWidget(self.map)
         self.layout.addStretch()
@@ -60,7 +60,7 @@ class PlotArea(QWidget):
             self.spectrum.add(filepath, dataset)
         elif dataset.measure_type == 'trpl':
             self.trpl.add(filepath, dataset)
-        elif dataset.measure_type == 'map':
+        elif dataset.measure_type == 'maps':
             self.map.add(filepath, dataset)
 
     def remove(self, filepath, dataset,refresh=True,keep=False):
@@ -85,8 +85,10 @@ class PlotArea(QWidget):
                 self.map.deleteLater()
                 self.map = None
     def remove_all(self):
-        self.spectrum.remove_all()
-        # self.trpl.remove_all
+        if self.spectrum:
+            self.spectrum.remove_all()
+        if self.trpl:
+            self.trpl.remove_all
         # self.maps.remove_all
 
 

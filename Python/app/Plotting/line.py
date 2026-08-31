@@ -59,37 +59,45 @@ class BasePlot(QWidget):
         button_layout = QVBoxLayout()
         button_layout.setContentsMargins(4, 4, 4, 4)
         button_layout.setSpacing(5)
+        # self.buttons = ['normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset']
+        if 'normalize' in self.buttons:
+            btn_normalize = QPushButton("Normalize")
+            btn_normalize.setFixedWidth(100)
+            btn_normalize.clicked.connect(self.normalize)
+            button_layout.addWidget(btn_normalize)
+        if 'ev_swap' in self.buttons:
+            btn_ev_nm_swap = QPushButton("eV/nm")
+            btn_ev_nm_swap.clicked.connect(self.ev_nm_swap)
+            button_layout.addWidget(btn_ev_nm_swap)
+        if 'set_title' in self.buttons:
+            btn_title = QPushButton("Set Title")
+            btn_title.clicked.connect(self.set_title)
+            button_layout.addWidget(btn_title)
+        if 'set_xlim' in self.buttons:
+            btn_xlim = QPushButton("Set x lim")
+            btn_xlim.clicked.connect(self.set_xlim)
+            button_layout.addWidget(btn_xlim)
+        if 'set_ylim' in self.buttons:
+            btn_ylim = QPushButton("Set y lim")
+            btn_ylim.clicked.connect(self.set_ylim)
+            button_layout.addWidget(btn_ylim)
+        if 'axvline' in self.buttons:
+            btn_axvline = QPushButton("Ax V Line")
+            btn_axvline.clicked.connect(self.axvline)
+            button_layout.addWidget(btn_axvline)
+        if 'axhline' in self.buttons:
+            btn_axhline = QPushButton("Ax H Line")
+            btn_axhline.clicked.connect(self.axhline)
+            button_layout.addWidget(btn_axhline)
+        if 'set y axis' in self.buttons:
+            btn_yaxis_select = QPushButton("Set y axis")
+            btn_yaxis_select.clicked.connect(self.yaxis_select)
+            button_layout.addWidget(btn_yaxis_select)
+        if 'set y_offset' in self.buttons:
+            btn_y_offset = QPushButton("Set y offset")
+            btn_y_offset.clicked.connect(self.set_y_offset)
+            button_layout.addWidget(btn_y_offset)
 
-        btn_normalize = QPushButton("Normalize")
-        btn_normalize.setFixedWidth(100)
-        btn_normalize.clicked.connect(self.normalize)
-        btn_ev_nm_swap = QPushButton("eV/nm")
-        btn_ev_nm_swap.clicked.connect(self.ev_nm_swap)
-        btn_title = QPushButton("Set Title")
-        btn_title.clicked.connect(self.set_title)
-        btn_xlim = QPushButton("Set x lim")
-        btn_xlim.clicked.connect(self.set_xlim)
-        btn_ylim = QPushButton("Set y lim")
-        btn_ylim.clicked.connect(self.set_ylim)
-        btn_axvline = QPushButton("Ax V Line")
-        btn_axvline.clicked.connect(self.axvline)
-        btn_axhline = QPushButton("Ax H Line")
-        btn_axhline.clicked.connect(self.axhline)
-        btn_yaxis_select = QPushButton("Set y axis")
-        btn_yaxis_select.clicked.connect(self.yaxis_select)
-        btn_y_offset = QPushButton("Set y offset")
-        btn_y_offset.clicked.connect(self.set_y_offset)
-
-
-        button_layout.addWidget(btn_normalize)
-        button_layout.addWidget(btn_ev_nm_swap)
-        button_layout.addWidget(btn_title)
-        button_layout.addWidget(btn_xlim)
-        button_layout.addWidget(btn_ylim)
-        button_layout.addWidget(btn_axvline)
-        button_layout.addWidget(btn_axhline)
-        button_layout.addWidget(btn_yaxis_select)
-        button_layout.addWidget(btn_y_offset)
         button_layout.addStretch()
 
         # -----------------
@@ -281,7 +289,7 @@ class BasePlot(QWidget):
                 norm_factor =  dataset.data[self.yaxis][((dataset.data[self.xaxis] >= self.xlim[0]) &(dataset.data[self.xaxis] <= self.xlim[1]))].max()
             else:
                 norm_factor=dataset.data[self.yaxis].max()
-        line, = self.ax.plot(dataset.data[self.xaxis], dataset.data[self.yaxis]/norm_factor,color=color, label=label)
+        line, = self.ax.plot(dataset.data[self.xaxis]+dataset.x_offset, dataset.data[self.yaxis]/norm_factor, color=color, label=label)
         self.lines[filepath] = line
         # self.used_colors[filepath] = color
         self.original_d[filepath] = dataset.data.copy()
@@ -322,13 +330,23 @@ class BasePlot(QWidget):
 
         self.ax.legend()
         self.canvas.draw_idle()
+        
+    def refresh_curves(self):
+        for key, data in self.datasets.items():
+            self.remove(key)
+            self.add(key,data)
+        
+    
 
 
 
 class SpectrumPlot(BasePlot):
     def __init__(self, main_window):
+        self.buttons = ['normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset']
+        super().__init__(main_window)
         self.xaxis = 'nm'
         self.yaxis = 'count_cor'
+
 
         self.x_lab = "Wavelength (nm)"
         self.y_lab = "Counts/s"
@@ -337,7 +355,6 @@ class SpectrumPlot(BasePlot):
         self.groups = {str(i): [] for i in range(5)}
         self.toggles = {'normalize':0,'annotations':[],'yoffset':0}
         
-        super().__init__(main_window)
             
 
         
@@ -446,74 +463,28 @@ class SpectrumPlot(BasePlot):
     
         
         
-        
+    
 
-class TRPLPlot(QWidget):
+class TRPLPlot(BasePlot):
     def __init__(self, main_window):
-        super().__init__()
-        self.main = main_window
-        self.lines = {}   # { filepath: Line2D }
-        sizePolicy = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
-        sizePolicy.setHeightForWidth(True)
-        self.setSizePolicy(sizePolicy)
-        self._build()
+        self.buttons = ['normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis']
+        self.x_lab = "Time (ns)"
+        self.y_lab = "Counts/s"
+        super().__init__(main_window)
+        self.xaxis = 'ns'
+        self.yaxis = 'count'
+
+
+
+        self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
+        self.groups = {str(i): [] for i in range(5)}
+        self.toggles = {'normalize':0,'annotations':[],'yoffset':0}
         
-    def sizeHint(self):
-        return QSize(1200,800)
-    def heightForWidth(self, width):
-        return width * 0.75
-
-    def _build(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        self.figure = Figure(figsize=(8, 4))
-        self.canvas = FigureCanvas(self.figure)
-        self.toolbar = NavigationToolbar(self.canvas, self)
-        self.ax = self.figure.add_subplot(111)
-
-        self.ax.set_xlabel("Wavelength (nm)")
-        self.ax.set_ylabel("Intensity (a.u.)")
-        self.ax.set_title("Spectrum")
-
-        layout.addWidget(self.toolbar)
-        layout.addWidget(self.canvas)
-
-    def add(self, filepath, dataset):
-        xaxis='ns'
-        yaxis='count'
-        label = filepath.replace("\\", "/").split("/")[-1]
-        line, = self.ax.plot(dataset.data[xaxis], dataset.data[yaxis], label=label)
-        self.lines[filepath] = line
-        self._refresh()
-
-    def remove(self, filepath):
-        if filepath in self.lines:
-            self.lines[filepath].remove()
-            del self.lines[filepath]
-        self._refresh()
-
-    def toggle_log(self):
-        current = self.ax.get_yscale()
-        self.ax.set_yscale("linear" if current == "log" else "log")
-        self.canvas.draw()
-
-    def normalize(self):
-        for filepath, line in self.lines.items():
-            y = line.get_ydata()
-            if y.max() != 0:
-                line.set_ydata(y / y.max())
-        self.ax.relim()
-        self.ax.autoscale_view()
-        self.canvas.draw()
-
-    def _refresh(self):
-        if self.lines:
-            self.ax.legend()
-        else:
-            self.ax.legend().remove() if self.ax.get_legend() else None
-        self.ax.relim()
-        self.ax.autoscale_view()
-        self.canvas.draw()
+    def gen_axis(self):
+        self.ax.set_yscale('log')
+        self.ax.set_ylabel(self.y_lab)
+        self.ax.set_xlabel(self.x_lab)
         
-        
+     
+
+    
