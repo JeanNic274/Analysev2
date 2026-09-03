@@ -116,7 +116,6 @@ class BaseMap(QWidget):
         main_layout.addLayout(button_layout)
         main_layout.addLayout(graph_layout, 1)
         # main_layout.addLayout(margin_layout)
-            
         
         
     def resizeEvent(self, event):

@@ -307,6 +307,7 @@ class BasePlot(QWidget):
         del self.lines[filepath]
         if refresh:
             self._refresh()
+            
     def remove_all(self):
         for filepath in self.lines.copy():
             self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)

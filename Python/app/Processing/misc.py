@@ -1,13 +1,16 @@
-import pathlib
+from pathlib import Path
 import os
 import re
+import csv
+
+from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
 
 
 def meastxt(directory_path):
     files_type,csv_save=[],[]
     spectre,polarisation,carte,cartespec,lifetime,focus=[],[],[],[],[],[]
     # directory_path=os.path.join("Data","micro-PL",directory)
-    directory_path=pathlib.Path(directory_path)
+    directory_path=Path(directory_path)
     
     # Sort numerically for easier reading
     if directory_path.name[0:2]=="20":
@@ -320,5 +323,56 @@ def fetchtype(header):
         measure_type="trpl"
         file_type="trpl APD MH"
     return file_type,measure_type
+
+
+
+
+
+    
+def browse(directory=DEFAULT_FOLDER):
+    directory = Path(directory)
+    
+    meas_file={}
+    if not directory.exists():
+        print('404 error directory not found.')
+    if directory.joinpath(str(directory.name)+' measurements.txt').is_file():
+        with open(directory.joinpath(str(directory.name)+' measurements.txt'),'r') as csvfile:
+            f=csv.reader(csvfile,delimiter='\t')
+            next(f,None)
+            for line in f:
+                meas_file[str(line[0])]=line[1][0]
+            csvfile.close()
+    items = []
+    for name in directory.iterdir():
+        if (name.suffix not in WHITELIST_EXTENSIONS or 'measurement' in name.name) and not name.is_dir(): # blacklisted file extensions
+            continue
+        
+        name_type='📁'+meas_file.get(name.name,'')+" "+name.name if name.is_dir() else '📄'+meas_file.get(name.name,'')+" "+name.name
+        items.append({
+            "name": name_type,
+            "path": name,
+            "is_dir": name.is_dir()
+        })
+
+    dirs  = sorted([i for i in items if     i["is_dir"]], key=lambda x: sort_key(x["name"]), reverse=True) # sort directories by reversed alphabetical order
+    files = sorted([i for i in items if not i["is_dir"]], key=lambda x: sort_key(x["name"]), reverse=False) # sort files by alphabetical order
+
+    # print(dirs+files)
+    return dirs+files
+
+
+def sort_key(filename):
+    """Sorts key by number
+
+    Args:
+        filename (list): List of file names to be sorted
+
+    Returns:
+        list: Sorted list
+    """
+    numbers = re.findall(r'\d+', filename)
+    return [int(n) for n in numbers]
+
+
 
 

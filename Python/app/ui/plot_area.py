@@ -11,7 +11,7 @@ class PlotArea(QWidget):
         self.main = main_window
         self.spectrum = None
         self.trpl = None
-        self.map = None
+        self.maps = None
         self.setSizePolicy(
             QSizePolicy.Expanding,
             QSizePolicy.Preferred
@@ -48,9 +48,9 @@ class PlotArea(QWidget):
             self.trpl = TRPLPlot(self.main)
             self.layout.addWidget(self.trpl)
             
-        elif plot_type == 'maps' and self.map is None:
-            self.map = MapPlot(self.main)
-            self.layout.addWidget(self.map)
+        elif plot_type == 'maps' and self.maps is None:
+            self.maps = MapPlot(self.main)
+            self.layout.addWidget(self.maps)
         self.layout.addStretch()
         
     def add(self, filepath, dataset):
@@ -61,7 +61,7 @@ class PlotArea(QWidget):
         elif dataset.measure_type == 'trpl':
             self.trpl.add(filepath, dataset)
         elif dataset.measure_type == 'maps':
-            self.map.add(filepath, dataset)
+            self.maps.add(filepath, dataset)
 
     def remove(self, filepath, dataset,refresh=True,keep=False):
         if dataset.measure_type == 'spectrum' and self.spectrum:
@@ -72,24 +72,25 @@ class PlotArea(QWidget):
                 self.spectrum = None
 
         elif dataset.measure_type == 'trpl' and self.trpl:
-            self.trpl.remove(filepath)
+            self.trpl.remove(filepath,refresh=refresh)
             if not self.trpl.lines:
                 self.layout.removeWidget(self.trpl)
                 self.trpl.deleteLater()
                 self.trpl = None
 
-        elif dataset.measure_type == 'map' and self.map:
-            self.map.remove(filepath)
-            if not self.map.lines:
-                self.layout.removeWidget(self.map)
-                self.map.deleteLater()
-                self.map = None
+        elif dataset.measure_type == 'maps' and self.maps:
+            self.maps.remove(filepath,refresh=refresh)
+            if not self.maps.lines:
+                self.layout.removeWidget(self.maps)
+                self.maps.deleteLater()
+                self.maps = None
     def remove_all(self):
         if self.spectrum:
             self.spectrum.remove_all()
         if self.trpl:
-            self.trpl.remove_all
-        # self.maps.remove_all
+            self.trpl.remove_all()
+        if self.maps:
+            self.maps.remove_all()
 
 
 class ScrollArea(QScrollArea):

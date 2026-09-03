@@ -1,29 +1,31 @@
 # import time
 # t=time.time()
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QLineEdit, QTreeView, QSizePolicy, QFileSystemModel
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
+    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel
 )
 # print('imported QTWidget', time.time()-t)
 # t=time.time()
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel
+from PySide6.QtGui import QBrush
 # print('imported QtCore', time.time()-t)
 # t=time.time()
-import re
+from pathlib import Path
 # print('imported re', time.time()-t)
-
 # t=time.time()
-from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
+# from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
 # print('imported config', time.time()-t)
 # t=time.time()
 from app.Processing.data_import import Data_Set_Import
 # print('imported Data_Set_Import', time.time()-t)
 # t=time.time()
-from app.Processing.misc import reset_idx
+from app.Processing.misc import reset_idx, browse
 # print('imported reset_idx', time.time()-t)
+from config import DEFAULT_FOLDER
 
 class Sidebar(QWidget):
     def __init__(self, main_window):
+        self.path=Path(DEFAULT_FOLDER)
         super().__init__()
         self.main = main_window
         self.setFixedWidth(250)
@@ -36,38 +38,28 @@ class Sidebar(QWidget):
 
         # path input
         self.path_input = QLineEdit()
+        self.path_input.setStyleSheet('font-size: 10pt;')
         self.path_input.setPlaceholderText("Enter path...")
         self.path_input.returnPressed.connect(self._set_path)
         layout.addWidget(QLabel("Browse Files"))
         layout.addWidget(self.path_input)
         
-        # file tree
-        self.fs_model = QFileSystemModel()
-        self.fs_model.setRootPath(DEFAULT_FOLDER)
-        self.fs_model.setNameFilters(WHITELIST_EXTENSIONS)
-        self.fs_model.setNameFilterDisables(False)
-        
-        # custom sort
-        self.proxy_model = CustomSortModel()
-        self.proxy_model.setSourceModel(self.fs_model)
-        
-        self.tree = QTreeView()
-        self.tree.setModel(self.proxy_model)
-        # self.tree.setRootIndex(self.fs_model.index(DEFAULT_FOLDER))
-        self.tree.setRootIndex(self.proxy_model.mapFromSource(
-            self.fs_model.index(DEFAULT_FOLDER)
-        ))
-        self.tree.setSelectionMode(QTreeView.MultiSelection)
-        self.tree.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.tree.clicked.connect(self._on_file_clicked)
-        self.tree.setSortingEnabled(True)
-        self.tree.sortByColumn(0, Qt.AscendingOrder)
+        btn_return = QPushButton("  📁 ..")
+        btn_return.setStyleSheet("text-align: left")
+        btn_return.clicked.connect(self.return_folder)
 
-        # hide size, type, date columns
-        self.tree.hideColumn(1)
-        self.tree.hideColumn(2)
-        self.tree.hideColumn(3)
+        layout.addWidget(btn_return)
 
+        self.tree = QTreeWidget()
+        self.tree.setHeaderHidden(True)
+        self.tree.setRootIsDecorated(False)
+        self.tree.setSelectionMode(QAbstractItemView.NoSelection)
+        self.tree.setStyleSheet('font-size: 10pt;')
+        
+        self.populate_tree(self.path)
+        self.tree.itemClicked.connect(self._item_clicked)
+        
+        
         layout.addWidget(self.tree)
 
         # selected files label
@@ -88,37 +80,57 @@ class Sidebar(QWidget):
 
         btn_layout.addWidget(clear_btn)
         layout.addWidget(btn_row)
-        
+    
+    def return_folder(self):
+        self.populate_tree("")
+    
+    def populate_tree(self,path):
+        if path:
+            self.path=Path(path)
+        else:
+            self.path= self.path.parent
+        files = browse(self.path)
+        self.tree.clear()
+        for file in files:
+            item = QTreeWidgetItem([file['name']])
+            item.setData(0,Qt.UserRole,file['path'])
+            item.setData(0,Qt.UserRole+1,file['is_dir'])
+            
+            self.tree.addTopLevelItem(item)
+            
     def _set_path(self):
         path = self.path_input.text()
         if QDir(path).exists():
-            self.fs_model.setRootPath(path)
-            self.tree.setRootIndex(self.proxy_model.mapFromSource(
-                self.fs_model.index(path)
-            ))
-    def _on_file_clicked(self, index):
-        source_index = self.proxy_model.mapToSource(index)
-        if self.fs_model.isDir(source_index):
-            if self.tree.isExpanded(index):
-                self.tree.collapse(index)
-            else:
-                self.tree.expand(index)
-            return
-
-        path = self.fs_model.filePath(source_index)
-
-        if path in self.main.selected_files:
-            self.main.selected_files.remove(path)
-            dataset = self.main.datasets.pop(path)
-            self.main.plot_area.remove(path, dataset)
+            self.populate_tree(path)
+            
+    def _item_clicked(self, item):
+        
+        path = str(item.data(0, Qt.UserRole))
+        is_dir = item.data(0, Qt.UserRole + 1)
+        if is_dir:
+            self.populate_tree(path)
         else:
-            dataset = Data_Set_Import(path)
-            self.main.selected_files.append(path)
-            self.main.datasets[path] = dataset
-            self.main.plot_area.add(path, dataset)
-        self._update_label()
+            if path in self.main.selected_files:
+                self.main.selected_files.remove(path)
+                dataset = self.main.datasets.pop(path)
+                self.main.plot_area.remove(path, dataset)
+                item.setData(0, Qt.UserRole + 2, False)
+                item.setBackground(0, QBrush())
+            else:
+                dataset = Data_Set_Import(path)
+                self.main.selected_files.append(path)
+                self.main.datasets[path] = dataset
+                self.main.plot_area.add(path, dataset)
+                item.setData(0, Qt.UserRole + 2, True)
+                item.setBackground(0, QBrush(Qt.blue))
+            self._update_label()
         
     def _clear_selection(self):
+        
+        for i in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(i)
+            item.setData(0, Qt.UserRole + 2, False)
+            item.setBackground(0, QBrush())
         self.main.plot_area.remove_all()
         self.main.selected_files = []
         self.tree.clearSelection()
@@ -144,26 +156,3 @@ class Sidebar(QWidget):
             
             
             
-
-class CustomSortModel(QSortFilterProxyModel):
-    def _natural_key(self, name):
-        # split "..._0_10.txt" into ["..._", 0, "_", 10, ".txt"]
-        parts = re.split(r'(\d+)', name.lower())
-        return [int(p) if p.isdigit() else p for p in parts]
-    def lessThan(self, left, right):
-        model = self.sourceModel()
-
-        left_is_dir = model.isDir(left)
-        right_is_dir = model.isDir(right)
-
-        if left_is_dir and right_is_dir:
-            left_name = model.fileName(left)
-            right_name = model.fileName(right)
-            return self._natural_key(left_name) > self._natural_key(right_name)  # descending
-
-        if not left_is_dir and not right_is_dir:
-            left_name = model.fileName(left)
-            right_name = model.fileName(right)
-            return self._natural_key(left_name) < self._natural_key(right_name)  # ascending
-
-        return left_is_dir
