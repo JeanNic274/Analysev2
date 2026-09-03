@@ -204,6 +204,136 @@ class SpectrumFileManager(QDialog):
 
 
 
+class TRPLFileManager(QDialog):
+
+    def __init__(self, main_window):
+        self.force_refresh=0
+        super().__init__(main_window)
+
+        self.main = main_window
+
+        self.setWindowTitle("TRPL File Manager")
+        self.resize(700, 500)
+
+
+
+        self._build()
+        self._refresh()
+
+
+    def _build(self):
+
+        layout = QVBoxLayout(self)
+
+        # Files
+        self.files = QListWidget()
+
+        # Layouts
+        file_layout = QVBoxLayout()
+        file_layout.addWidget(self.files)
+        
+        check_layout = QHBoxLayout()
+        for attribute, var in [('Number','number'),('Name','name'),('Power',"power"), ('Position (x,y)',"pos"),('Positition (x,y,z)','posf'), ('Filter',"filter")]:
+            checkbox = QCheckBox(attribute)
+
+            checkbox.toggled.connect(
+                lambda checked, attr=var:
+                    self._checkbox_attribute_label_change(attr, checked)
+            )
+            if self.main.plot_area.trpl.labels[var]:
+                checkbox.setChecked(1)
+            check_layout.addWidget(checkbox)
+
+
+        lists = QHBoxLayout()
+        lists.addLayout(file_layout)
+        
+        # Title
+        qlab1 = QLabel('Curves label:')
+        qlab1.setStyleSheet('font-size: 16pt;')
+        # Title
+        qlab2 = QLabel('Set zero (x offset in ns):')
+        qlab2.setStyleSheet('font-size: 12pt;')
+        
+        layout.addWidget(qlab1)
+        layout.addLayout(check_layout)
+        layout.addWidget(qlab2)
+        layout.addLayout(lists)
+        
+    def _checkbox_attribute_label_change(self,var,checked):
+        self.main.plot_area.trpl.labels[var] = checked
+
+    def _reset(self):
+        print('WIP')
+    
+    def _refresh(self):
+        self.files.clear()
+
+        for filepath, dataset in self.main.datasets.items():
+            if getattr(dataset, "measure_type", None) != "trpl":
+                continue
+            
+            item=QListWidgetItem(os.path.basename(filepath)[:-4])
+            item.setData(Qt.UserRole,filepath)
+
+            # Widget containing filename + text box
+            widget = QWidget()
+            layout = QHBoxLayout(widget)
+            layout.setContentsMargins(2, 2, 2, 2)
+
+            # Filename
+            filename = QLabel(os.path.basename(filepath)[:-4])
+
+            # Custom text
+            edit = QLineEdit()
+            edit.setPlaceholderText("Custom Labels")
+            edit.setText(
+                self.main.plot_area.trpl.datasets[filepath].text
+            )
+
+            # Save text when edited
+            edit.editingFinished.connect(
+                lambda filepath=filepath, edit=edit:
+                    self._custom_text_changed(filepath, edit)
+            )
+            x_off = QLineEdit()
+            x_off.setFixedWidth(50)
+            x_off.setPlaceholderText("x")
+            x_off.setText(
+                str(self.main.plot_area.trpl.datasets[filepath].x_offset)
+            )
+
+            x_off.editingFinished.connect(
+                lambda filepath=filepath, edit=x_off:
+                    self._custom_number_changed(filepath, edit)
+            )
+
+            layout.addWidget(filename)
+            layout.addWidget(x_off)
+            layout.addWidget(edit)
+
+            # Put widget inside QListWidget item
+            self.files.addItem(item)
+            self.files.setItemWidget(item, widget)
+
+            # Give the item enough height
+            item.setSizeHint(widget.sizeHint())
+    def _custom_text_changed(self, filepath, edit):
+        if edit != "":
+            self.main.plot_area.trpl.datasets[filepath].text = edit.text()+", "
+    def _custom_number_changed(self, filepath, edit):
+        if edit != "":
+            self.main.plot_area.trpl.datasets[filepath].x_offset = float(edit.text())
+            self.main.plot_area.trpl.refresh_curves()
+        
+    def closeEvent(self, event):
+        if self.force_refresh:
+            # self.main.plot_area.trpl.refresh()
+            # self.force_refresh = 0
+            print('refresh curve WIP')
+        self.main.plot_area.trpl.refresh_labels()
+        event.accept()
+
 
 
 

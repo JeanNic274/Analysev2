@@ -185,6 +185,9 @@ def header_extract(file_path,map=False):
         if power < 1e-6:
             info['power'] = f"{1e9 * power:.4}" + r' nW'
     info['filter'] = fetchfilter(header)
+    info['x_offset'] = 0
+    info['y_offset'] = 0
+    info['cmap'] = 'viridis'
     if file_type:
         info['int_time'] = int(fetchinttime(header,file_type=file_type).replace(' ',''))/1000
     return info  

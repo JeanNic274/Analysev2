@@ -1,5 +1,4 @@
-Buttons:
-- [x] log
+- [x] log (MPL)
 - [ ] save
 - [x] fix number label when merged spectrum
 - [ ] fit
@@ -27,5 +26,5 @@ Buttons:
 - [ ] add map group for different cmaps (viridis + red transp) and/or new graph
 - [ ] make custom file tree
 - [ ] make new tab for each graph/new tab for new set of graphs (experiments)
-
+- [ ] map double click circle or text
 

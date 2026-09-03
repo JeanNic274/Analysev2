@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QTreeView, QSizePolicy, QFileSystemModel
 )
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel
-from app.ui.DialogWindow import SpectrumFileManager
+from app.ui.DialogWindow import SpectrumFileManager, TRPLFileManager
 
 class Toolbar(QWidget):
     def __init__(self, main_window):
@@ -26,9 +26,13 @@ class Toolbar(QWidget):
         btn_save_mng.setFixedWidth(150)
         btn_save_mng.clicked.connect(self._open_save_mng)
 
-        btn_file_mng = QPushButton("File Manager")
-        btn_file_mng.setFixedWidth(150)
-        btn_file_mng.clicked.connect(self._open_file_mng)
+        btn_sfile_mng = QPushButton("Spectrum File Manager")
+        btn_sfile_mng.setFixedWidth(150)
+        btn_sfile_mng.clicked.connect(self._open_sfile_mng)
+
+        btn_tfile_mng = QPushButton("TRPL File Manager")
+        btn_tfile_mng.setFixedWidth(150)
+        btn_tfile_mng.clicked.connect(self._open_tfile_mng)
 
         btn_save_exp = QPushButton("Save Exp")
         btn_save_exp.setFixedWidth(150)
@@ -48,7 +52,8 @@ class Toolbar(QWidget):
 
 
         btn_layout.addWidget(btn_save_mng)
-        btn_layout.addWidget(btn_file_mng)
+        btn_layout.addWidget(btn_sfile_mng)
+        btn_layout.addWidget(btn_tfile_mng)
         btn_layout.addWidget(btn_save_exp)
         btn_layout.addWidget(btn_load_exp)
         btn_layout.addWidget(btn_reset)
@@ -61,8 +66,12 @@ class Toolbar(QWidget):
     def _open_save_mng(self):
         print("_open_save_mng")
 
-    def _open_file_mng(self):
+    def _open_sfile_mng(self):
         dialog = SpectrumFileManager(self.main)
+        dialog.exec()
+        
+    def _open_tfile_mng(self):
+        dialog = TRPLFileManager(self.main)
         dialog.exec()
         
     def _save_exp(self):
