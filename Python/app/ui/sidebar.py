@@ -54,10 +54,11 @@ class Sidebar(QWidget):
         self.tree.setHeaderHidden(True)
         self.tree.setRootIsDecorated(False)
         self.tree.setSelectionMode(QAbstractItemView.NoSelection)
-        self.tree.setStyleSheet('font-size: 10pt;')
-        
+        self.tree.setStyleSheet("""font-size: 10pt;""")
         self.populate_tree(self.path)
+        
         self.tree.itemClicked.connect(self._item_clicked)
+        
         
         
         layout.addWidget(self.tree)

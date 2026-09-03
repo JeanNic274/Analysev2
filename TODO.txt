@@ -19,12 +19,12 @@
 - [ ] add general line plot
 - [ ] add fr (axis label) to save manager
 - [ ] add colors (polar plot)
-- [ ] add meas.txt to know file type or something
-- [ ] add generate meas.txt and meas type on file picker
-- [ ] add file manager check box for legend to all lines (eg power, name, number, etc)
-- [ ] add trpl x start delay to file manager? to line up different power
+- [x] add meas.txt to know file type or something
+- [x] add generate meas.txt and meas type on file picker
+- [x] add file manager check box for legend to all lines (eg power, name, number, etc)
+- [x] add trpl x start delay to file manager? to line up different power
 - [ ] add map group for different cmaps (viridis + red transp) and/or new graph
-- [ ] make custom file tree
+- [x] make custom file tree
 - [ ] make new tab for each graph/new tab for new set of graphs (experiments)
 - [ ] map double click circle or text
 

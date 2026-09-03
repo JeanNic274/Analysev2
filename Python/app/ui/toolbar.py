@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel
 from app.ui.DialogWindow import SpectrumFileManager, TRPLFileManager
+from app.Processing.misc import meastxt
 
 class Toolbar(QWidget):
     def __init__(self, main_window):
@@ -84,7 +85,7 @@ class Toolbar(QWidget):
         print("_reset")
 
     def _meastxt(self):
-        print("_meastxt")
+        meastxt(self.main.sidebar.path)
 
 
 

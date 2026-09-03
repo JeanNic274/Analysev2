@@ -171,7 +171,7 @@ class BaseMap(QWidget):
         except ValueError:
             return
         for y in y_values:
-            self.hlines.append(self.ax.axhline(y,color='k',alpha=0.7,zorder=-10))
+            self.hlines.append(self.ax.axhline(y,color='k',alpha=0.7,zorder=10))
         self._refresh()     
          
     def axvline(self):
@@ -199,7 +199,7 @@ class BaseMap(QWidget):
         except ValueError:
             return
         for x in x_values:
-            self.vlines.append(self.ax.axvline(x,color='k',alpha=0.7,zorder=-10))
+            self.vlines.append(self.ax.axvline(x,color='k',alpha=0.7,zorder=10))
         self._refresh()      
 
     def normalize(self):

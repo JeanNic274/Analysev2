@@ -2,11 +2,14 @@ from pathlib import Path
 import os
 import re
 import csv
+import sys
 
 from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
 
 
 def meastxt(directory_path):
+    print('Generating measurements.txt file:')
+    print("")
     files_type,csv_save=[],[]
     spectre,polarisation,carte,cartespec,lifetime,focus=[],[],[],[],[],[]
     # directory_path=os.path.join("Data","micro-PL",directory)
@@ -31,7 +34,6 @@ def meastxt(directory_path):
         if filename.endswith(".txt") and filename.startswith(filestart) and "Req" not in filename:
             file_path=os.path.join(directory_path,filename)
             header=[]
-            print(filename)
     
             with open(file_path) as f:
                 comment_lines=0
@@ -97,7 +99,11 @@ def meastxt(directory_path):
                         continue #???
                 else:
                     file_type='Empty file'
+                    sys.stdout.write("\r")
+                    sys.stdout.flush()
                     print(filename + ' is empty.')
+            sys.stdout.write("\r"+filename+' done.')
+            sys.stdout.flush()
             if len(pos)<10:
                 pos+="    "
             if len(filter)<15:
@@ -110,7 +116,7 @@ def meastxt(directory_path):
         f.close()
         
     # dic={'bg_spectre':[],'spectre':spectre,'polarisation':polarisation,'map':carte,'lifetime':lifetime,'map_spec':cartespec,'focus':focus,'folder':directory}
-    print(len(files_type), "file types saved in "+directory_path.name+f" as {directory_path.name} measurements.txt'")
+    print('\n\n',f"\b{len(files_type)} file types saved in "+directory_path.name+f" as {directory_path.name} measurements.txt'")
     return 0
 
 
@@ -347,7 +353,7 @@ def browse(directory=DEFAULT_FOLDER):
         if (name.suffix not in WHITELIST_EXTENSIONS or 'measurement' in name.name) and not name.is_dir(): # blacklisted file extensions
             continue
         
-        name_type='📁'+meas_file.get(name.name,'')+" "+name.name if name.is_dir() else '📄'+meas_file.get(name.name,'')+" "+name.name
+        name_type="📁 "+name.name if name.is_dir() else '📄'+meas_file.get(name.name,'')+"  "+name.name
         items.append({
             "name": name_type,
             "path": name,
