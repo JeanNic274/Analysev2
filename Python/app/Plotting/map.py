@@ -273,27 +273,28 @@ class BaseMap(QWidget):
         self._refresh()
         
 
-    def add(self, filepath, dataset):
+    def add(self, filepath, dataset, plot_now = True):
         self.datasets[filepath]=dataset
         
-        xu = np.unique(dataset.data[self.xaxis])
-        yu = np.unique(dataset.data[self.yaxis])
+        if plot_now:
+            xu = np.unique(dataset.data[self.xaxis])
+            yu = np.unique(dataset.data[self.yaxis])
 
-        grid = np.zeros((len(yu), len(xu)))
-        xi = np.searchsorted(xu, dataset.data[self.xaxis])
-        yi = np.searchsorted(yu, dataset.data[self.yaxis])
-        grid[yi, xi] = dataset.data[self.zaxis]
-        pcolormesh = self.ax.pcolormesh(xu,yu,grid, cmap=dataset.cmap,antialiased=False,edgecolor='none', linewidth=0)
-        self.lines[filepath] = pcolormesh
-        self.original_d[filepath] = dataset.data.copy()
-        cbar = InteractiveColorbar(
-            self.ax_strip, pcolormesh, dataset.data[self.zaxis],
-            dataset.cmap, label=self.z_lab
-        )
-        self.cbars[filepath] = cbar
-        self.active_cbar = cbar
-        
-        self._refresh()
+            grid = np.zeros((len(yu), len(xu)))
+            xi = np.searchsorted(xu, dataset.data[self.xaxis])
+            yi = np.searchsorted(yu, dataset.data[self.yaxis])
+            grid[yi, xi] = dataset.data[self.zaxis]
+            pcolormesh = self.ax.pcolormesh(xu,yu,grid, cmap=dataset.cmap,antialiased=False,edgecolor='none', linewidth=0)
+            self.lines[filepath] = pcolormesh
+            self.original_d[filepath] = dataset.data.copy()
+            cbar = InteractiveColorbar(
+                self.ax_strip, pcolormesh, dataset.data[self.zaxis],
+                dataset.cmap, label=self.z_lab
+            )
+            self.cbars[filepath] = cbar
+            self.active_cbar = cbar
+            
+            self._refresh()
 
     def remove(self, filepath, refresh=True):
         if filepath not in self.lines:
@@ -319,6 +320,11 @@ class BaseMap(QWidget):
         for key, data in self.datasets.items():
             self.remove(key)
             self.add(key,data)
+            
+    def _refresh_full(self):
+        self.refresh_curves()
+        self._refresh_cmap()
+        self._refresh()
         
     
 

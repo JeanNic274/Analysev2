@@ -37,8 +37,7 @@ class BasePlot(QWidget):
         self.available_colors = list(self.colors)
         self.used_colors = {}
 
-        self.xaxis = None
-        self.yaxis = None
+        self.title = ""
         self.xlim = None
         self.ylim = None
 
@@ -216,7 +215,8 @@ class BasePlot(QWidget):
     def set_title(self):
         title, ok = QInputDialog.getText(self, 'Title', 'Enter title, if multiple attributes, separate with a comma.')
         if title and ok:
-            set_fig_title(self.figure,title,[*self.datasets.values()][0])
+            self.title = title
+            set_fig_title(self.figure,self.title,[*self.datasets.values()][0])
             self._refresh()
                
     def set_xlim(self):
@@ -274,7 +274,7 @@ class BasePlot(QWidget):
         self.canvas.flush_events()
 
   
-    def add(self, filepath, dataset):
+    def add(self, filepath, dataset, plot_now = True):
         if not self.available_colors:
             # Reuse colors after cycle
             self.available_colors = list(self.colors)
@@ -282,18 +282,19 @@ class BasePlot(QWidget):
         color=self._get_color(filepath)
         # color = self.available_colors.pop(0)
         self.datasets[filepath]=dataset
-        label = fetch_label(dataset,toggles=self.labels)
-        norm_factor=1
-        if self.toggles['normalize']:
-            if self.xlim:
-                norm_factor =  dataset.data[self.yaxis][((dataset.data[self.xaxis] >= self.xlim[0]) &(dataset.data[self.xaxis] <= self.xlim[1]))].max()
-            else:
-                norm_factor=dataset.data[self.yaxis].max()
-        line, = self.ax.plot(dataset.data[self.xaxis]+dataset.x_offset, dataset.data[self.yaxis]/norm_factor, color=color, label=label)
-        self.lines[filepath] = line
-        # self.used_colors[filepath] = color
-        self.original_d[filepath] = dataset.data.copy()
-        self._refresh()
+        if plot_now:
+            label = fetch_label(dataset,toggles=self.labels)
+            norm_factor=1
+            if self.toggles['normalize']:
+                if self.xlim:
+                    norm_factor =  dataset.data[self.yaxis][((dataset.data[self.xaxis] >= self.xlim[0]) &(dataset.data[self.xaxis] <= self.xlim[1]))].max()
+                else:
+                    norm_factor=dataset.data[self.yaxis].max()
+            line, = self.ax.plot(dataset.data[self.xaxis]+dataset.x_offset, dataset.data[self.yaxis]/norm_factor, color=color, label=label)
+            self.lines[filepath] = line
+            # self.used_colors[filepath] = color
+            self.original_d[filepath] = dataset.data.copy()
+            self._refresh()
 
     def remove(self, filepath,refresh=True):
         if filepath not in self.lines:
@@ -336,6 +337,10 @@ class BasePlot(QWidget):
         for key, data in self.datasets.items():
             self.remove(key)
             self.add(key,data)
+            
+    def _refresh_full(self):
+        self.refresh_curves()
+        self._refresh()
         
     
 
@@ -344,9 +349,9 @@ class BasePlot(QWidget):
 class SpectrumPlot(BasePlot):
     def __init__(self, main_window):
         self.buttons = ['normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset']
-        super().__init__(main_window)
         self.xaxis = 'nm'
         self.yaxis = 'count_cor'
+        super().__init__(main_window)
 
 
         self.x_lab = "Wavelength (nm)"
@@ -471,9 +476,9 @@ class TRPLPlot(BasePlot):
         self.buttons = ['normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis']
         self.x_lab = "Time (ns)"
         self.y_lab = "Counts/s"
-        super().__init__(main_window)
         self.xaxis = 'ns'
         self.yaxis = 'count'
+        super().__init__(main_window)
 
 
 

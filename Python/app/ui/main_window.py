@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
 
         self.layout.addWidget(self.sidebar)
         self.layout.addWidget(self.plot_area)
-        self.layout.addWidget(self.toolbar)#
+        self.layout.addWidget(self.toolbar)
                 
     def closeEvent(self, event):
         print(f'Closing app. Runtime: {time.time()-t:.3f} s')

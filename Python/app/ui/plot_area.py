@@ -53,15 +53,15 @@ class PlotArea(QWidget):
             self.layout.addWidget(self.maps)
         self.layout.addStretch()
         
-    def add(self, filepath, dataset):
+    def add(self, filepath, dataset,plot_now= True):
         self._get_or_create(dataset.measure_type)
 
         if dataset.measure_type == 'spectrum':
-            self.spectrum.add(filepath, dataset)
+            self.spectrum.add(filepath, dataset, plot_now)
         elif dataset.measure_type == 'trpl':
-            self.trpl.add(filepath, dataset)
+            self.trpl.add(filepath, dataset, plot_now)
         elif dataset.measure_type == 'maps':
-            self.maps.add(filepath, dataset)
+            self.maps.add(filepath, dataset, plot_now)
 
     def remove(self, filepath, dataset,refresh=True,keep=False):
         if dataset.measure_type == 'spectrum' and self.spectrum:

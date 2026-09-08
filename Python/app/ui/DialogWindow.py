@@ -335,8 +335,66 @@ class TRPLFileManager(QDialog):
         event.accept()
 
 
+class Experiment_Picker(QDialog):
+    
+    def __init__(self, main_window):
+        self.path=""
+        super().__init__(main_window)
+
+        self.main = main_window
+
+        self.setWindowTitle("Experiment Picker")
+        self.resize(400, 500)
+
+        self._build()
+        self._refresh()
 
 
+    def _build(self):
+
+        layout = QVBoxLayout(self)
+
+        # Files
+        self.files = QListWidget()
+        self.files.itemSelectionChanged.connect(self._on_change)
+        
+        # Title
+        qlab1 = QLabel('Curves label:')
+        qlab1.setStyleSheet('font-size: 12pt;')
+        
+        layout.addWidget(qlab1)
+        layout.addWidget(self.files)
+
+
+    def _refresh(self):
+        self.files.clear()
+
+        for filepath in os.listdir(os.path.join('data','experiments')):
+            
+            item=QListWidgetItem(os.path.basename(filepath))
+            item.setData(Qt.UserRole,filepath)
+
+            # Widget containing filename + text box
+            widget = QWidget()
+            layout = QHBoxLayout(widget)
+            layout.setContentsMargins(2, 2, 2, 2)
+
+            # Filename
+            filename = QLabel(os.path.basename(filepath))
+
+       
+            layout.addWidget(filename)
+
+            # Put widget inside QListWidget item
+            self.files.addItem(item)
+            self.files.setItemWidget(item, widget)
+
+            # Give the item enough height
+            item.setSizeHint(widget.sizeHint())
+            
+    def _on_change(self):
+        self.path = self.files.selectedItems()[0].data(Qt.UserRole)
+        self.accept()
 
 
 

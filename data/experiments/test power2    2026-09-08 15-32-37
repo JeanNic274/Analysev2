@@ -1,0 +1,42 @@
+{
+    "spectrum": {
+        "attributes": {
+            "xlim": null,
+            "ylim": null,
+            "title": "",
+            "vlines": [],
+            "hlines": [],
+            "yaxis": "count_cor",
+            "groups": {
+                "0": [
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_06\\Data_260806_0_9.txt",
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_06\\Data_260806_0_10.txt"
+                ],
+                "1": [],
+                "2": [],
+                "3": [],
+                "4": []
+            },
+            "x_lab": "Wavelength (nm)",
+            "y_lab": "Counts/s",
+            "labels": {
+                "number": true,
+                "name": false,
+                "power": true,
+                "pos": 0,
+                "posf": 0,
+                "filter": 0
+            },
+            "toggles": {
+                "normalize": 0,
+                "annotations": [],
+                "yoffset": 0
+            }
+        },
+        "filepaths": [
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_06\\Data_260806_0_7.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_06\\Data_260806_0_8.txt",
+            "0"
+        ]
+    }
+}

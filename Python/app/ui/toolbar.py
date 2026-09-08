@@ -1,10 +1,11 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QLineEdit, QTreeView, QSizePolicy, QFileSystemModel
+    QLabel, QLineEdit, QTreeView, QSizePolicy, QFileSystemModel, QInputDialog
 )
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel
-from app.ui.DialogWindow import SpectrumFileManager, TRPLFileManager
+from app.ui.DialogWindow import SpectrumFileManager, TRPLFileManager, Experiment_Picker
 from app.Processing.misc import meastxt
+from app.Processing.io import save_exp, load_exp
 
 class Toolbar(QWidget):
     def __init__(self, main_window):
@@ -76,10 +77,19 @@ class Toolbar(QWidget):
         dialog.exec()
         
     def _save_exp(self):
-        print("_save_exp")
-
+        filename, ok = QInputDialog.getText(self,"Save Experiment", "Enter file name:")
+        if ok:
+            save_exp(self.main.plot_area,filename)
+        else:
+            print('Enter valid name')
+        
+        
     def _load_exp(self):
-        print("_load_exp")
+        dialog = Experiment_Picker(self.main)
+        dialog.exec()
+        filepath = dialog.path
+        if filepath:
+            load_exp(self.main.plot_area, filepath)
         
     def _reset(self):
         print("_reset")
