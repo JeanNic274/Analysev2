@@ -86,6 +86,10 @@ class BaseMap(QWidget):
             btn_yaxis_select = QPushButton("Set y axis")
             btn_yaxis_select.clicked.connect(self.yaxis_select)
             button_layout.addWidget(btn_yaxis_select)
+        if 'cmap' in self.buttons:
+            btn_cmap = QPushButton("cmap")
+            btn_cmap.clicked.connect(self.cmap_change)
+            button_layout.addWidget(btn_cmap)
 
         button_layout.addStretch()
 
@@ -233,6 +237,13 @@ class BaseMap(QWidget):
         if yaxis and ok:
             self.yaxis = yaxis
         self._refresh() 
+        
+    def cmap_change(self):
+        cmap, ok = QInputDialog.getText(self, 'Set cmap', 'Enter colormap name (ex: viridis, gist_rainbow_r, turbo, jet, CustomLC).')
+        if cmap and ok:
+            for filepath in self.datasets:
+                self.datasets[filepath].cmap = cmap
+        self._refresh_cmap() 
 
     def _on_plot_double_click(self, event):
         if event.dblclick and event.inaxes == self.ax:
@@ -253,6 +264,14 @@ class BaseMap(QWidget):
         self.ax.autoscale_view()
         self.canvas.draw()
         self.canvas.flush_events()
+        
+    def _refresh_cmap(self):
+        filepath = list(self.lines.keys())[-1]
+        dataset = self.datasets[filepath]
+        self.remove(filepath,refresh=False)
+        self.add(filepath,dataset)
+        self._refresh()
+        
 
     def add(self, filepath, dataset):
         self.datasets[filepath]=dataset
@@ -306,7 +325,7 @@ class BaseMap(QWidget):
 
 class MapPlot(BaseMap):
     def __init__(self,main_window):
-        self.buttons = ['normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis']
+        self.buttons = ['normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'cmap']
         self.x_lab = "x (μm)"
         self.y_lab = "y (μm)"
         self.z_lab = "Counts/s"
@@ -327,6 +346,8 @@ class MapPlot(BaseMap):
         self.ax.yaxis.set_major_locator(plt.MaxNLocator(5))
 
 
+
+
 class PiecewiseNorm(mcolors.Normalize):
     def __init__(self, stops, frac):
         self.stops = np.asarray(stops, dtype=float)
@@ -345,7 +366,10 @@ class InteractiveColorbar:
     def __init__(self, ax_strip, mappable, data, cmap, label=""):
         self.ax = ax_strip
         self.mappable = mappable
-        self.cmap = matplotlib.colormaps[cmap] if isinstance(cmap, str) else cmap
+        if isinstance(cmap,str):
+            self.cmap = matplotlib.colormaps[cmap] 
+        else:
+            self.cmap = cmap
 
         finite = data[np.isfinite(data)]
         self.vmin = float(finite.min()) if finite.size else 0.0

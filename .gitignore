@@ -1,2 +1,3 @@
 run-dev mode.bat
 run.bat
+/Python/app/Plotting/__pycache__
