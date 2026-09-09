@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QTreeView, QSizePolicy, QFileSystemModel, QInputDialog
 )
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel
-from app.ui.DialogWindow import SpectrumFileManager, TRPLFileManager, Experiment_Picker
+from app.ui.DialogWindow import SpectrumFileManager, TRPLFileManager, Experiment_Picker, SaveManager
 from app.Processing.misc import meastxt
 from app.Processing.io import save_exp, load_exp
 
@@ -66,7 +66,8 @@ class Toolbar(QWidget):
         
         
     def _open_save_mng(self):
-        print("_open_save_mng")
+        dialog = SaveManager(self.main)
+        dialog.exec()
 
     def _open_sfile_mng(self):
         dialog = SpectrumFileManager(self.main)

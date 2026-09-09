@@ -42,14 +42,17 @@ class PlotArea(QWidget):
     def _get_or_create(self, plot_type):
         if plot_type == 'spectrum' and self.spectrum is None:
             self.spectrum = SpectrumPlot(self.main)
+            self.spectrum.setObjectName("Spectrum")
             self.layout.addWidget(self.spectrum)
             
         elif plot_type == 'trpl' and self.trpl is None:
             self.trpl = TRPLPlot(self.main)
+            self.trpl.setObjectName("TRPL")
             self.layout.addWidget(self.trpl)
             
         elif plot_type == 'maps' and self.maps is None:
             self.maps = MapPlot(self.main)
+            self.maps.setObjectName("Map")
             self.layout.addWidget(self.maps)
         self.layout.addStretch()
         

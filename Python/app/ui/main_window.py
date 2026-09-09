@@ -17,6 +17,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("PL ViewerV2")
         # self.resize(1200, 800)
 
+        self.save_folder = r"C:\Users\jnich\OneDrive - USherbrooke\Uni\PhD\Data\img\26_08_13-i"
+
         self.selected_files = []
         self.datasets = {}
         self.fit_results = {}

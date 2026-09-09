@@ -30,3 +30,9 @@
 
 check main.datasets == useful? -> used in spectrum file manager
 
+save mng:
+file name
+save folder
+file extension
+transp
+

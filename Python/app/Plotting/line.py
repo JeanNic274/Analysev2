@@ -13,7 +13,7 @@ from matplotlib import ticker
 
 from app.Plotting.utils import *
 from app.Processing.data_import import Data_Set_Import
-from app.Processing.io import prevent_overwrite_file
+from app.Processing.io import prevent_overwrite_file, save_figure_export
 
 plt.rcParams.update({
     "font.size": 16,
@@ -26,7 +26,7 @@ class BasePlot(QWidget):
 
         self.main = main_window
         self.EXPORT_STYLE = {"width": 6.4,"height": 4.8,"dpi": 200,"font_size": 10,"legend_font_size": 9,}
-        self.save_name = "temp"
+        self.save_params = {'save_name':'temp','extension':'.png','transp':True}
 
         self.lines = {}
         self.datasets = {}
@@ -268,14 +268,18 @@ class BasePlot(QWidget):
             self.ax.text(event.xdata,event.ydata,text)
             self.canvas.draw_idle()
             
-    def save_graph(self):
-        filename, ok = QInputDialog.getText(self, 'Export graph', 'Enter file name.',text=self.save_name)
-        if not ok:
-            return
-        prevent_overwrite_file(filename+'.png')
+    def save_graph(self,skip_name=False):
+        if not skip_name:
+            filename, ok = QInputDialog.getText(self, 'Export graph', 'Enter file name.',text=self.save_name)
+            self.save_params['save_name'] = filename
+            if not ok:
+                return
+        save_path = self.main.save_folder+"\\"+self.save_params['save_name']+self.save_params['extension']
+        prevent_overwrite_file(save_path)
         save_figure_export(
             self.figure,
-            filename,
+            save_path,
+            self.save_params['transp'],
             **self.EXPORT_STYLE
         )
 

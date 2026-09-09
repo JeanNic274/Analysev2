@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QWidget,
     QLabel,
+    QComboBox,
 )
 from PySide6.QtCore import Qt
 
@@ -397,6 +398,163 @@ class Experiment_Picker(QDialog):
         self.accept()
 
 
+class SaveManager(QDialog):
+
+    def __init__(self, main_window):
+        super().__init__(main_window)
+
+        self.main = main_window
+
+        self.setWindowTitle("Save Manager")
+        self.resize(700, 500)
+
+
+        self._build()
+        self._refresh()
+
+
+    def _build(self):
+
+        layout = QVBoxLayout(self)
+
+        lab1 = QLabel('Save Folder')
+        folder_edit = QLineEdit()
+        folder_edit.setPlaceholderText("File name")
+        folder_edit.setText(
+            self.main.save_folder
+        )
+
+        folder_edit.editingFinished.connect(
+            lambda graph=self.main, edit=folder_edit:
+                self._save_folder_changed(graph, edit)
+        )
+
+
+        lab2 = QLabel('Save Parameters')
+        # Files
+        self.graphs = QListWidget()
+
+        # Layouts
+        graphs_layout = QVBoxLayout()
+        graphs_layout.addWidget(self.graphs)
+        
+
+        lists = QHBoxLayout()
+        lists.addLayout(graphs_layout)
+        
+        
+        btn_save_all = QPushButton("Save All")
+
+        btn_save_all.clicked.connect(self._save_all)
+            
+        
+        
+        layout.addWidget(lab1)
+        layout.addWidget(folder_edit)
+        layout.addWidget(lab2)
+        layout.addLayout(lists)
+        layout.addWidget(btn_save_all)
+    
+    def _refresh(self):
+        self.graphs.clear()
+        graphs=[
+            self.main.plot_area.layout.itemAt(i).widget()
+            for i in range(self.main.plot_area.layout.count())
+            if self.main.plot_area.layout.itemAt(i).widget() is not None
+        ]
+        for graph in graphs:
+            
+            item=QListWidgetItem()
+            item.setData(Qt.UserRole,graph)
+
+            # Widget containing save params
+            widget = QWidget()
+            layout = QHBoxLayout(widget)
+            layout.setContentsMargins(2, 2, 2, 2)
+            
+            
+            btn_save = QPushButton("Save")
+
+            btn_save.clicked.connect(
+                lambda checked, graph=graph:
+                    self._save_graph(graph)
+            )
+            
+            
+
+            # Filename
+            filename = QLabel(graph.objectName())
+            filename.setFixedWidth(100)
+
+            # Custom text
+            edit = QLineEdit()
+            edit.setPlaceholderText("File name")
+            edit.setText(
+                graph.save_params['save_name']
+            )
+
+            # Save text when edited
+            edit.editingFinished.connect(
+                lambda graph=graph, edit=edit:
+                    self._custom_text_changed(graph, edit)
+            )
+            f_ext = QComboBox()
+            # f_ext.setFixedWidth(50)
+            f_ext.addItems(['.png','.svg','.pdf',''])
+
+            f_ext.currentTextChanged.connect(
+                lambda text, graph=graph:
+                    self._file_extension_changed(graph, text)
+            )
+
+            box_transp = QCheckBox('')
+            box_transp.setChecked(1)
+            box_transp.setToolTip('Enable Transparency')
+
+            box_transp.toggled.connect(
+                lambda checked, graph=graph:
+                    self._checkbox_transp_change(graph, checked)
+            )
+
+
+            layout.addWidget(btn_save)
+            layout.addWidget(filename)
+            layout.addWidget(edit)
+            layout.addWidget(f_ext)
+            layout.addWidget(box_transp)
+
+            self.graphs.addItem(item)
+            self.graphs.setItemWidget(item, widget)
+
+            item.setSizeHint(widget.sizeHint())
+            
+    def _save_folder_changed(self, main_window, edit):
+        if edit != "":
+            main_window.save_folder = edit.text()
+            
+    def _custom_text_changed(self, graph, edit):
+        if edit != "":
+            graph.save_params['save_name'] = edit.text()
+        
+    def _file_extension_changed(self, graph, text):
+        graph.save_params['extension'] = text
+        
+    def _checkbox_transp_change(self,graph, checked):
+        graph.save_params['transp'] = checked
+        
+    def _save_graph(self,graph):
+        graph.save_graph(skip_name=True)
+        
+    def _save_all(self):
+        graphs=[
+            self.main.plot_area.layout.itemAt(i).widget()
+            for i in range(self.main.plot_area.layout.count())
+            if self.main.plot_area.layout.itemAt(i).widget() is not None
+        ]
+        for graph in graphs:
+            self._save_graph(graph)
+        
+        
 
 
 

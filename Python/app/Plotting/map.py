@@ -14,6 +14,7 @@ from PySide6.QtCore import QSize
 
 from app.Plotting.utils import *
 from app.Processing.data_import import Data_Set_Import
+from app.Processing.io import prevent_overwrite_file, save_figure_export
 import app.Plotting.cmaps
 
 class BaseMap(QWidget):
@@ -21,6 +22,9 @@ class BaseMap(QWidget):
         super().__init__()
 
         self.main = main_window
+        
+        self.save_params = {'save_name':'temp','extension':'.png','transp':True}
+        self.EXPORT_STYLE = {"width": 6.4,"height": 4.8,"dpi": 200,"font_size": 10,"legend_font_size": 9,}
 
         self.lines = {}
         self.datasets = {}
@@ -244,6 +248,21 @@ class BaseMap(QWidget):
             for filepath in self.datasets:
                 self.datasets[filepath].cmap = cmap
         self._refresh_cmap() 
+    
+    
+    def save_graph(self,skip_name=False):
+        if not skip_name:
+            filename, ok = QInputDialog.getText(self, 'Export graph', 'Enter file name.',text=self.save_name)
+            self.save_params['save_name'] = filename
+            if not ok:
+                return
+        prevent_overwrite_file(self.save_params['save_name']+self.save_params['extension'])
+        save_figure_export(
+            self.figure,
+            self.save_params['save_name']+self.save_params['extension'],
+            **self.EXPORT_STYLE
+        )
+
 
     def _on_plot_double_click(self, event):
         if event.dblclick and event.inaxes == self.ax:
