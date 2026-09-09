@@ -13,6 +13,7 @@ from matplotlib import ticker
 
 from app.Plotting.utils import *
 from app.Processing.data_import import Data_Set_Import
+from app.Processing.io import prevent_overwrite_file
 
 plt.rcParams.update({
     "font.size": 16,
@@ -24,6 +25,8 @@ class BasePlot(QWidget):
         super().__init__()
 
         self.main = main_window
+        self.EXPORT_STYLE = {"width": 6.4,"height": 4.8,"dpi": 200,"font_size": 10,"legend_font_size": 9,}
+        self.save_name = "temp"
 
         self.lines = {}
         self.datasets = {}
@@ -31,7 +34,6 @@ class BasePlot(QWidget):
 
         self.vlines = []
         self.hlines = []
-        self.annotations = []
 
         self.colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
         self.available_colors = list(self.colors)
@@ -59,6 +61,16 @@ class BasePlot(QWidget):
         button_layout.setContentsMargins(4, 4, 4, 4)
         button_layout.setSpacing(5)
         # self.buttons = ['normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset']
+        if 'save' in self.buttons:
+            btn_save = QPushButton("Save Graph")
+            btn_save.setFixedWidth(100)
+            btn_save.clicked.connect(self.save_graph)
+            button_layout.addWidget(btn_save)
+        if True:
+            btn_legend = QPushButton("Legend")
+            btn_legend.setFixedWidth(100)
+            btn_legend.clicked.connect(self.legend_toggle)
+            button_layout.addWidget(btn_legend)
         if 'normalize' in self.buttons:
             btn_normalize = QPushButton("Normalize")
             btn_normalize.setFixedWidth(100)
@@ -115,24 +127,13 @@ class BasePlot(QWidget):
         
         self.figure.set_layout_engine('tight')
         
-        
-        # -----------------
-        # Right: margin
-        # -----------------
-        # margin_layout = QVBoxLayout()
-        # margin_layout.setContentsMargins(4, 4, 4, 4)
-        # margin_layout.setSpacing(5)
-        # margin_layout.addStretch(100)
-        
         #--------------------------------------------------------#
         
         graph_layout.addWidget(self.toolbar)
         graph_layout.addWidget(self.canvas)
 
-        # Add layouts
         main_layout.addLayout(button_layout)
         main_layout.addLayout(graph_layout, 1)
-        # main_layout.addLayout(margin_layout)
             
         
         
@@ -247,6 +248,15 @@ class BasePlot(QWidget):
         if yaxis and ok:
             self.yaxis = yaxis
         self._refresh() 
+        
+    def legend_toggle(self):
+        if self.toggles['legend']:
+            self.toggles['legend']=0
+            self.ax.get_legend().remove()
+        else:
+            self.toggles['legend']=1
+            self.ax.legend()
+        self._refresh() 
 
     def _on_plot_double_click(self, event):
         if event.dblclick and event.inaxes == self.ax:
@@ -257,11 +267,22 @@ class BasePlot(QWidget):
             self.toggles['annotations'].append([event.xdata,event.ydata,text])
             self.ax.text(event.xdata,event.ydata,text)
             self.canvas.draw_idle()
-
+            
+    def save_graph(self):
+        filename, ok = QInputDialog.getText(self, 'Export graph', 'Enter file name.',text=self.save_name)
+        if not ok:
+            return
+        prevent_overwrite_file(filename+'.png')
+        save_figure_export(
+            self.figure,
+            filename,
+            **self.EXPORT_STYLE
+        )
 
     def _refresh(self):
         if self.lines:
-            self.ax.legend()
+            if self.toggles['legend']:
+                self.ax.legend()
         else:
             self.ax.get_legend().remove() if self.ax.get_legend() else None
         self.ax.relim()
@@ -348,7 +369,7 @@ class BasePlot(QWidget):
 
 class SpectrumPlot(BasePlot):
     def __init__(self, main_window):
-        self.buttons = ['normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset']
+        self.buttons = ['save','normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset']
         self.xaxis = 'nm'
         self.yaxis = 'count_cor'
         super().__init__(main_window)
@@ -359,7 +380,7 @@ class SpectrumPlot(BasePlot):
 
         self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
         self.groups = {str(i): [] for i in range(5)}
-        self.toggles = {'normalize':0,'annotations':[],'yoffset':0}
+        self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1}
         
             
 
@@ -473,7 +494,7 @@ class SpectrumPlot(BasePlot):
 
 class TRPLPlot(BasePlot):
     def __init__(self, main_window):
-        self.buttons = ['normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis']
+        self.buttons = ['save','normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis']
         self.x_lab = "Time (ns)"
         self.y_lab = "Counts/s"
         self.xaxis = 'ns'
@@ -484,7 +505,7 @@ class TRPLPlot(BasePlot):
 
         self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
         self.groups = {str(i): [] for i in range(5)}
-        self.toggles = {'normalize':0,'annotations':[],'yoffset':0}
+        self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1}
         
     def gen_axis(self):
         self.ax.set_yscale('log')

@@ -30,7 +30,8 @@
             "toggles": {
                 "normalize": 0,
                 "annotations": [],
-                "yoffset": 0
+                "yoffset": 0,
+                "legend": 1
             }
         },
         "filepaths": [

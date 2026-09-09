@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from datetime import datetime
 
@@ -6,7 +7,7 @@ from app.Processing.data_import import Data_Set_Import
 
 
 def save_exp(plot_area_widget,filename = 'test'):
-    filename += "    "+datetime.today().strftime('%Y-%m-%d %H-%M-%S')
+    prevent_overwrite_file(Path('data','experiments',filename))
     save_dict = {}
     if plot_area_widget.spectrum:
         attributes = ['xlim','ylim','title','vlines','hlines','yaxis','groups','x_lab','y_lab','labels','toggles']
@@ -51,16 +52,56 @@ def load_exp(plot_area_widget,filename = "test    2026-09-08 14-20-41"):
             if path.is_file():
                 dataset = Data_Set_Import(path)
                 plot_area_widget.main.selected_files.append(filepath)
-                plot_area_widget.main.datasets[path] = dataset
+                plot_area_widget.main.datasets[filepath] = dataset
                 plot_area_widget.add(filepath,dataset)
             else:
                 for group_path in experiment[lines]['attributes']['groups'][filepath]:
                     path = Path(group_path)
                     dataset = Data_Set_Import(path)
                     plot_area_widget.main.selected_files.append(group_path)
-                    plot_area_widget.main.datasets[path] = dataset
+                    plot_area_widget.main.datasets[group_path] = dataset
                     plot_area_widget.add(group_path,dataset)
         # getattr(plot_area_widget,lines)._refresh_full()
         if lines =='spectrum':
             plot_area_widget.spectrum.update_groups()
+            
+            
+
+def prevent_overwrite_file(filepath):
+    """Prevents new file from overwriting existing file with same name. New file will keep its name and older file will have (n) at the end of their name.
+
+    Args:
+        filepath (path): New file's path
+
+    """
+    filepath = Path(filepath)
+
+    if not filepath.exists(): # If no file with same name, exits
+        return 0
+
+    parent = filepath.parent # File parent directory
+    stem = filepath.stem     # File name
+    suffix = filepath.suffix # File suffix
+
+    existing_versions = [] # Initialization of list of existing files with same name
+
+    for f in parent.iterdir(): # Search for all files with same name and (n)
+        if f.is_file():
+            match = re.match(
+                rf"^{re.escape(stem)} \((\d+)\){re.escape(suffix)}$",
+                f.name
+            )
+            if match:
+                existing_versions.append(int(match.group(1)))
+
+    next_number = max(existing_versions, default=0) + 1 # New max n
+
+    for number in range(next_number, 0, -1): # Rename every file to filename (n+1)
+        old = parent / f"{stem} ({number}){suffix}"
+        new = parent / f"{stem} ({number + 1}){suffix}"
+
+        if old.exists():
+            old.rename(new)
+
+    filepath.rename(parent / f"{stem} (1){suffix}")
         

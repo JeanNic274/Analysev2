@@ -141,4 +141,71 @@ def merge_spectra(dfs,axis=('count', 'count_cor'),x_axis='nm',step=0.05):
         result[axis[0]] = merged
 
     return result
-                     
+
+
+
+import matplotlib.pyplot as plt
+
+
+def save_figure_export(
+    figure,
+    filename,
+    width=6.4,
+    height=4.8,
+    dpi=200,
+    font_size=10,
+    legend_font_size=9,
+):
+    """
+    Save an existing Matplotlib figure using a fixed export style.
+
+    The original figure size and font sizes are restored afterwards.
+    """
+
+    original_size = figure.get_size_inches().copy()
+
+    text_sizes = {}
+
+    for artist in figure.findobj(
+        match=lambda artist: hasattr(artist, "get_fontsize")
+    ):
+        try:
+            text_sizes[artist] = artist.get_fontsize()
+        except Exception:
+            pass
+
+    try:
+
+        figure.set_size_inches(
+            width,
+            height,
+            forward=False
+        )
+
+        for artist in text_sizes:
+            artist.set_fontsize(font_size)
+
+        for ax in figure.axes:
+            legend = ax.get_legend()
+            if legend is not None:
+                for text in legend.get_texts():
+                    text.set_fontsize(legend_font_size)
+        figure.savefig(
+            filename,
+            dpi=dpi,
+            bbox_inches="tight"
+        )
+
+    finally:
+        for artist, size in text_sizes.items():
+            try:
+                artist.set_fontsize(size)
+            except Exception:
+                pass
+        figure.set_size_inches(
+            original_size,
+            forward=False
+        )
+
+
+          
