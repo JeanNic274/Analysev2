@@ -65,9 +65,10 @@ class Data_Set_Import:
             ) 
 
     
-    def fit(self,fitOptions,graphOptions,fit_idx):
+    def fit(self,graph,fit_idx):
         self.data_fit={'xfit':0,'yfit':0,'yfit_init':0}
-        self.fit_params=fit_data(self,fitOptions,graphOptions,fit_idx)
+        self.fit_result=fit_data(self,graph,fit_idx)
+        self.fitted = True
     
     def __init__(self,file_path=0,attrs=None,dataset=None,name=None):
         # if type(file_paths)==str:
@@ -82,7 +83,6 @@ class Data_Set_Import:
             self.name=self.name[34:]
         if self.name.startswith('plmap_data_'):
             self.name=self.name[10:20]
-        self.text = ""
         if file_path:
             self.attrs=header_extract(file_path)
         elif attrs:
@@ -109,21 +109,24 @@ class Data_Set_Import:
 
 
 
-def fit_data(df,parameters,graph,fit_idx):
-    xaxis=graph['x_axis']
-    axis=graph['axis']
+def fit_data(df,graph,fit_idx):
+    parameters = graph.fit_params
+    xaxis=graph.xaxis
+    yaxis=graph.yaxis
     
-    yfit=np.array(df.data.loc[(df.data[xaxis]+df.x_offset >= parameters['p0'][fit_idx][0]) & (df.data[xaxis]+df.x_offset <= parameters['p0'][fit_idx][1]), axis])
-    xfit=np.array(df.data.loc[(df.data[xaxis]+df.x_offset >= parameters['p0'][fit_idx][0]) & (df.data[xaxis]+df.x_offset <= parameters['p0'][fit_idx][1]), xaxis]) + df.x_offset
-    p0=parameters['p0'][fit_idx][2:]
+    mask = ((df.data[xaxis] >= parameters['p0s'][fit_idx][0]) & (df.data[xaxis] <= parameters['p0s'][fit_idx][1]))
+    yfit=df.data[yaxis][mask]
+    xfit=df.data[xaxis][mask] + df.x_offset
+    p0=parameters['p0s'][fit_idx][2:]
     
     xfit0=0
     
     t=time.time()
+    print('-- importing lmfit --')
     from lmfit import Model, Parameters, models
     print('imported lmfit', time.time()-t)
     
-    if parameters['fit_model']=='Gaussian':
+    if parameters['model']=='Gaussian':
         nb_func=len(p0)//3
         cstmodel=len(p0)%3
         s=['a{}_'.format(i) for i in range(1, nb_func)]
@@ -143,7 +146,7 @@ def fit_data(df,parameters,graph,fit_idx):
                 (pref+'sigma',p0[3*p_idx+5],True,0,None),
                 )
     
-    if parameters['fit_model']=='Lorentzian':
+    if parameters['model']=='Cauchy':
         nb_func=len(p0)//3
         cstmodel=len(p0)%3
         s=['a{}_'.format(i) for i in range(1, nb_func)]
@@ -163,7 +166,7 @@ def fit_data(df,parameters,graph,fit_idx):
                 (pref+'sigma',p0[3*p_idx+5],True,0,None),
                 )
             
-    if parameters['fit_model']=='PseudoVoigt':
+    if parameters['model']=='PseudoVoigt':
         nb_func=len(p0)//4
         cstmodel=len(p0)%4
         s=['a{}_'.format(i) for i in range(1, nb_func)]
@@ -185,9 +188,9 @@ def fit_data(df,parameters,graph,fit_idx):
                 (pref+'fraction',p0[4*p_idx+7],True,0,1),
                 )
         
-    if parameters['fit_model']=='Exponential':
+    if parameters['model']=='Exponential':
         
-        xfit-=parameters['p0'][fit_idx][0]
+        xfit-=parameters['p0s'][fit_idx][0]
         xfit0=1
         
         nb_func=len(p0)//2
@@ -207,9 +210,9 @@ def fit_data(df,parameters,graph,fit_idx):
                 (pref+'decay',p0[2*p_idx+4],True,0,None),
                 )
     
-    if parameters['fit_model']=='Stretched':
+    if parameters['model']=='Stretched':
         
-        xfit-=parameters['p0'][fit_idx][0]
+        xfit-=parameters['p0s'][fit_idx][0]
         xfit0=1
         
         def StretchedExpModel(x,amplitude,decay,beta):
@@ -231,7 +234,7 @@ def fit_data(df,parameters,graph,fit_idx):
     result = model.fit(yfit, pars, x=xfit,weights=1/np.sqrt(yfit))
 
     if xfit0:
-        xfit+=parameters['p0'][fit_idx][0]
+        xfit+=parameters['p0s'][fit_idx][0]
 
     print(result.fit_report(show_correl=0))
     df.data_fit['xfit']=xfit

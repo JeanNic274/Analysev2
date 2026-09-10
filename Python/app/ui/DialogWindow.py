@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -13,6 +14,8 @@ from PySide6.QtWidgets import (
     QWidget,
     QLabel,
     QComboBox,
+    QTableWidget,
+    QTableWidgetItem,
 )
 from PySide6.QtCore import Qt
 
@@ -408,7 +411,6 @@ class SaveManager(QDialog):
         self.setWindowTitle("Save Manager")
         self.resize(700, 500)
 
-
         self._build()
         self._refresh()
 
@@ -556,10 +558,164 @@ class SaveManager(QDialog):
         
         
 
+class FitManager(QDialog):
+
+    def __init__(self, graph):
+        super().__init__(graph.main)
 
 
+        self.models_param = {
+            'Gaussian' :    ['x_min','x_max','A   ','mu  ','sig '],
+            'Exponential' : ['x_min','x_max','A   ','tau '],
+            'Stertched' :   ['x_min','x_max','A   ','tau ','beta'],
+            'Cauchy' :      ['x_min','x_max','A   ','mu  ','sig '],
+            'PseudoVoigt' : ['x_min','x_max','A   ','mu  ','sig ','frac'],
+        }
+        self.additionnal_params = []
+        self.main = graph.main
+        self.graph = graph
+        
+        self.ncol = 6
+        self.nrow = 5
+        
+        self.setWindowTitle("Fit Manager")
+        self.resize(700, 500)
+
+        self._build()
+        self._refresh()
 
 
+    def _build(self):
+
+        layout = QVBoxLayout(self)
+
+        # Files
+        self.files = QTableWidget()
+
+        self.files.cellChanged.connect(self._on_cell_change)
+        
+        # Layouts
+        file_layout = QVBoxLayout()
+        file_layout.addWidget(self.files)
+        
+        check_layout = QHBoxLayout()
+        
+        
+        for setting in ['P_init','Single']:
+            checkbox = QCheckBox(setting)
+
+            checkbox.toggled.connect(
+                lambda checked, setting=setting:
+                    self._checkbox_setting_change(setting, checked)
+            )
+            check_layout.addWidget(checkbox)
+            
+        model_lab = QLabel('Fit model:')
+        check_layout.addWidget(model_lab)
+        
+        f_model = QComboBox()
+        # f_ext.setFixedWidth(50)
+        f_model.addItems(['Gaussian','Cauchy','PseudoVoigt','Exponential','StretchedExp'])
+        f_model.setCurrentText(self.graph.fit_params['model'])
+        f_model.currentTextChanged.connect(
+            lambda text,:
+                self._file_model_changed(text)
+        )
+
+        check_layout.addWidget(f_model)
+
+
+        btn_add_param = QPushButton("Add")
+        btn_add_param.clicked.connect(self._add_par)
+        btn_rem_param = QPushButton("Remove")
+        btn_rem_param.clicked.connect(self._rem_par)
+
+        check_layout.addWidget(btn_add_param)
+        check_layout.addWidget(btn_rem_param)
+
+        check_layout.addStretch()
+        lists = QHBoxLayout()
+        lists.addLayout(file_layout)
+        
+        # Title
+        qlab1 = QLabel('Fit parameters:')
+        qlab1.setStyleSheet('font-size: 16pt;')
+        # Title
+        qlab2 = QLabel('Fit initial parameters:')
+        qlab2.setStyleSheet('font-size: 12pt;')
+        
+        btn_start_fit = QPushButton("Start Fit")
+        btn_start_fit.clicked.connect(self._do_fit)
+        
+        layout.addLayout(check_layout)
+        layout.addWidget(qlab2)
+        layout.addLayout(lists)
+        layout.addWidget(btn_start_fit)
+        
+    def _checkbox_setting_change(self,var,checked):
+        self.graph.fit_params[var] = checked
+        
+    def _do_fit(self):
+        self.graph.remove_all(fits=1)
+        for idx, filepath in enumerate(self.graph.datasets):
+            self.graph.datasets[filepath].fit(self.graph,idx)
+        self.graph.refresh_curves()
+        
+    def _file_model_changed(self,model):
+        self.graph.fit_params['model'] = model
+        if self.ncol<=len(self.models_param[self.graph.fit_params['model']]):
+            while self.ncol<len(self.models_param[self.graph.fit_params['model']]):
+                self._add_par()
+        else:
+            self._refresh()
+
+    def _on_cell_change(self,row,col):
+        if col:
+            self.graph.fit_params['p0s'][row][col-1] = float(self.files.item(row,col).text())
+            
+    def _rem_par(self):
+        del self.additionnal_params[-1]
+        for idx, filepath in enumerate(self.graph.datasets):
+                self.graph.fit_params['p0s'][idx] = np.delete(self.graph.fit_params['p0s'][idx],-1)
+        self._refresh()
+        
+    def _add_par(self):
+        par_idx = ((self.ncol-3)%(len(self.models_param[self.graph.fit_params['model']])-2))+2
+        if self.ncol>len(self.models_param[self.graph.fit_params['model']]):
+            self.additionnal_params.append(self.models_param[self.graph.fit_params['model']][par_idx])
+
+        for idx, filepath in enumerate(self.graph.datasets):
+            if (par_idx+1)>len(self.graph.fit_params['p0s'][idx]):
+                par_idx=2
+            self.graph.fit_params['p0s'][idx] = np.append(self.graph.fit_params['p0s'][idx],self.graph.fit_params['p0s'][idx][par_idx])
+        self._refresh()
+        
+    def _reset(self):
+        print('WIP')
+    
+    def _refresh(self):
+        self.files.clear()
+
+        self.nrow = len(self.graph.datasets.items())
+        self.ncol = len(self.graph.fit_params['p0s'][0])+1
+            
+        self.files.setRowCount(self.nrow)
+        self.files.setColumnCount(self.ncol)
+        self.files.setHorizontalHeaderLabels(['Set']+self.models_param[self.graph.fit_params['model']]+self.additionnal_params)
+        if len(self.graph.fit_params['p0s'])<self.nrow:
+            self.graph.fit_params['p0s']+=[self.graph.fit_params['p0s'][0][:] for _ in range(self.nrow-len(self.graph.fit_params['p0s']))] # cursed dont change
+        elif len(self.graph.fit_params['p0s'])>self.nrow:
+            self.graph.fit_params['p0s'] = self.graph.fit_params['p0s'][0:self.nrow]
+            
+        for idx, filepath in enumerate(self.graph.datasets):
+            item_name = QTableWidgetItem(self.graph.datasets[filepath].name)
+            self.files.setItem(idx,0,item_name)
+            for id,p0 in enumerate(self.graph.fit_params['p0s'][idx]):
+                self.files.setItem(idx,id+1,QTableWidgetItem(str(p0)))
+        self.files.resizeColumnsToContents()
+        
+            
+            
 
 
 

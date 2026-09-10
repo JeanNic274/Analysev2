@@ -197,6 +197,9 @@ def header_extract(file_path,map=False):
     info['x_offset'] = 0
     info['y_offset'] = 0
     info['cmap'] = 'viridis'
+    info['text'] = ""
+    info['skip_fit'] = False
+    info['fitted'] = False
     if file_type:
         info['int_time'] = int(fetchinttime(header,file_type=file_type).replace(' ',''))/1000
     return info  

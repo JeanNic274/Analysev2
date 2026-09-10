@@ -14,6 +14,7 @@ from matplotlib import ticker
 from app.Plotting.utils import *
 from app.Processing.data_import import Data_Set_Import
 from app.Processing.io import prevent_overwrite_file, save_figure_export
+from app.ui.DialogWindow import FitManager
 
 plt.rcParams.update({
     "font.size": 16,
@@ -29,6 +30,7 @@ class BasePlot(QWidget):
         self.save_params = {'save_name':'temp','extension':'.png','transp':True}
 
         self.lines = {}
+        self.lines_fit = {}
         self.datasets = {}
         self.original_d = {}
 
@@ -108,6 +110,11 @@ class BasePlot(QWidget):
             btn_y_offset = QPushButton("Set y offset")
             btn_y_offset.clicked.connect(self.set_y_offset)
             button_layout.addWidget(btn_y_offset)
+        if 'fit' in self.buttons:
+            btn_fit_params = QPushButton("Fit")
+            btn_fit_params.clicked.connect(self._open_fit_params)
+            button_layout.addWidget(btn_fit_params)
+
 
         button_layout.addStretch()
 
@@ -257,6 +264,10 @@ class BasePlot(QWidget):
             self.toggles['legend']=1
             self.ax.legend()
         self._refresh() 
+        
+    def _open_fit_params(self):
+        dialog = FitManager(self)
+        dialog.exec()
 
     def _on_plot_double_click(self, event):
         if event.dblclick and event.inaxes == self.ax:
@@ -271,9 +282,10 @@ class BasePlot(QWidget):
     def save_graph(self,skip_name=False):
         if not skip_name:
             filename, ok = QInputDialog.getText(self, 'Export graph', 'Enter file name.',text=self.save_name)
-            self.save_params['save_name'] = filename
             if not ok:
                 return
+            self.save_params['save_name'] = filename
+            
         save_path = self.main.save_folder+"\\"+self.save_params['save_name']+self.save_params['extension']
         prevent_overwrite_file(save_path)
         save_figure_export(
@@ -314,8 +326,14 @@ class BasePlot(QWidget):
                 if self.xlim:
                     norm_factor =  dataset.data[self.yaxis][((dataset.data[self.xaxis] >= self.xlim[0]) &(dataset.data[self.xaxis] <= self.xlim[1]))].max()
                 else:
-                    norm_factor=dataset.data[self.yaxis].max()
-            line, = self.ax.plot(dataset.data[self.xaxis]+dataset.x_offset, dataset.data[self.yaxis]/norm_factor, color=color, label=label)
+                    norm_factor = dataset.data[self.yaxis].max()
+            if dataset.fitted:
+                line_fit, = self.ax.plot(dataset.data_fit['xfit']+dataset.x_offset, dataset.data_fit['yfit']/norm_factor, color=color, label=label,zorder=10)
+                self.lines_fit[filepath] = line_fit
+                
+                line, = self.ax.plot(dataset.data[self.xaxis]+dataset.x_offset, dataset.data[self.yaxis]/norm_factor, color='k')
+            else:
+                line, = self.ax.plot(dataset.data[self.xaxis]+dataset.x_offset, dataset.data[self.yaxis]/norm_factor, color=color, label=label)
             self.lines[filepath] = line
             # self.used_colors[filepath] = color
             self.original_d[filepath] = dataset.data.copy()
@@ -334,10 +352,26 @@ class BasePlot(QWidget):
         if refresh:
             self._refresh()
             
-    def remove_all(self):
-        for filepath in self.lines.copy():
-            self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
-        self._refresh()
+    def remove_all(self,fits=0):
+        if not fits:
+            for filepath in self.lines.copy():
+                self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
+            self._refresh()
+        else:
+            for filepath in self.lines_fit.copy():
+                self.remove_fit(filepath)
+            self._refresh()
+
+    def remove_fit(self, filepath):
+        if filepath not in self.lines_fit:
+            return
+
+        self.lines_fit[filepath].remove()
+
+        color = self.used_colors.pop(filepath,None)
+        self.available_colors.insert(0, color)
+
+        del self.lines_fit[filepath]
     
     def _get_color(self, key):
         if key not in self.used_colors:
@@ -373,7 +407,7 @@ class BasePlot(QWidget):
 
 class SpectrumPlot(BasePlot):
     def __init__(self, main_window):
-        self.buttons = ['save','normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset']
+        self.buttons = ['save','normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset','fit']
         self.xaxis = 'nm'
         self.yaxis = 'count_cor'
         super().__init__(main_window)
@@ -382,6 +416,7 @@ class SpectrumPlot(BasePlot):
         self.x_lab = "Wavelength (nm)"
         self.y_lab = "Counts/s"
 
+        self.fit_params = {'model':'Gaussian', 'P_init':False,'Single':False,'p0s':[[420.0,450.0,1.0,430.0,1.0]]}
         self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
         self.groups = {str(i): [] for i in range(5)}
         self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1}
@@ -498,7 +533,7 @@ class SpectrumPlot(BasePlot):
 
 class TRPLPlot(BasePlot):
     def __init__(self, main_window):
-        self.buttons = ['save','normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis']
+        self.buttons = ['save','normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis','fit']
         self.x_lab = "Time (ns)"
         self.y_lab = "Counts/s"
         self.xaxis = 'ns'
@@ -506,7 +541,7 @@ class TRPLPlot(BasePlot):
         super().__init__(main_window)
 
 
-
+        self.fit_params = {'model':'Exponential', 'P_init':False,'Single':False, 'p0s':[np.array([0.0,10.0,1.0,1.0])]}
         self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
         self.groups = {str(i): [] for i in range(5)}
         self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1}

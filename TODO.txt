@@ -1,5 +1,5 @@
 - [x] log (MPL)
-- [ ] save
+- [x] save
 - [x] fix number label when merged spectrum
 - [ ] fit
 - [x] title
@@ -30,9 +30,5 @@
 
 check main.datasets == useful? -> used in spectrum file manager
 
-save mng:
-file name
-save folder
-file extension
-transp
-
+fix fit header better way to make header list = idk
+fix model pvoigt to guassian
