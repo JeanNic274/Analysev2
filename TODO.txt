@@ -2,7 +2,7 @@
 - [x] save
 - [x] fix number label when merged spectrum
 - [x] fit
-- [ ] save fit
+- [x] save fit
 - [x] title
 - [x] hlines vlines
 - [x] add cmap (CustomLC)
@@ -30,9 +30,6 @@
 - [ ] map double click circle or text
 
 
-load fit w/ load exp
-test fit w/ merged spectrum & test fit save (no file path ok??)
-check why fit mng has removed curves
+load fit w/ load exp (hard, worth?)
 
-chekc p0 length with merged (seems to be 2x po init)
 

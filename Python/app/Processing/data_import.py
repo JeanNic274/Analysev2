@@ -260,7 +260,7 @@ def fit_data(df,graph,fit_idx):
     else:
         df.data_fit['yfit']=np.column_stack(( df.data_fit['yfit'],))
         
-    print('---------------- ',df.measure_type,' #',df.number,'   ',df.name, 'fit done -----------------')
+    print('----------------',df.measure_type,f'#{df.number} ',df.name, 'fit done -----------------')
     return result.params.valuesdict()
 
 
