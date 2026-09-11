@@ -1,0 +1,96 @@
+{
+    "spectrum": {
+        "attributes": {
+            "xlim": null,
+            "ylim": null,
+            "title": "",
+            "vlines": [],
+            "hlines": [],
+            "yaxis": "count_cor",
+            "groups": {
+                "0": [],
+                "1": [],
+                "2": [],
+                "3": [],
+                "4": []
+            },
+            "x_lab": "Wavelength (nm)",
+            "y_lab": "Counts/s",
+            "labels": {
+                "number": 1,
+                "name": 1,
+                "power": 0,
+                "pos": 0,
+                "posf": 0,
+                "filter": 0
+            },
+            "toggles": {
+                "normalize": 0,
+                "annotations": [],
+                "yoffset": 0,
+                "legend": 1,
+                "xoffsets": {}
+            },
+            "fit_params": {
+                "model": "Cauchy",
+                "P_init": false,
+                "Single": true,
+                "p0s": [
+                    [
+                        420.0,
+                        450.0,
+                        1.0,
+                        425.0,
+                        1.0,
+                        1.0,
+                        425.0,
+                        1.0
+                    ],
+                    [
+                        420.0,
+                        450.0,
+                        20.0,
+                        430.0,
+                        3.0,
+                        20.0,
+                        430.0,
+                        3.0
+                    ],
+                    [
+                        420.0,
+                        450.0,
+                        60.0,
+                        435.0,
+                        5.0,
+                        60.0,
+                        435.0,
+                        5.0
+                    ]
+                ],
+                "fit_results": {
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_13.txt": {
+                        "a0_amplitude": 63.78857689200433,
+                        "a0_center": 432.3253547522109,
+                        "a0_sigma": 7.33657570050768
+                    },
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_16.txt": {
+                        "a0_amplitude": 252.9071871369495,
+                        "a0_center": 432.5190564203488,
+                        "a0_sigma": 7.764652344005896
+                    },
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_17.txt": {
+                        "a0_amplitude": 519.2981456194732,
+                        "a0_center": 432.72338477031684,
+                        "a0_sigma": 8.875967731369308
+                    }
+                },
+                "Print": false
+            }
+        },
+        "filepaths": [
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_13.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_16.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_17.txt"
+        ]
+    }
+}

@@ -13,7 +13,7 @@ from matplotlib import ticker
 
 from app.Plotting.utils import *
 from app.Processing.data_import import Data_Set_Import
-from app.Processing.io import prevent_overwrite_file, save_figure_export
+from app.Processing.io import prevent_overwrite_file, save_figure_export, save_fit
 from app.ui.DialogWindow import FitManager
 
 plt.rcParams.update({
@@ -64,16 +64,21 @@ class BasePlot(QWidget):
         button_layout.setContentsMargins(4, 4, 4, 4)
         button_layout.setSpacing(5)
         # self.buttons = ['normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset']
-        if 'save' in self.buttons:
+        if True:
             btn_save = QPushButton("Save Graph")
             btn_save.setFixedWidth(100)
             btn_save.clicked.connect(self.save_graph)
             button_layout.addWidget(btn_save)
-        if True:
+            btn_get_info = QPushButton("Get Info")
+            btn_get_info.setFixedWidth(100)
+            btn_get_info.clicked.connect(self._get_info)
+            button_layout.addWidget(btn_get_info)
+            
             btn_legend = QPushButton("Legend")
             btn_legend.setFixedWidth(100)
             btn_legend.clicked.connect(self.legend_toggle)
             button_layout.addWidget(btn_legend)
+            
         if 'normalize' in self.buttons:
             btn_normalize = QPushButton("Normalize")
             btn_normalize.setFixedWidth(100)
@@ -115,6 +120,9 @@ class BasePlot(QWidget):
             btn_fit_params = QPushButton("Fit")
             btn_fit_params.clicked.connect(self._open_fit_params)
             button_layout.addWidget(btn_fit_params)
+            btn_save_fit = QPushButton("Save Fit")
+            btn_save_fit.clicked.connect(self._save_fit)
+            button_layout.addWidget(btn_save_fit)
 
 
         button_layout.addStretch()
@@ -143,6 +151,11 @@ class BasePlot(QWidget):
         main_layout.addLayout(button_layout)
         main_layout.addLayout(graph_layout, 1)
             
+    def _get_info(self):
+        text, ok = QInputDialog.getText(self,"Info", "Enter attribute name")
+        if not ok:
+            return
+        print(getattr(self,text))
         
         
     def resizeEvent(self, event):
@@ -259,7 +272,7 @@ class BasePlot(QWidget):
         yaxis, ok = QInputDialog.getText(self, 'Set y axis', 'Enter y axis name.')
         if yaxis and ok:
             self.yaxis = yaxis
-        self._refresh() 
+        self.refresh_curves() 
         
     def legend_toggle(self):
         if self.toggles['legend']:
@@ -273,6 +286,13 @@ class BasePlot(QWidget):
     def _open_fit_params(self):
         dialog = FitManager(self)
         dialog.exec()
+        
+    def _save_fit(self):
+        filename, ok = QInputDialog.getText(self,"Save Fit Results","Enter file name:")
+        if not ok:
+            return
+        save_fit(self,filename)
+        
 
     def _on_plot_double_click(self, event):
         if event.dblclick and event.inaxes == self.ax:
@@ -334,8 +354,8 @@ class BasePlot(QWidget):
                     norm_factor = dataset.data[self.yaxis].max()
             x_off = self.toggles['xoffsets'].get(filepath,0)
             if dataset.fitted:
-                line_fit, = self.ax.plot(dataset.data_fit['xfit']+x_off, dataset.data_fit['yfit']/norm_factor, color=color, label=label,zorder=10)
-                self.lines_fit[filepath] = line_fit
+                lines_fit = self.ax.plot(dataset.data_fit['xfit']+x_off, dataset.data_fit['yfit']/norm_factor, color=color, label=label,zorder=10)
+                self.lines_fit[filepath] = lines_fit
                 
                 line, = self.ax.plot(dataset.data[self.xaxis]+x_off, dataset.data[self.yaxis]/norm_factor, color='k')
             else:
@@ -355,14 +375,17 @@ class BasePlot(QWidget):
         self.available_colors.insert(0, color)
 
         del self.lines[filepath]
+        del self.datasets[filepath]
+        
         if refresh:
             self._refresh()
             
-    def remove_all(self,fits=0,refresh=True):
-        if not fits:
+    def remove_all(self,fits=0,refresh=True,all_lines=False):
+        self.ax.get_legend().remove()
+        if not fits or all_lines:
             for filepath in self.lines.copy():
                 self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
-        else:
+        elif fits or all_lines:
             for filepath in self.lines_fit.copy():
                 self.remove_fit(filepath)
         if refresh:
@@ -371,8 +394,8 @@ class BasePlot(QWidget):
     def remove_fit(self, filepath): # does not remove color since it is removed when refresh_curves is called after fit
         if filepath not in self.lines_fit:
             return
-
-        self.lines_fit[filepath].remove()
+        for line_fit in self.lines_fit[filepath]:
+            line_fit.remove()
         del self.lines_fit[filepath]
     
     def _get_color(self, key):
@@ -382,7 +405,9 @@ class BasePlot(QWidget):
 
     def refresh_labels(self):
         for key, line in self.lines.items():
-            line = self.lines_fit.get(key,line)
+            lines_fit = self.lines_fit.get(key)
+            if lines_fit:
+                line=lines_fit[0]
             dataset = self.datasets.get(key)
             
             if dataset is None:
@@ -396,12 +421,12 @@ class BasePlot(QWidget):
         self.canvas.draw_idle()
         
     def refresh_curves(self):
-        for filepath in self.datasets:
+        for filepath in self.datasets.copy():
             self.refresh_curve(filepath)
             
     def refresh_curve(self,filepath):
         data = self.datasets[filepath]
-        self.remove(filepath)
+        self.remove(filepath,refresh=False)
         self.add(filepath,data)
         
     def _refresh_full(self):
@@ -423,7 +448,7 @@ class SpectrumPlot(BasePlot):
         self.x_lab = "Wavelength (nm)"
         self.y_lab = "Counts/s"
 
-        self.fit_params = {'model':'Gaussian', 'P_init':False,'Single':False,'p0s':[[420.0,450.0,1.0,430.0,1.0]],'fit_results':{}}
+        self.fit_params = {'model':'Gaussian', 'P_init':False,'Single':False,'p0s':[[420.0,450.0,1.0,430.0,1.0]],'fit_results':{},'Print':True}
         self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
         self.groups = {str(i): [] for i in range(5)}
         self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1,'xoffsets':{}}
@@ -547,7 +572,7 @@ class TRPLPlot(BasePlot):
         super().__init__(main_window)
 
 
-        self.fit_params = {'model':'Exponential', 'P_init':False,'Single':False, 'p0s':[[0.0,10.0,1.0,1.0]],'fit_results':{}}
+        self.fit_params = {'model':'Exponential', 'P_init':False,'Single':False, 'p0s':[[0.0,10.0,1.0,1.0]],'fit_results':{},'Print':True}
         self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
         self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1,'xoffsets':{}}
         

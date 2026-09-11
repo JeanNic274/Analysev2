@@ -29,8 +29,10 @@
 - [ ] make new tab for each graph/new tab for new set of graphs (experiments)
 - [ ] map double click circle or text
 
-check main.datasets == useful? -> used in spectrum file manager (merge)
 
-fix fit header better way to make header list = idk
+load fit w/ load exp
+test fit w/ merged spectrum & test fit save (no file path ok??)
+check why fit mng has removed curves
 
-trpl save xoffset (afet fit?)
+chekc p0 length with merged (seems to be 2x po init)
+

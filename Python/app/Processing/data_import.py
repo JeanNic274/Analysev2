@@ -109,34 +109,29 @@ class Data_Set_Import:
             
 
 
-            
 
 
 
 def fit_data(df,graph,fit_idx):
+    
+    from lmfit import Model, Parameters, models
+    
     parameters = graph.fit_params
     xaxis=graph.xaxis
     yaxis=graph.yaxis
-    
     mask = ((df.data[xaxis] >= parameters['p0s'][fit_idx][0]) & (df.data[xaxis] <= parameters['p0s'][fit_idx][1]))
     yfit=df.data[yaxis][mask]
     xfit=df.data[xaxis][mask]
-
     
     p0=parameters['p0s'][fit_idx][2:]
-    
     xfit0=0
-    
-    t=time.time()
-    print('-- importing lmfit --')
-    from lmfit import Model, Parameters, models
-    print('imported lmfit', time.time()-t)
     
     if parameters['model']=='Gaussian':
         nb_func=len(p0)//3
         cstmodel=len(p0)%3
         s=['a{}_'.format(i) for i in range(1, nb_func)]
         model=models.GaussianModel(prefix="a0_")
+        model_type=models.GaussianModel()
         pars=Parameters()
         pars.add_many(
             ('a0_amplitude',p0[0],True,0,None),
@@ -157,6 +152,7 @@ def fit_data(df,graph,fit_idx):
         cstmodel=len(p0)%3
         s=['a{}_'.format(i) for i in range(1, nb_func)]
         model=models.LorentzianModel(prefix="a0_")
+        model_type=models.LorentzianModel()
         pars=Parameters()
         pars.add_many(
             ('a0_amplitude',p0[0],True,0,None),
@@ -177,6 +173,7 @@ def fit_data(df,graph,fit_idx):
         cstmodel=len(p0)%4
         s=['a{}_'.format(i) for i in range(1, nb_func)]
         model=models.PseudoVoigtModel(prefix="a0_")
+        model_type=models.PseudoVoigtModel()
         pars=Parameters()
         pars.add_many(
             ('a0_amplitude',p0[0],True,0,None),
@@ -203,6 +200,7 @@ def fit_data(df,graph,fit_idx):
         cstmodel=len(p0)%2
         s=['a{}_'.format(i) for i in range(1, nb_func)]
         model=models.ExponentialModel(prefix="a0_")
+        model_type=models.ExponentialModel()
         pars=Parameters()
         pars.add_many(
             ('a0_amplitude',p0[0],True,0,None),
@@ -225,6 +223,7 @@ def fit_data(df,graph,fit_idx):
             return amplitude*((np.exp(-x/decay))**beta)
         cstmodel=len(p0)%3
         model=Model(StretchedExpModel)
+        model_type=models.ExponentialModel()
         pars=Parameters()
         pars.add_many(
             ('amplitude',p0[0],True,0,None),
@@ -246,11 +245,21 @@ def fit_data(df,graph,fit_idx):
         xfit+=parameters['p0s'][fit_idx][0]
 
     
-
-    print(result.fit_report(show_correl=0))
+    if graph.fit_params['Print']:
+        print(result.fit_report(show_correl=0))
     df.data_fit['xfit']=xfit
+    
     df.data_fit['yfit']=result.best_fit
-    df.data_fit['yfit_init']=result.init_fit
+    if graph.fit_params['P_init']:
+        df.data_fit['yfit']=np.column_stack(( df.data_fit['yfit'],result.init_fit))
+    if graph.fit_params['Single']:
+        comps = result.eval_components()
+        df.data_fit['yfit']=np.column_stack(( df.data_fit['yfit'],comps['a0_']))
+        for pref in s:
+            df.data_fit['yfit']=np.column_stack(( df.data_fit['yfit'],comps[pref]))
+    else:
+        df.data_fit['yfit']=np.column_stack(( df.data_fit['yfit'],))
+        
     print('---------------- ',df.measure_type,' #',df.number,'   ',df.name, 'fit done -----------------')
     return result.params.valuesdict()
 

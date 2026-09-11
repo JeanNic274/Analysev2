@@ -330,7 +330,7 @@ class BaseMap(QWidget):
         if refresh:
             self._refresh()
             
-    def remove_all(self):
+    def remove_all(self,all_lines=False):
         for filepath in self.lines.copy():
             self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
         self._refresh()

@@ -6,7 +6,7 @@ def normalize_lines(lines,lines_fit,original_d,xlim=None,xaxis='nm',yaxis='count
     if xlim is None:
         xlim = [-np.inf, np.inf]
     for filepath, line in lines.items():
-        line_fit = lines_fit.get(filepath)
+        lines_f = lines_fit.get(filepath)
         data = original_d[filepath]
         y = data[yaxis]
         mask = ((data[xaxis] >= xlim[0]) &(data[xaxis] <= xlim[1]))
@@ -15,12 +15,14 @@ def normalize_lines(lines,lines_fit,original_d,xlim=None,xaxis='nm',yaxis='count
             continue
         if y_cut.max() != 0 and toggle:
             line.set_ydata(y / y_cut.max())
-            if line_fit:
-                line_fit.set_ydata(line_fit.get_ydata() / y_cut.max())
+            if lines_f:
+                for line_fit in lines_f:
+                    line_fit.set_ydata(line_fit.get_ydata() / y_cut.max())
         else:
             line.set_ydata(y)
-            if line_fit:
-                line_fit.set_ydata(line_fit.get_ydata() * y_cut.max())
+            if lines_f:
+                for line_fit in lines_f:
+                    line_fit.set_ydata(line_fit.get_ydata() * y_cut.max())
             
             
 def offset_lines(GraphClass,yoffset=0,xaxis='nm',yaxis='count',filepath=False):
@@ -43,22 +45,27 @@ def offset_lines(GraphClass,yoffset=0,xaxis='nm',yaxis='count',filepath=False):
             
             xoffset = GraphClass.toggles['xoffsets'].get(filepath,0)
             
-            line_fit =  GraphClass.lines_fit.get(filepath)
+            lines_fit =  GraphClass.lines_fit.get(filepath)
             data = GraphClass.original_d[filepath]
             y = data[yaxis]
             x = data[xaxis]
             line.set_ydata(y+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(yoffset))
             line.set_xdata(x+np.float64(xoffset))
-            if line_fit:
-                y_fit = GraphClass.datasets[filepath].data_fit['yfit']
-                x_fit = GraphClass.datasets[filepath].data_fit['xfit']
-                line_fit.set_ydata(y_fit+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(yoffset))
-                line_fit.set_xdata(x_fit+np.float64(xoffset))
-            
+            if lines_fit:
+                for id,line_fit in enumerate(lines_fit):
+                    y_fit = GraphClass.datasets[filepath].data_fit['yfit'][:,id]
+                    x_fit = GraphClass.datasets[filepath].data_fit['xfit']
+                    line_fit.set_ydata(y_fit+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(yoffset))
+                    line_fit.set_xdata(x_fit+np.float64(xoffset))
+                
             
 def evnm_swap(lines):
     for filepath, line in lines.items():
-        line.set_xdata(1239.8/line.get_xdata())          
+        if type(line) == list:
+            for lin in line:
+                lin.set_xdata(1239.8/lin.get_xdata())  
+        else:        
+            line.set_xdata(1239.8/line.get_xdata())          
             
 def fetch_label(data,labels='',toggles={}):
     labels=data.text+labels

@@ -1,0 +1,74 @@
+{
+    "trpl": {
+        "attributes": {
+            "xlim": null,
+            "ylim": null,
+            "title": "",
+            "vlines": [],
+            "hlines": [],
+            "yaxis": "count",
+            "x_lab": "Time (ns)",
+            "y_lab": "Counts/s",
+            "labels": {
+                "number": true,
+                "name": true,
+                "power": 0,
+                "pos": 0,
+                "posf": 0,
+                "filter": 0
+            },
+            "toggles": {
+                "normalize": 0,
+                "annotations": [],
+                "yoffset": 0,
+                "legend": 1,
+                "xoffsets": {}
+            },
+            "fit_params": {
+                "model": "Exponential",
+                "P_init": false,
+                "Single": false,
+                "Print":true,
+                "p0s": [
+                    [
+                        1.3,
+                        3.6,
+                        1.0,
+                        1.0
+                    ],
+                    [
+                        1.3,
+                        3.6,
+                        1.0,
+                        1.0
+                    ],
+                    [
+                        1.3,
+                        4.0,
+                        1.0,
+                        1.0
+                    ]
+                ],
+                "fit_results": {
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_19.txt": {
+                        "a0_amplitude": 525.0352867358578,
+                        "a0_decay": 0.46629307889819605
+                    },
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_26.txt": {
+                        "a0_amplitude": 501.259457934918,
+                        "a0_decay": 0.40442790583617616
+                    },
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_35.txt": {
+                        "a0_amplitude": 492.39080663412005,
+                        "a0_decay": 0.7400152889604679
+                    }
+                }
+            }
+        },
+        "filepaths": [
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_19.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_26.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_35.txt"
+        ]
+    }
+}

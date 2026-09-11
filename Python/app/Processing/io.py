@@ -7,7 +7,8 @@ from app.Processing.data_import import Data_Set_Import
 from app.Processing.misc import reset_idx
 
 def save_exp(plot_area_widget,filename = 'test'):
-    prevent_overwrite_file(Path('data','experiments',filename))
+    save_path = Path('data','experiments',filename)
+    prevent_overwrite_file(save_path)
     save_dict = {}
     if plot_area_widget.spectrum:
         attributes = ['xlim','ylim','title','vlines','hlines','yaxis','groups','x_lab','y_lab','labels','toggles','fit_params']
@@ -33,8 +34,9 @@ def save_exp(plot_area_widget,filename = 'test'):
             save_dict['maps']['attributes'][attr] = getattr(line,attr,attr+'--- key error ---')
         save_dict['maps']['filepaths'] = list(line.lines.keys())
         
-    with open(Path('data','experiments',filename), 'w') as file:
+    with open(save_path, 'w') as file:
         file.write(json.dumps(save_dict, indent = 4))
+    print('Saved experiment at: ', save_path)
     
 
 def load_exp(plot_area_widget,filename = "test    2026-09-08 14-20-41"):
@@ -170,4 +172,46 @@ def save_figure_export(
             forward=False
         )
 
+        
+def save_fit(graph,filename=""): 
+
+    save_path = Path('data','fit results')
+    save_path.mkdir(parents=True, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    if filename =="":
+        filename =  f"fit results {timestamp}.txt"
+    else:
+        filename+=".txt"
+    save_file = Path(save_path,filename)
+    prevent_overwrite_file(save_file)
+    
+    
+  
+    combined = {
+            param: [graph.fit_params['fit_results'][name][param] for name in graph.fit_params['fit_results']]
+            for param in next(iter(graph.fit_params['fit_results'].values()))
+    }
+    
+    
+    with open(save_file, 'w') as f:
+        for name in graph.fit_params['fit_results']:
+            pname = Path(name)
+            f.write(pname.stem+' = [ '+',  \t'.join(str(x) for x in graph.fit_params['fit_results'][name].values())+"\t]\n")
+        f.write('\n')
+        for param, values in combined.items():
+            while len(param)<10:
+                param+=" "
+            f.write(f"{param}  \t= {values}\n")
+
+    print('Saved fit at: ', save_file)
+           
+        
+        
+        
+        
+        
+        
+        
+        
         

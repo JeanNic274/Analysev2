@@ -89,11 +89,11 @@ class PlotArea(QWidget):
                 self.maps = None
     def remove_all(self):
         if self.spectrum:
-            self.spectrum.remove_all()
+            self.spectrum.remove_all(all_lines=True)
         if self.trpl:
-            self.trpl.remove_all()
+            self.trpl.remove_all(all_lines=True)
         if self.maps:
-            self.maps.remove_all()
+            self.maps.remove_all(all_lines=True)
 
 
 class ScrollArea(QScrollArea):

@@ -600,13 +600,16 @@ class FitManager(QDialog):
         check_layout = QHBoxLayout()
         
         
-        for setting in ['P_init','Single']:
+        for setting in ['P_init','Single','Print']:
             checkbox = QCheckBox(setting)
 
             checkbox.toggled.connect(
                 lambda checked, setting=setting:
                     self._checkbox_setting_change(setting, checked)
             )
+            if self.graph.fit_params[setting]:
+                checkbox.setChecked(1)
+                
             check_layout.addWidget(checkbox)
             
         model_lab = QLabel('Fit model:')
@@ -706,7 +709,7 @@ class FitManager(QDialog):
         elif len(self.graph.fit_params['p0s'])>self.nrow:
             self.graph.fit_params['p0s'] = self.graph.fit_params['p0s'][0:self.nrow]
             
-        for idx, filepath in enumerate(self.graph.datasets):
+        for idx, filepath in enumerate(self.graph.lines):
             item_name = QTableWidgetItem(self.graph.datasets[filepath].name)
             self.files.setItem(idx,0,item_name)
             for id,p0 in enumerate(self.graph.fit_params['p0s'][idx]):

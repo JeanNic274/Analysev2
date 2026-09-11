@@ -1,0 +1,108 @@
+{
+    "spectrum": {
+        "attributes": {
+            "xlim": null,
+            "ylim": null,
+            "title": "",
+            "vlines": [],
+            "hlines": [],
+            "yaxis": "count_cor",
+            "groups": {
+                "0": [
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_13.txt",
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_14.txt"
+                ],
+                "1": [
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_15.txt",
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_16.txt"
+                ],
+                "2": [
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_17.txt",
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_18.txt"
+                ],
+                "3": [],
+                "4": []
+            },
+            "x_lab": "Wavelength (nm)",
+            "y_lab": "Counts/s",
+            "labels": {
+                "number": true,
+                "name": false,
+                "power": true,
+                "pos": 0,
+                "posf": 0,
+                "filter": 0
+            },
+            "toggles": {
+                "normalize": 0,
+                "annotations": [],
+                "yoffset": 0,
+                "legend": 1,
+                "xoffsets": {}
+            },
+            "fit_params": {
+                "model": "Cauchy",
+                "P_init": false,
+                "Single": false,
+                "p0s": [
+                    [
+                        420.0,
+                        450.0,
+                        1.0,
+                        430.0,
+                        1.0
+                    ],
+                    [
+                        420.0,
+                        450.0,
+                        1.0,
+                        430.0,
+                        1.0
+                    ],
+                    [
+                        420.0,
+                        450.0,
+                        1.0,
+                        430.0,
+                        1.0
+                    ],
+                    [
+                        420.0,
+                        450.0,
+                        1.0,
+                        430.0,
+                        1.0
+                    ],
+                    [
+                        420.0,
+                        450.0,
+                        1.0,
+                        430.0,
+                        1.0
+                    ],
+                    [
+                        420.0,
+                        450.0,
+                        1.0,
+                        430.0,
+                        1.0
+                    ],
+                    [
+                        420.0,
+                        450.0,
+                        1.0,
+                        430.0,
+                        1.0
+                    ]
+                ],
+                "fit_results": {},
+                "Print": false
+            }
+        },
+        "filepaths": [
+            "0",
+            "1",
+            "2"
+        ]
+    }
+}
