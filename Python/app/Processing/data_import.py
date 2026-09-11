@@ -120,7 +120,7 @@ def fit_data(df,graph,fit_idx):
     
     mask = ((df.data[xaxis] >= parameters['p0s'][fit_idx][0]) & (df.data[xaxis] <= parameters['p0s'][fit_idx][1]))
     yfit=df.data[yaxis][mask]
-    xfit=df.data[xaxis][mask] + df.x_offset
+    xfit=df.data[xaxis][mask]
 
     
     p0=parameters['p0s'][fit_idx][2:]

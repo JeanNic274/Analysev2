@@ -33,3 +33,4 @@ check main.datasets == useful? -> used in spectrum file manager (merge)
 
 fix fit header better way to make header list = idk
 
+trpl save xoffset (afet fit?)

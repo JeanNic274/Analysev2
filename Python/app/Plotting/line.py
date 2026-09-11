@@ -218,7 +218,7 @@ class BasePlot(QWidget):
 
     def normalize(self):
         self.toggles['normalize']=(self.toggles['normalize']+1)%2
-        normalize_lines(self.lines,self.original_d,xlim=self.xlim,xaxis=self.xaxis,yaxis=self.yaxis,toggle=self.toggles['normalize'])
+        normalize_lines(self.lines,self.lines_fit,self.original_d,xlim=self.xlim,xaxis=self.xaxis,yaxis=self.yaxis,toggle=self.toggles['normalize'])
         self._refresh()
         
     def set_title(self):
@@ -249,6 +249,10 @@ class BasePlot(QWidget):
         if ok:
             self.toggles['yoffset'] = yoffset
             offset_lines(self,yoffset=self.toggles['yoffset'],xaxis=self.xaxis,yaxis=self.yaxis)
+        self._refresh()
+        
+    def offset_line(self,filepath):
+        offset_lines(self,filepath=filepath,xaxis=self.xaxis,yaxis=self.yaxis)
         self._refresh()
 
     def yaxis_select(self):
@@ -328,13 +332,14 @@ class BasePlot(QWidget):
                     norm_factor =  dataset.data[self.yaxis][((dataset.data[self.xaxis] >= self.xlim[0]) &(dataset.data[self.xaxis] <= self.xlim[1]))].max()
                 else:
                     norm_factor = dataset.data[self.yaxis].max()
+            x_off = self.toggles['xoffsets'].get(filepath,0)
             if dataset.fitted:
-                line_fit, = self.ax.plot(dataset.data_fit['xfit']+dataset.x_offset, dataset.data_fit['yfit']/norm_factor, color=color, label=label,zorder=10)
+                line_fit, = self.ax.plot(dataset.data_fit['xfit']+x_off, dataset.data_fit['yfit']/norm_factor, color=color, label=label,zorder=10)
                 self.lines_fit[filepath] = line_fit
                 
-                line, = self.ax.plot(dataset.data[self.xaxis]+dataset.x_offset, dataset.data[self.yaxis]/norm_factor, color='k')
+                line, = self.ax.plot(dataset.data[self.xaxis]+x_off, dataset.data[self.yaxis]/norm_factor, color='k')
             else:
-                line, = self.ax.plot(dataset.data[self.xaxis]+dataset.x_offset, dataset.data[self.yaxis]/norm_factor, color=color, label=label)
+                line, = self.ax.plot(dataset.data[self.xaxis]+x_off, dataset.data[self.yaxis]/norm_factor, color=color, label=label)
             self.lines[filepath] = line
             # self.used_colors[filepath] = color
             self.original_d[filepath] = dataset.data.copy()
@@ -377,8 +382,9 @@ class BasePlot(QWidget):
 
     def refresh_labels(self):
         for key, line in self.lines.items():
+            line = self.lines_fit.get(key,line)
             dataset = self.datasets.get(key)
-
+            
             if dataset is None:
                 continue
 
@@ -390,10 +396,14 @@ class BasePlot(QWidget):
         self.canvas.draw_idle()
         
     def refresh_curves(self):
-        for key, data in self.datasets.items():
-            self.remove(key)
-            self.add(key,data)
+        for filepath in self.datasets:
+            self.refresh_curve(filepath)
             
+    def refresh_curve(self,filepath):
+        data = self.datasets[filepath]
+        self.remove(filepath)
+        self.add(filepath,data)
+        
     def _refresh_full(self):
         self.refresh_curves()
         self._refresh()
@@ -416,7 +426,7 @@ class SpectrumPlot(BasePlot):
         self.fit_params = {'model':'Gaussian', 'P_init':False,'Single':False,'p0s':[[420.0,450.0,1.0,430.0,1.0]],'fit_results':{}}
         self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
         self.groups = {str(i): [] for i in range(5)}
-        self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1}
+        self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1,'xoffsets':{}}
         
 
     def nm_to_ev(self,wl):
@@ -537,10 +547,9 @@ class TRPLPlot(BasePlot):
         super().__init__(main_window)
 
 
-        self.fit_params = {'model':'Exponential', 'P_init':False,'Single':False, 'p0s':[np.array([0.0,10.0,1.0,1.0])],'fit_results':{}}
+        self.fit_params = {'model':'Exponential', 'P_init':False,'Single':False, 'p0s':[[0.0,10.0,1.0,1.0]],'fit_results':{}}
         self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
-        self.groups = {str(i): [] for i in range(5)}
-        self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1}
+        self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1,'xoffsets':{}}
         
     def gen_axis(self):
         self.ax.set_yscale('log')

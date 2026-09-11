@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 
 from app.Processing.data_import import Data_Set_Import
-
+from app.Processing.misc import reset_idx
 
 def save_exp(plot_area_widget,filename = 'test'):
     prevent_overwrite_file(Path('data','experiments',filename))
@@ -15,8 +15,6 @@ def save_exp(plot_area_widget,filename = 'test'):
         save_dict['spectrum'] = {'attributes':{}}
         for attr in attributes:
             save_dict['spectrum']['attributes'][attr] = getattr(line,attr,attr+'--- key error ---')
-            print(getattr(line,attr,attr+'--- key error ---'))
-            print(type(getattr(line,attr,attr+'--- key error ---')))
         save_dict['spectrum']['filepaths'] = list(line.lines.keys())
         
     if plot_area_widget.trpl:
@@ -41,6 +39,7 @@ def save_exp(plot_area_widget,filename = 'test'):
 
 def load_exp(plot_area_widget,filename = "test    2026-09-08 14-20-41"):
     print('Loading experiment: ', filename)
+    reset_idx()
     plot_area_widget.remove_all()
     with open(Path('data','experiments',filename), 'r') as file:
         experiment = json.load(file)

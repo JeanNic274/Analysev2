@@ -2,10 +2,11 @@ import numpy as np
 import re
 from scipy.interpolate import interp1d
 
-def normalize_lines(lines,original_d,xlim=None,xaxis='nm',yaxis='count',toggle=1):
+def normalize_lines(lines,lines_fit,original_d,xlim=None,xaxis='nm',yaxis='count',toggle=1):
     if xlim is None:
         xlim = [-np.inf, np.inf]
     for filepath, line in lines.items():
+        line_fit = lines_fit.get(filepath)
         data = original_d[filepath]
         y = data[yaxis]
         mask = ((data[xaxis] >= xlim[0]) &(data[xaxis] <= xlim[1]))
@@ -14,17 +15,46 @@ def normalize_lines(lines,original_d,xlim=None,xaxis='nm',yaxis='count',toggle=1
             continue
         if y_cut.max() != 0 and toggle:
             line.set_ydata(y / y_cut.max())
+            if line_fit:
+                line_fit.set_ydata(line_fit.get_ydata() / y_cut.max())
         else:
             line.set_ydata(y)
+            if line_fit:
+                line_fit.set_ydata(line_fit.get_ydata() * y_cut.max())
             
             
-def offset_lines(GraphClass,xoffset=0,yoffset=0,xaxis='nm',yaxis='count'):
-    for filepath, line in GraphClass.lines.items():
-        data = GraphClass.original_d[filepath]
-        y = data[yaxis]
-        x = data[xaxis]
-        line.set_ydata(y+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(yoffset))
-        line.set_xdata(x+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(xoffset))
+def offset_lines(GraphClass,yoffset=0,xaxis='nm',yaxis='count',filepath=False):
+    if filepath:
+            xoffset = GraphClass.toggles['xoffsets'].get(filepath,0)
+            line = GraphClass.lines[filepath]
+            line_fit =  GraphClass.lines_fit.get(filepath)
+            data = GraphClass.original_d[filepath]
+            y = data[yaxis]
+            x = data[xaxis]
+            line.set_ydata(y+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(yoffset))
+            line.set_xdata(x+np.float64(xoffset))
+            if line_fit:
+                y_fit = GraphClass.datasets[filepath].data_fit['yfit']
+                x_fit = GraphClass.datasets[filepath].data_fit['xfit']
+                line_fit.set_ydata(y_fit+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(yoffset))
+                line_fit.set_xdata(x_fit+np.float64(xoffset))
+    else:
+        for filepath, line in GraphClass.lines.items():
+            
+            xoffset = GraphClass.toggles['xoffsets'].get(filepath,0)
+            
+            line_fit =  GraphClass.lines_fit.get(filepath)
+            data = GraphClass.original_d[filepath]
+            y = data[yaxis]
+            x = data[xaxis]
+            line.set_ydata(y+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(yoffset))
+            line.set_xdata(x+np.float64(xoffset))
+            if line_fit:
+                y_fit = GraphClass.datasets[filepath].data_fit['yfit']
+                x_fit = GraphClass.datasets[filepath].data_fit['xfit']
+                line_fit.set_ydata(y_fit+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(yoffset))
+                line_fit.set_xdata(x_fit+np.float64(xoffset))
+            
             
 def evnm_swap(lines):
     for filepath, line in lines.items():

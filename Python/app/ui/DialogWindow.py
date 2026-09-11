@@ -1,6 +1,5 @@
 import os
 
-import numpy as np
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -16,6 +15,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QTableWidget,
     QTableWidgetItem,
+    QApplication,
 )
 from PySide6.QtCore import Qt
 
@@ -303,7 +303,7 @@ class TRPLFileManager(QDialog):
             x_off.setFixedWidth(50)
             x_off.setPlaceholderText("x")
             x_off.setText(
-                str(self.main.plot_area.trpl.datasets[filepath].x_offset)
+                str(self.main.plot_area.trpl.toggles['xoffsets'].get(filepath,0))
             )
 
             x_off.editingFinished.connect(
@@ -326,8 +326,9 @@ class TRPLFileManager(QDialog):
             self.main.plot_area.trpl.datasets[filepath].text = edit.text()+", "
     def _custom_number_changed(self, filepath, edit):
         if edit != "":
-            self.main.plot_area.trpl.datasets[filepath].x_offset = float(edit.text())
-            self.main.plot_area.trpl.refresh_curves()
+            self.main.plot_area.trpl.toggles['xoffsets'][filepath] = float(edit.text())
+            # self.main.plot_area.trpl.refresh_curve(filepath)
+            self.main.plot_area.trpl.offset_line(filepath)
         
     def closeEvent(self, event):
         if self.force_refresh:
@@ -654,11 +655,13 @@ class FitManager(QDialog):
         self.graph.fit_params[var] = checked
         
     def _do_fit(self):
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         self.graph.remove_all(fits=True,refresh=False)
         for idx, filepath in enumerate(self.graph.datasets):
             self.graph.datasets[filepath].fit(self.graph,idx)
             self.graph.fit_params['fit_results'][filepath] = self.graph.datasets[filepath].fit_result
         self.graph.refresh_curves()
+        QApplication.restoreOverrideCursor()
         
     def _file_model_changed(self,model):
         self.graph.fit_params['model'] = model
@@ -674,7 +677,7 @@ class FitManager(QDialog):
             
     def _rem_par(self):
         for idx, filepath in enumerate(self.graph.datasets):
-                self.graph.fit_params['p0s'][idx] = np.delete(self.graph.fit_params['p0s'][idx],-1)
+                del self.graph.fit_params['p0s'][idx][-1]
         self._refresh()
         
     def _add_par(self):
@@ -683,7 +686,7 @@ class FitManager(QDialog):
         for idx, filepath in enumerate(self.graph.datasets):
             if (par_idx+1)>len(self.graph.fit_params['p0s'][idx]):
                 par_idx=2
-            self.graph.fit_params['p0s'][idx] = np.append(self.graph.fit_params['p0s'][idx],self.graph.fit_params['p0s'][idx][par_idx])
+            self.graph.fit_params['p0s'][idx].append(self.graph.fit_params['p0s'][idx][par_idx])
         self._refresh()
         
     def _reset(self):
