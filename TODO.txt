@@ -1,16 +1,17 @@
 - [x] log (MPL)
 - [x] save
 - [x] fix number label when merged spectrum
-- [ ] fit
+- [x] fit
+- [ ] save fit
 - [x] title
 - [x] hlines vlines
-- [ ] add cmap (CustomLC)
+- [x] add cmap (CustomLC)
 - [x] add xlim and make it so normalize toggle works with it
-- [ ] add import work (eg file_path with labels already done)
+- [x] add import work (eg file_path with labels already done)
 - [x] add title
 - [x] make normalize work for new curves
 - [x] add hlines/vlines
-- [ ] add trpl fit
+- [x] add trpl fit
 - [x] add text/annotations
 - [x] add line offset (y decay)
 - [ ] make line offset work w/ normalize (and other data specifications) (refresh w/ toggles)
@@ -28,7 +29,7 @@
 - [ ] make new tab for each graph/new tab for new set of graphs (experiments)
 - [ ] map double click circle or text
 
-check main.datasets == useful? -> used in spectrum file manager
+check main.datasets == useful? -> used in spectrum file manager (merge)
 
 fix fit header better way to make header list = idk
-fix model pvoigt to guassian
+

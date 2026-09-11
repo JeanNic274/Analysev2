@@ -44,6 +44,9 @@ class Data_Set_Import:
         if 'ev' in self.data.dtype.names:
             new_names.append('nm')
             new_values.append(1239.8/self.data['ev'])
+        if 'nm' in self.data.dtype.names:
+            new_names.append('ev')
+            new_values.append(1239.8/self.data['nm'])
         if 'count_raw' in self.data.dtype.names:
             new_names.append('count')
             new_values.append(self.data['count_raw'] / self.int_time)
@@ -69,6 +72,7 @@ class Data_Set_Import:
         self.data_fit={'xfit':0,'yfit':0,'yfit_init':0}
         self.fit_result=fit_data(self,graph,fit_idx)
         self.fitted = True
+
     
     def __init__(self,file_path=0,attrs=None,dataset=None,name=None):
         # if type(file_paths)==str:
@@ -117,6 +121,8 @@ def fit_data(df,graph,fit_idx):
     mask = ((df.data[xaxis] >= parameters['p0s'][fit_idx][0]) & (df.data[xaxis] <= parameters['p0s'][fit_idx][1]))
     yfit=df.data[yaxis][mask]
     xfit=df.data[xaxis][mask] + df.x_offset
+
+    
     p0=parameters['p0s'][fit_idx][2:]
     
     xfit0=0
@@ -230,18 +236,23 @@ def fit_data(df,graph,fit_idx):
     if cstmodel:
         model+=models.ConstantModel()
         pars.add('c',p0[-1],True,0,None)
-    
-    result = model.fit(yfit, pars, x=xfit,weights=1/np.sqrt(yfit))
+        
+    if df.measure_type == 'trpl':
+        result = model.fit(yfit, pars, x=xfit,weights=1/np.sqrt(np.abs(yfit)))
+    else:
+        result = model.fit(yfit, pars, x=xfit,)
 
     if xfit0:
         xfit+=parameters['p0s'][fit_idx][0]
+
+    
 
     print(result.fit_report(show_correl=0))
     df.data_fit['xfit']=xfit
     df.data_fit['yfit']=result.best_fit
     df.data_fit['yfit_init']=result.init_fit
     print('---------------- ',df.measure_type,' #',df.number,'   ',df.name, 'fit done -----------------')
-    return result.params
+    return result.params.valuesdict()
 
 
 

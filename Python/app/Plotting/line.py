@@ -33,7 +33,8 @@ class BasePlot(QWidget):
         self.lines_fit = {}
         self.datasets = {}
         self.original_d = {}
-
+        self.fit_params = {}
+        
         self.vlines = []
         self.hlines = []
 
@@ -352,25 +353,21 @@ class BasePlot(QWidget):
         if refresh:
             self._refresh()
             
-    def remove_all(self,fits=0):
+    def remove_all(self,fits=0,refresh=True):
         if not fits:
             for filepath in self.lines.copy():
                 self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
-            self._refresh()
         else:
             for filepath in self.lines_fit.copy():
                 self.remove_fit(filepath)
+        if refresh:
             self._refresh()
 
-    def remove_fit(self, filepath):
+    def remove_fit(self, filepath): # does not remove color since it is removed when refresh_curves is called after fit
         if filepath not in self.lines_fit:
             return
 
         self.lines_fit[filepath].remove()
-
-        color = self.used_colors.pop(filepath,None)
-        self.available_colors.insert(0, color)
-
         del self.lines_fit[filepath]
     
     def _get_color(self, key):
@@ -416,14 +413,12 @@ class SpectrumPlot(BasePlot):
         self.x_lab = "Wavelength (nm)"
         self.y_lab = "Counts/s"
 
-        self.fit_params = {'model':'Gaussian', 'P_init':False,'Single':False,'p0s':[[420.0,450.0,1.0,430.0,1.0]]}
+        self.fit_params = {'model':'Gaussian', 'P_init':False,'Single':False,'p0s':[[420.0,450.0,1.0,430.0,1.0]],'fit_results':{}}
         self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
         self.groups = {str(i): [] for i in range(5)}
         self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1}
         
-            
 
-        
     def nm_to_ev(self,wl):
         """Converts wavelength in nm to eV and inverse.
 
@@ -441,6 +436,7 @@ class SpectrumPlot(BasePlot):
         print('Swaping axis')
         
         evnm_swap(self.lines)
+        evnm_swap(self.lines_fit)
         
         if self.xaxis=='ev':
                 self.xaxis='nm'
@@ -541,7 +537,7 @@ class TRPLPlot(BasePlot):
         super().__init__(main_window)
 
 
-        self.fit_params = {'model':'Exponential', 'P_init':False,'Single':False, 'p0s':[np.array([0.0,10.0,1.0,1.0])]}
+        self.fit_params = {'model':'Exponential', 'P_init':False,'Single':False, 'p0s':[np.array([0.0,10.0,1.0,1.0])],'fit_results':{}}
         self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
         self.groups = {str(i): [] for i in range(5)}
         self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1}

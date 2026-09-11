@@ -28,7 +28,7 @@ def offset_lines(GraphClass,xoffset=0,yoffset=0,xaxis='nm',yaxis='count'):
             
 def evnm_swap(lines):
     for filepath, line in lines.items():
-        line.set_xdata(1239.8/line.get_xdata())         
+        line.set_xdata(1239.8/line.get_xdata())          
             
 def fetch_label(data,labels='',toggles={}):
     labels=data.text+labels

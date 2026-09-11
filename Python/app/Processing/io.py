@@ -10,15 +10,17 @@ def save_exp(plot_area_widget,filename = 'test'):
     prevent_overwrite_file(Path('data','experiments',filename))
     save_dict = {}
     if plot_area_widget.spectrum:
-        attributes = ['xlim','ylim','title','vlines','hlines','yaxis','groups','x_lab','y_lab','labels','toggles']
+        attributes = ['xlim','ylim','title','vlines','hlines','yaxis','groups','x_lab','y_lab','labels','toggles','fit_params']
         line = plot_area_widget.spectrum
         save_dict['spectrum'] = {'attributes':{}}
         for attr in attributes:
             save_dict['spectrum']['attributes'][attr] = getattr(line,attr,attr+'--- key error ---')
+            print(getattr(line,attr,attr+'--- key error ---'))
+            print(type(getattr(line,attr,attr+'--- key error ---')))
         save_dict['spectrum']['filepaths'] = list(line.lines.keys())
         
     if plot_area_widget.trpl:
-        attributes = ['xlim','ylim','title','vlines','hlines','yaxis','x_lab','y_lab','labels','toggles']
+        attributes = ['xlim','ylim','title','vlines','hlines','yaxis','x_lab','y_lab','labels','toggles','fit_params']
         line = plot_area_widget.trpl
         save_dict['trpl'] = {'attributes':{}}
         for attr in attributes:

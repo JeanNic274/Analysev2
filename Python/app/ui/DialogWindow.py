@@ -207,7 +207,6 @@ class SpectrumFileManager(QDialog):
         event.accept()
 
 
-
 class TRPLFileManager(QDialog):
 
     def __init__(self, main_window):
@@ -556,7 +555,6 @@ class SaveManager(QDialog):
         for graph in graphs:
             self._save_graph(graph)
         
-        
 
 class FitManager(QDialog):
 
@@ -656,15 +654,16 @@ class FitManager(QDialog):
         self.graph.fit_params[var] = checked
         
     def _do_fit(self):
-        self.graph.remove_all(fits=1)
+        self.graph.remove_all(fits=True,refresh=False)
         for idx, filepath in enumerate(self.graph.datasets):
             self.graph.datasets[filepath].fit(self.graph,idx)
+            self.graph.fit_params['fit_results'][filepath] = self.graph.datasets[filepath].fit_result
         self.graph.refresh_curves()
         
     def _file_model_changed(self,model):
         self.graph.fit_params['model'] = model
         if self.ncol<=len(self.models_param[self.graph.fit_params['model']]):
-            while self.ncol<len(self.models_param[self.graph.fit_params['model']]):
+            while self.ncol<(len(self.models_param[self.graph.fit_params['model']])+1):
                 self._add_par()
         else:
             self._refresh()
@@ -674,15 +673,12 @@ class FitManager(QDialog):
             self.graph.fit_params['p0s'][row][col-1] = float(self.files.item(row,col).text())
             
     def _rem_par(self):
-        del self.additionnal_params[-1]
         for idx, filepath in enumerate(self.graph.datasets):
                 self.graph.fit_params['p0s'][idx] = np.delete(self.graph.fit_params['p0s'][idx],-1)
         self._refresh()
         
     def _add_par(self):
         par_idx = ((self.ncol-3)%(len(self.models_param[self.graph.fit_params['model']])-2))+2
-        if self.ncol>len(self.models_param[self.graph.fit_params['model']]):
-            self.additionnal_params.append(self.models_param[self.graph.fit_params['model']][par_idx])
 
         for idx, filepath in enumerate(self.graph.datasets):
             if (par_idx+1)>len(self.graph.fit_params['p0s'][idx]):
@@ -701,7 +697,7 @@ class FitManager(QDialog):
             
         self.files.setRowCount(self.nrow)
         self.files.setColumnCount(self.ncol)
-        self.files.setHorizontalHeaderLabels(['Set']+self.models_param[self.graph.fit_params['model']]+self.additionnal_params)
+        self.files.setHorizontalHeaderLabels(['Set']+self.models_param[self.graph.fit_params['model']]+10*self.models_param[self.graph.fit_params['model']][2:])
         if len(self.graph.fit_params['p0s'])<self.nrow:
             self.graph.fit_params['p0s']+=[self.graph.fit_params['p0s'][0][:] for _ in range(self.nrow-len(self.graph.fit_params['p0s']))] # cursed dont change
         elif len(self.graph.fit_params['p0s'])>self.nrow:
