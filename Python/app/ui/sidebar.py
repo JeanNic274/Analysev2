@@ -2,11 +2,11 @@
 # t=time.time()
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
-    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel
+    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel,
 )
 # print('imported QTWidget', time.time()-t)
 # t=time.time()
-from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel
+from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel, QSettings
 from PySide6.QtGui import QBrush
 # print('imported QtCore', time.time()-t)
 # t=time.time()
@@ -23,11 +23,13 @@ from app.Processing.misc import reset_idx, browse
 # print('imported reset_idx', time.time()-t)
 from config import DEFAULT_FOLDER
 
+
 class Sidebar(QWidget):
     def __init__(self, main_window):
-        self.path=Path(DEFAULT_FOLDER)
         super().__init__()
         self.main = main_window
+        self.settings = QSettings("JN","AnalyseV2")
+        self.path=Path(self.settings.value("last_folder",DEFAULT_FOLDER))
         self.setFixedWidth(250)
         self._build()
 
@@ -110,6 +112,7 @@ class Sidebar(QWidget):
         is_dir = item.data(0, Qt.UserRole + 1)
         if is_dir:
             self.populate_tree(path)
+            self.settings.setValue("last_folder", str(path))
         else:
             if path in self.main.selected_files:
                 self.main.selected_files.remove(path)

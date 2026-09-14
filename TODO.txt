@@ -16,8 +16,8 @@
 - [x] add line offset (y decay)
 - [ ] make line offset work w/ normalize (and other data specifications) (refresh w/ toggles)
 - [x] add axis select
-- [ ] add focus sweep
-- [ ] add general line plot
+- [x] add focus sweep
+- [x] add general line plot
 - [ ] add fr (axis label) to save manager
 - [ ] add colors (polar plot)
 - [x] add meas.txt to know file type or something
@@ -30,6 +30,5 @@
 - [ ] map double click circle or text
 
 
-load fit w/ load exp (hard, worth?)
 
 

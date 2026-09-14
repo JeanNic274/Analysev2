@@ -114,7 +114,27 @@ class SpectrumFileManager(QDialog):
         self.groups.clear()
         self.files.clear()
         for group_name in self.main.plot_area.spectrum.groups:
-            self.groups.addItem(group_name)
+            item=QListWidgetItem(group_name)
+            widget = QWidget()
+            layout = QHBoxLayout(widget)
+            layout.setContentsMargins(2, 2, 2, 2)
+            filename = QLabel(group_name)
+            
+            edit_group = QLineEdit()
+
+            edit_group.setPlaceholderText("Custom Label")
+            edit_group.setText(
+                getattr(self.main.plot_area.spectrum.groups[group_name],"text",None)
+            )
+            edit_group.editingFinished.connect(
+                lambda filepath=group_name, edit=edit_group:
+                    self._custom_group_text_changed(filepath, edit)
+            )
+            layout.addWidget(filename)
+            layout.addWidget(edit_group)
+            self.groups.addItem(item)
+            self.groups.setItemWidget(item, widget)
+
 
         for filepath, dataset in self.main.datasets.items():
             if getattr(dataset, "measure_type", None) != "spectrum":
@@ -134,13 +154,12 @@ class SpectrumFileManager(QDialog):
             # Custom text
             edit = QLineEdit()
 
-            edit.setPlaceholderText("Custom Labels")
+            edit.setPlaceholderText("Custom Label")
 
             edit.setText(
-                self.main.plot_area.spectrum.datasets[filepath].text
+                dataset.text[:-2]
             )
 
-            # Save text when edited
             edit.editingFinished.connect(
                 lambda filepath=filepath, edit=edit:
                     self._custom_text_changed(filepath, edit)
@@ -156,6 +175,9 @@ class SpectrumFileManager(QDialog):
             # Give the item enough height
             item.setSizeHint(widget.sizeHint())
     def _custom_text_changed(self, filepath, edit):
+        if edit != "":
+            self.main.datasets[filepath].text = edit.text()+", "
+    def _custom_group_text_changed(self, filepath, edit):
         if edit != "":
             self.main.plot_area.spectrum.datasets[filepath].text = edit.text()+", "
 

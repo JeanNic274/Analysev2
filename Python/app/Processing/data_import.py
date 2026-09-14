@@ -1,4 +1,4 @@
-import time
+# import time
 # t=time.time()
 import numpy as np
 from numpy.lib import recfunctions as rfn
@@ -14,16 +14,16 @@ from app.Processing.misc import header_extract
 # print('imported header_extract', time.time()-t)
 
 col_names = {
-    'Unknown' :                 [str(i) for i in range(20)],
+    # 'Unknown' :                 [str(i) for i in range(20)],
     'spectre w/o bg' :          ['pixel','nm','count_cor_raw'],
     'spectre w/ bg' :           ['pixel','nm','count_raw','countbg','count_cor_raw'],
     'map APD MH' :              ["x","detx","y","dety","count1_raw","count2_raw","count_raw"],
     'map APD DAQ' :             ["x","detx","y","dety","count1_raw","count2_raw","count_raw"],
     'plmap' :                   ["x","y","detx","dety","count1_raw","count2_raw","count_raw"],
-    'focus scan MH' :           ["f","detf","count1","count2","count_raw"],
-    'focus scan DAQ' :          ["f","detf","count1","count2","count_raw"],
+    'focus scan MH' :           ["f","detf","count_1","count_2","count_raw"], #todo
+    'focus scan DAQ' :          ["f","detf","count_1","count_2","count_raw"],
     'trpl APD MH' :             ["ns","count1","count2"],
-    'polarisation spectre' :    ["deg","detdeg","pixel","max_count_raw","max_wl","count"],
+    'polarisation spectre' :    ["deg","detdeg","pixel","max_count_raw","max_wl","count"], #todo?
     'polarisation APD' :        ["deg","detdeg","count1","count2","count_raw"],
     'spectre c2n' :             ["ev","count_cor","bugged_col"],
 }
@@ -35,8 +35,36 @@ col_merged = {
 class Data_Set_Import:
 
     def import_data(self,file_path):
-        
-        self.data=np.genfromtxt(file_path,comments="#",delimiter="\t",encoding="latin-1",names=col_names[self.file_type])
+        names = col_names.get(self.file_type)
+        col_error = False
+        if names is not None:
+            data=np.genfromtxt(file_path,comments="#",delimiter="\t",encoding="latin-1")#,names=col_names[self.file_type]
+            n_col = data.shape[1]
+            if n_col <= len(names):
+            
+                structured = np.empty(
+                    data.shape[0],
+                    dtype=[(name, "f8") for name in names]
+                )
+
+                for i, name in enumerate(names):
+                    structured[name] = data[:, i]
+                self.data = structured
+            else: 
+                col_error = True
+                self.measure_type = 'Unknown'
+                
+        if names is None or col_error:
+            print('Unknown data type/error in columns names, trying to get column names from file')
+            with open(file_path, "r") as data:
+                while True:
+                    line = data.readline()
+                    if not line.startswith('#') and line.strip(): break
+                    line_header = line
+                header = [e for e in line_header.strip().split('\t') if e]
+
+                self.data = np.genfromtxt(data, names=header, comments="#",encoding="latin-1")
+            # self.data=np.genfromtxt(file_path,comments="#",delimiter="\t",encoding="latin-1",names=True)
         self.data = np.nan_to_num(self.data, nan=0)
     def init_data(self):
         new_names = []

@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import  QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy
 from PySide6.QtCore import Qt
 
-from app.Plotting.line import SpectrumPlot, TRPLPlot
+from app.Plotting.line import SpectrumPlot, TRPLPlot, LinePlot, FocusPlot
 from app.Plotting.map import MapPlot
 
 
@@ -12,6 +12,8 @@ class PlotArea(QWidget):
         self.spectrum = None
         self.trpl = None
         self.maps = None
+        self.lineplot = None
+        self.focus = None
         self.setSizePolicy(
             QSizePolicy.Expanding,
             QSizePolicy.Preferred
@@ -39,25 +41,40 @@ class PlotArea(QWidget):
         self.container.setMinimumWidth(400)
         outer_layout.addWidget(self.scroll)
 
-    def _get_or_create(self, plot_type):
-        if plot_type == 'spectrum' and self.spectrum is None:
-            self.spectrum = SpectrumPlot(self.main)
-            self.spectrum.setObjectName("Spectrum")
-            self.layout.addWidget(self.spectrum)
+    def _get_or_create(self, plot_type,names = None):
+        if plot_type == 'spectrum':
+            if self.spectrum is None:
+                self.spectrum = SpectrumPlot(self.main)
+                self.spectrum.setObjectName("Spectrum")
+                self.layout.addWidget(self.spectrum)
             
-        elif plot_type == 'trpl' and self.trpl is None:
-            self.trpl = TRPLPlot(self.main)
-            self.trpl.setObjectName("TRPL")
-            self.layout.addWidget(self.trpl)
+        elif plot_type == 'trpl':
+            if self.trpl is None:
+                self.trpl = TRPLPlot(self.main)
+                self.trpl.setObjectName("TRPL")
+                self.layout.addWidget(self.trpl)
             
-        elif plot_type == 'maps' and self.maps is None:
-            self.maps = MapPlot(self.main)
-            self.maps.setObjectName("Map")
-            self.layout.addWidget(self.maps)
+        elif plot_type == 'maps':
+            if self.maps is None:
+                self.maps = MapPlot(self.main)
+                self.maps.setObjectName("Map")
+                self.layout.addWidget(self.maps)
+            
+        elif plot_type == 'focus':
+            if self.focus is None:
+                self.focus = FocusPlot(self.main)
+                self.focus.setObjectName("Focus")
+                self.layout.addWidget(self.focus)
+            
+            
+        elif self.lineplot is None:
+            self.lineplot = LinePlot(self.main,names)
+            self.lineplot.setObjectName("Line")
+            self.layout.addWidget(self.lineplot)
         self.layout.addStretch()
         
     def add(self, filepath, dataset,plot_now= True):
-        self._get_or_create(dataset.measure_type)
+        self._get_or_create(dataset.measure_type,names = dataset.data.dtype.names)
 
         if dataset.measure_type == 'spectrum':
             self.spectrum.add(filepath, dataset, plot_now)
@@ -65,6 +82,10 @@ class PlotArea(QWidget):
             self.trpl.add(filepath, dataset, plot_now)
         elif dataset.measure_type == 'maps':
             self.maps.add(filepath, dataset, plot_now)
+        elif dataset.measure_type == 'focus':
+            self.focus.add(filepath, dataset, plot_now)
+        else:
+            self.lineplot.add(filepath, dataset, plot_now)
 
     def remove(self, filepath, dataset,refresh=True,keep=False):
         if dataset.measure_type == 'spectrum' and self.spectrum:
@@ -87,6 +108,21 @@ class PlotArea(QWidget):
                 self.layout.removeWidget(self.maps)
                 self.maps.deleteLater()
                 self.maps = None
+                
+        elif dataset.measure_type == 'focus' and self.focus:
+            self.focus.remove(filepath,refresh=refresh)
+            if not self.focus.lines:
+                self.layout.removeWidget(self.focus)
+                self.focus.deleteLater()
+                self.focus = None
+                
+        elif dataset.measure_type == 'line' and self.lineplot:
+            self.lineplot.remove(filepath,refresh=refresh)
+            if not self.lineplot.lines:
+                self.layout.removeWidget(self.lineplot)
+                self.lineplot.deleteLater()
+                self.lineplot = None
+                
     def remove_all(self):
         if self.spectrum:
             self.spectrum.remove_all(all_lines=True)
@@ -94,6 +130,10 @@ class PlotArea(QWidget):
             self.trpl.remove_all(all_lines=True)
         if self.maps:
             self.maps.remove_all(all_lines=True)
+        if self.focus:
+            self.focus.remove_all(all_lines=True)
+        if self.line:
+            self.line.remove_all(all_lines=True)
 
 
 class ScrollArea(QScrollArea):

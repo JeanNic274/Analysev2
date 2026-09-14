@@ -112,6 +112,10 @@ class BasePlot(QWidget):
             btn_yaxis_select = QPushButton("Set y axis")
             btn_yaxis_select.clicked.connect(self.yaxis_select)
             button_layout.addWidget(btn_yaxis_select)
+        if 'set x axis' in self.buttons:
+            btn_xaxis_select = QPushButton("Set x axis")
+            btn_xaxis_select.clicked.connect(self.xaxis_select)
+            button_layout.addWidget(btn_xaxis_select)
         if 'set y_offset' in self.buttons:
             btn_y_offset = QPushButton("Set y offset")
             btn_y_offset.clicked.connect(self.set_y_offset)
@@ -155,7 +159,10 @@ class BasePlot(QWidget):
         text, ok = QInputDialog.getText(self,"Info", "Enter attribute name")
         if not ok:
             return
-        print(getattr(self,text))
+        obj = self
+        for attr in text.split("."):
+            obj = getattr(obj, attr)
+        print(obj)
         
         
     def resizeEvent(self, event):
@@ -272,6 +279,11 @@ class BasePlot(QWidget):
         yaxis, ok = QInputDialog.getText(self, 'Set y axis', 'Enter y axis name.')
         if yaxis and ok:
             self.yaxis = yaxis
+        self.refresh_curves() 
+    def xaxis_select(self):
+        xaxis, ok = QInputDialog.getText(self, 'Set x axis', 'Enter x axis name.')
+        if xaxis and ok:
+            self.xaxis = xaxis
         self.refresh_curves() 
         
     def legend_toggle(self):
@@ -409,7 +421,6 @@ class BasePlot(QWidget):
             if lines_fit:
                 line=lines_fit[0]
             dataset = self.datasets.get(key)
-            
             if dataset is None:
                 continue
 
@@ -496,19 +507,22 @@ class SpectrumPlot(BasePlot):
                 self.ax_ev.set_xlabel("Energy (eV)")
                 self.ax.set_xlabel("Wavelength (nm)")
                 self.ax_ev.invert_xaxis()
-                self.ax.xaxis.set_minor_locator(ticker.MultipleLocator(5))
+                self.ax.xaxis.set_minor_locator(ticker.AutoMinorLocator(5))
                 self.ax.xaxis.set_major_locator(plt.MaxNLocator(7))
-                self.ax_ev.xaxis.set_minor_locator(ticker.MultipleLocator(0.02))
+                # self.ax.xaxis.set_major_locator(ticker.IndexLocator(base=20,offset=0))
+                # self.ax.xaxis.set_major_locator(ticker.LinearLocator())
                 self.ax_ev.xaxis.set_major_locator(plt.MaxNLocator(7))
+                self.ax_ev.xaxis.set_minor_locator(ticker.AutoMinorLocator(5))
 
         if self.xaxis=='ev':
                 self.ax.set_xlabel("Energy (eV)")
                 self.ax_ev.set_xlabel("Wavelength (nm)")
                 self.ax_ev.invert_xaxis()
-                self.ax_ev.xaxis.set_minor_locator(ticker.MultipleLocator(5))
+                self.ax_ev.xaxis.set_minor_locator(ticker.AutoMinorLocator(5))
                 self.ax_ev.xaxis.set_major_locator(plt.MaxNLocator(7))
-                self.ax.xaxis.set_minor_locator(ticker.MultipleLocator(0.02))
                 self.ax.xaxis.set_major_locator(plt.MaxNLocator(7))
+                self.ax.xaxis.set_minor_locator(ticker.AutoMinorLocator(5))
+                
                 
         
     def update_groups(self):
@@ -581,6 +595,47 @@ class TRPLPlot(BasePlot):
         self.ax.set_ylabel(self.y_lab)
         self.ax.set_xlabel(self.x_lab)
         
+   
+class FocusPlot(BasePlot):
+    def __init__(self, main_window):
+        self.buttons = ['save','normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis','fit']
+        self.x_lab = "f (μm)"
+        self.y_lab = "Counts/s"
+        self.xaxis = 'f'
+        self.yaxis = 'count'
+        super().__init__(main_window)
+
+
+        self.fit_params = {'model':'Cauchy', 'P_init':False,'Single':False, 'p0s':[[0.0,10.0,1.0,1.0,1.0]],'fit_results':{},'Print':True}
+        self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
+        self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1,'xoffsets':{}}
+        
+    def gen_axis(self):
+        self.ax.set_ylabel(self.y_lab)
+        self.ax.set_xlabel(self.x_lab)
+   
      
+
+class LinePlot(BasePlot):
+    def __init__(self, main_window,names):
+        self.buttons = ['save','normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set x axis','fit']
+        self.x_lab = "x"
+        self.y_lab = "y"
+        self.xaxis = names[0]
+        self.yaxis = names[-1]
+        self.names = names
+        print('Found axis are: ',names)
+        print('Plotting with ',names[0], ' as x axis and ', names[-1], 'as y axis.')
+        super().__init__(main_window)
+
+
+        self.fit_params = {'model':'Exponential', 'P_init':False,'Single':False, 'p0s':[[0.0,10.0,1.0,1.0]],'fit_results':{},'Print':True}
+        self.labels = {'number': 0,'name': 0,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
+        self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1,'xoffsets':{}}
+        
+    def gen_axis(self):
+        self.ax.set_ylabel(self.y_lab)
+        self.ax.set_xlabel(self.x_lab)
+        
 
     

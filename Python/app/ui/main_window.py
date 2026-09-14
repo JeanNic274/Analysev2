@@ -10,6 +10,7 @@ from app.ui.toolbar import Toolbar
 print(f'---------------- imported toolbar:  {time.time()-t:.8f} --------------------')
 from app.ui.plot_area import PlotArea
 print(f'---------------- imported PlotArea: {time.time()-t:.8f} --------------------')
+t=time.time()
 
 class MainWindow(QMainWindow):
     def __init__(self):
