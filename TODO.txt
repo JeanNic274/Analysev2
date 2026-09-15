@@ -28,10 +28,8 @@
 - [x] make custom file tree
 - [ ] make new tab for each graph/new tab for new set of graphs (experiments)
 - [ ] map double click circle or text
-- [ ] set_title (label?) use attributes 
 - [ ] check load exp/ reset is not removing selected files label (under file tree)
 - [x] add number class that is called whenever curve number is requested
-- [ ] add add_multi to line/maps for import performance
 
 
 
