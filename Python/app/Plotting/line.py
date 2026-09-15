@@ -1,7 +1,6 @@
 # import numpy as np
 from sys import float_info
 
-
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog
 from PySide6.QtCore import QSize
 
@@ -366,12 +365,12 @@ class BasePlot(QWidget):
                     norm_factor = dataset.data[self.yaxis].max()
             x_off = self.toggles['xoffsets'].get(filepath,0)
             if dataset.fitted:
-                lines_fit = self.ax.plot(dataset.data_fit['xfit']+x_off, dataset.data_fit['yfit']/norm_factor, color=color, label=label,zorder=10)
+                lines_fit = self.ax.plot(dataset.data_fit['xfit']+x_off, (dataset.data_fit['yfit']+self.toggles['yoffset'])/norm_factor, color=color, label=label,zorder=10)
                 self.lines_fit[filepath] = lines_fit
                 
-                line, = self.ax.plot(dataset.data[self.xaxis]+x_off, dataset.data[self.yaxis]/norm_factor, color='k')
+                line, = self.ax.plot(dataset.data[self.xaxis]+x_off, (dataset.data[self.yaxis]+self.toggles['yoffset'])/norm_factor, color='k')
             else:
-                line, = self.ax.plot(dataset.data[self.xaxis]+x_off, dataset.data[self.yaxis]/norm_factor, color=color, label=label)
+                line, = self.ax.plot(dataset.data[self.xaxis]+x_off, (dataset.data[self.yaxis]+self.toggles['yoffset'])/norm_factor, color=color, label=label)
             self.lines[filepath] = line
             # self.used_colors[filepath] = color
             self.original_d[filepath] = dataset.data.copy()

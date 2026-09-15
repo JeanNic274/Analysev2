@@ -132,8 +132,8 @@ class PlotArea(QWidget):
             self.maps.remove_all(all_lines=True)
         if self.focus:
             self.focus.remove_all(all_lines=True)
-        if self.line:
-            self.line.remove_all(all_lines=True)
+        if self.lineplot:
+            self.lineplot.remove_all(all_lines=True)
 
 
 class ScrollArea(QScrollArea):

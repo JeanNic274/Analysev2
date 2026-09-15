@@ -70,10 +70,16 @@ class Toolbar(QWidget):
         dialog.exec()
 
     def _open_sfile_mng(self):
+        if self.main.plot_area.spectrum is None:
+            print('No spectrum curves')
+            return
         dialog = SpectrumFileManager(self.main)
         dialog.exec()
         
     def _open_tfile_mng(self):
+        if self.main.plot_area.trpl is None:
+            print('No trpl curves')
+            return
         dialog = TRPLFileManager(self.main)
         dialog.exec()
         
