@@ -7,6 +7,27 @@ import sys
 from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
 
 
+class curve_number():
+    def __init__(self):
+        self.idx = {}
+        
+        
+    def add(self,dataset):
+        temp = self.idx.get(dataset.measure_type,[])
+        temp.append(dataset)
+        dataset.number = len(temp)
+        self.idx[dataset.measure_type] = temp
+    
+    def remove(self,dataset):
+        temp = self.idx.get(dataset.measure_type,[dataset])
+        index = dataset.number-1
+        temp.pop(index)
+        for i in range(index,len(temp)):
+            temp[i].number = i+1
+    def _reset(self):
+        self.idx={}
+
+
 def meastxt(directory_path):
     print('Generating measurements.txt file:')
     print("")
@@ -120,11 +141,6 @@ def meastxt(directory_path):
     return 0
 
 
-def reset_idx():
-    global idx_tracker
-    idx_tracker={}
-idx_tracker={}
-
 def header_extract(file_path,map=False):
     header=[]
     with open(file_path) as f:
@@ -141,13 +157,6 @@ def header_extract(file_path,map=False):
                     break
     info={}
     info['file_type'],info['measure_type']=fetchtype(header)
-    if info['measure_type'] in idx_tracker:
-        # print('idx_tracker',idx_tracker)
-        idx_tracker[info['measure_type']]+=1
-    else:
-        idx_tracker[info['measure_type']]=1
-    info['number'] = str(idx_tracker[info['measure_type']])
-    
     if len(header)<10:
         info['int_time']=1
         return info

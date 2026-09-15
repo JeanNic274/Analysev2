@@ -4,7 +4,6 @@ from pathlib import Path
 from datetime import datetime
 
 from app.Processing.data_import import Data_Set_Import
-from app.Processing.misc import reset_idx
 
 def save_exp(plot_area_widget,filename = 'test'):
     save_path = Path('data','experiments',filename)
@@ -41,8 +40,7 @@ def save_exp(plot_area_widget,filename = 'test'):
 
 def load_exp(plot_area_widget,filename = "test    2026-09-08 14-20-41"):
     print('Loading experiment: ', filename)
-    reset_idx()
-    plot_area_widget.remove_all()
+    plot_area_widget.main.sidebar._clear_selection()
     with open(Path('data','experiments',filename), 'r') as file:
         experiment = json.load(file)
     
@@ -56,17 +54,21 @@ def load_exp(plot_area_widget,filename = "test    2026-09-08 14-20-41"):
                 dataset = Data_Set_Import(path)
                 plot_area_widget.main.selected_files.append(filepath)
                 plot_area_widget.main.datasets[filepath] = dataset
-                plot_area_widget.add(filepath,dataset)
+                plot_area_widget.manager.add(dataset)
+                plot_area_widget.add(filepath,dataset,plot_now=False)
             else:
                 for group_path in experiment[lines]['attributes']['groups'][filepath]:
                     path = Path(group_path)
                     dataset = Data_Set_Import(path)
                     plot_area_widget.main.selected_files.append(group_path)
                     plot_area_widget.main.datasets[group_path] = dataset
-                    plot_area_widget.add(group_path,dataset)
+                    plot_area_widget.manager.add(dataset)
+                    plot_area_widget.add(group_path,dataset,plot_now=False)
         # getattr(plot_area_widget,lines)._refresh_full()
         if lines =='spectrum':
             plot_area_widget.spectrum.update_groups()
+        else:
+            getattr(plot_area_widget,lines)._refresh()
             
             
 

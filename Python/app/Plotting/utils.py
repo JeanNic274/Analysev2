@@ -81,7 +81,7 @@ def fetch_label(data,labels='',toggles={}):
     labels = re.split(', ', labels)
     label=""
     for lab in labels:
-        label+=getattr(data,lab,lab)+", "
+        label+=str(getattr(data,lab,lab))+", "
     return label[:-2]
 
             

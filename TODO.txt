@@ -30,6 +30,8 @@
 - [ ] map double click circle or text
 - [ ] set_title (label?) use attributes 
 - [ ] check load exp/ reset is not removing selected files label (under file tree)
+- [x] add number class that is called whenever curve number is requested
+- [ ] add add_multi to line/maps for import performance
 
 
 

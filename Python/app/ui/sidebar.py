@@ -19,8 +19,8 @@ from pathlib import Path
 from app.Processing.data_import import Data_Set_Import
 # print('imported Data_Set_Import', time.time()-t)
 # t=time.time()
-from app.Processing.misc import reset_idx, browse
-# print('imported reset_idx', time.time()-t)
+from app.Processing.misc import  browse
+# print('imported time.time()-t)
 from config import DEFAULT_FOLDER
 
 
@@ -124,13 +124,13 @@ class Sidebar(QWidget):
                 dataset = Data_Set_Import(path)
                 self.main.selected_files.append(path)
                 self.main.datasets[path] = dataset
+                self.main.plot_area.manager.add(dataset)
                 self.main.plot_area.add(path, dataset)
                 item.setData(0, Qt.UserRole + 2, True)
                 item.setBackground(0, QBrush(Qt.blue))
             self._update_label()
         
     def _clear_selection(self):
-        
         for i in range(self.tree.topLevelItemCount()):
             item = self.tree.topLevelItem(i)
             item.setData(0, Qt.UserRole + 2, False)
@@ -141,7 +141,6 @@ class Sidebar(QWidget):
         self._update_label()
         for filepath in self.main.selected_files.copy():
             self.remove(filepath)
-        reset_idx()
 
     # def _on_plot(self):
     #     self.main.plot_area.plot(self.main.selected_files)

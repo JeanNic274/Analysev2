@@ -105,6 +105,7 @@ class Data_Set_Import:
     def __init__(self,file_path=0,attrs=None,dataset=None,name=None):
         # if type(file_paths)==str:
         #     file_paths=[file_paths]
+        self.number = ""
         if file_path:
             self.name=os.path.basename(file_path)[:-4]
         else:
@@ -129,11 +130,16 @@ class Data_Set_Import:
         if self.file_type=='Unknown':
                 print("Unknown Data File Type for "+self.name)
         self.init_data()
+        
                 
     def __str__(self):
         return self.name
     def __repr__(self):
         return self.name
+    
+    
+    
+        
             
 
 

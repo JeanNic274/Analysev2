@@ -355,25 +355,26 @@ class BasePlot(QWidget):
         color=self._get_color(filepath)
         # color = self.available_colors.pop(0)
         self.datasets[filepath]=dataset
-        if plot_now:
-            label = fetch_label(dataset,toggles=self.labels)
-            norm_factor=1
-            if self.toggles['normalize']:
-                if self.xlim:
-                    norm_factor =  dataset.data[self.yaxis][((dataset.data[self.xaxis] >= self.xlim[0]) &(dataset.data[self.xaxis] <= self.xlim[1]))].max()
-                else:
-                    norm_factor = dataset.data[self.yaxis].max()
-            x_off = self.toggles['xoffsets'].get(filepath,0)
-            if dataset.fitted:
-                lines_fit = self.ax.plot(dataset.data_fit['xfit']+x_off, (dataset.data_fit['yfit']+self.toggles['yoffset'])/norm_factor, color=color, label=label,zorder=10)
-                self.lines_fit[filepath] = lines_fit
-                
-                line, = self.ax.plot(dataset.data[self.xaxis]+x_off, (dataset.data[self.yaxis]+self.toggles['yoffset'])/norm_factor, color='k')
+        label = fetch_label(dataset,toggles=self.labels)
+        norm_factor=1
+        if self.toggles['normalize']:
+            if self.xlim:
+                norm_factor =  dataset.data[self.yaxis][((dataset.data[self.xaxis] >= self.xlim[0]) &(dataset.data[self.xaxis] <= self.xlim[1]))].max()
             else:
-                line, = self.ax.plot(dataset.data[self.xaxis]+x_off, (dataset.data[self.yaxis]+self.toggles['yoffset'])/norm_factor, color=color, label=label)
-            self.lines[filepath] = line
-            # self.used_colors[filepath] = color
-            self.original_d[filepath] = dataset.data.copy()
+                norm_factor = dataset.data[self.yaxis].max()
+        x_off = self.toggles['xoffsets'].get(filepath,0)
+        if dataset.fitted:
+            lines_fit = self.ax.plot(dataset.data_fit['xfit']+x_off, (dataset.data_fit['yfit']+self.toggles['yoffset'])/norm_factor, color=color, label=label,zorder=10)
+            self.lines_fit[filepath] = lines_fit
+            
+            line, = self.ax.plot(dataset.data[self.xaxis]+x_off, (dataset.data[self.yaxis]+self.toggles['yoffset'])/norm_factor, color='k')
+        else:
+            line, = self.ax.plot(dataset.data[self.xaxis]+x_off, (dataset.data[self.yaxis]+self.toggles['yoffset'])/norm_factor, color=color, label=label)
+        self.lines[filepath] = line
+        # self.used_colors[filepath] = color
+        self.original_d[filepath] = dataset.data.copy()
+        if plot_now:
+            self.refresh_labels()
             self._refresh()
 
     def remove(self, filepath,refresh=True):

@@ -1,19 +1,24 @@
-from PySide6.QtWidgets import  QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy
+from PySide6.QtWidgets import  QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy, QLayout
 from PySide6.QtCore import Qt
 
 from app.Plotting.line import SpectrumPlot, TRPLPlot, LinePlot, FocusPlot
 from app.Plotting.map import MapPlot
-
+from app.Processing.misc import curve_number
 
 class PlotArea(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main = main_window
-        self.spectrum = None
-        self.trpl = None
-        self.maps = None
-        self.lineplot = None
-        self.focus = None
+        
+        
+        self.spectrum   = None
+        self.trpl       = None
+        self.maps       = None
+        self.lineplot   = None
+        self.focus      = None
+        
+        self.manager = curve_number()
+        
         self.setSizePolicy(
             QSizePolicy.Expanding,
             QSizePolicy.Preferred
@@ -73,6 +78,7 @@ class PlotArea(QWidget):
             self.layout.addWidget(self.lineplot)
         self.layout.addStretch()
         
+        
     def add(self, filepath, dataset,plot_now= True):
         self._get_or_create(dataset.measure_type,names = dataset.data.dtype.names)
 
@@ -122,6 +128,7 @@ class PlotArea(QWidget):
                 self.layout.removeWidget(self.lineplot)
                 self.lineplot.deleteLater()
                 self.lineplot = None
+        self.manager.remove(dataset)
                 
     def remove_all(self):
         if self.spectrum:
@@ -134,6 +141,17 @@ class PlotArea(QWidget):
             self.focus.remove_all(all_lines=True)
         if self.lineplot:
             self.lineplot.remove_all(all_lines=True)
+        self.clearLayout(self.layout)   
+                 
+    def clearLayout(self, layout):
+        if isinstance(layout, QLayout):
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+                else:
+                    self.clearLayout(item.layout())
 
 
 class ScrollArea(QScrollArea):
