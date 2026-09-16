@@ -136,7 +136,8 @@ class SpectrumFileManager(QDialog):
             self.groups.setItemWidget(item, widget)
 
 
-        for filepath, dataset in self.main.datasets.items():
+        for filepath in self.main.selected_files[self.main.plot_area_index]:
+            dataset = self.main.datasets[filepath]
             if getattr(dataset, "measure_type", None) != "spectrum":
                 continue
             
@@ -294,7 +295,8 @@ class TRPLFileManager(QDialog):
     def _refresh(self):
         self.files.clear()
 
-        for filepath, dataset in self.main.datasets.items():
+        for filepath in self.main.selected_files[self.main.plot_area_index]:
+            dataset = self.main.datasets[filepath]
             if getattr(dataset, "measure_type", None) != "trpl":
                 continue
             

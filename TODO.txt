@@ -32,5 +32,6 @@
 - [x] add number class that is called whenever curve number is requested
 
 
+make label text in grpah/plot_area instead of dataset (possible??)
 
 

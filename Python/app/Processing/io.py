@@ -38,9 +38,10 @@ def save_exp(plot_area_widget,filename = 'test'):
     print('Saved experiment at: ', save_path)
     
 
-def load_exp(plot_area_widget,filename = "test    2026-09-08 14-20-41"):
+def load_exp(plot_area_widget,plot_area_index,filename = "test    2026-09-08 14-20-41"):
     print('Loading experiment: ', filename)
     plot_area_widget.main.sidebar._clear_selection()
+    
     with open(Path('data','experiments',filename), 'r') as file:
         experiment = json.load(file)
     
@@ -52,7 +53,7 @@ def load_exp(plot_area_widget,filename = "test    2026-09-08 14-20-41"):
             path=Path(filepath)
             if path.is_file():
                 dataset = Data_Set_Import(path)
-                plot_area_widget.main.selected_files.append(filepath)
+                plot_area_widget.main.selected_files[plot_area_index].append(filepath)
                 plot_area_widget.main.datasets[filepath] = dataset
                 plot_area_widget.manager.add(dataset)
                 plot_area_widget.add(filepath,dataset,plot_now=False)
@@ -60,7 +61,7 @@ def load_exp(plot_area_widget,filename = "test    2026-09-08 14-20-41"):
                 for group_path in experiment[lines]['attributes']['groups'][filepath]:
                     path = Path(group_path)
                     dataset = Data_Set_Import(path)
-                    plot_area_widget.main.selected_files.append(group_path)
+                    plot_area_widget.main.selected_files[plot_area_index].append(group_path)
                     plot_area_widget.main.datasets[group_path] = dataset
                     plot_area_widget.manager.add(dataset)
                     plot_area_widget.add(group_path,dataset,plot_now=False)

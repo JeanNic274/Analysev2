@@ -11,6 +11,7 @@ from PySide6.QtGui import QBrush
 # print('imported QtCore', time.time()-t)
 # t=time.time()
 from pathlib import Path
+import subprocess
 # print('imported re', time.time()-t)
 # t=time.time()
 # from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
@@ -46,11 +47,18 @@ class Sidebar(QWidget):
         layout.addWidget(QLabel("Browse Files"))
         layout.addWidget(self.path_input)
         
+        layout_btn = QHBoxLayout()
+        
         btn_return = QPushButton("  📁 ..")
         btn_return.setStyleSheet("text-align: left")
         btn_return.clicked.connect(self.return_folder)
+        
+        btn_meas = QPushButton("Open meas.txt")
+        btn_meas.clicked.connect(self._open_meas)
 
-        layout.addWidget(btn_return)
+        layout_btn.addWidget(btn_return)
+        layout_btn.addWidget(btn_meas)
+        layout.addLayout(layout_btn)
 
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
@@ -114,15 +122,15 @@ class Sidebar(QWidget):
             self.populate_tree(path)
             self.settings.setValue("last_folder", str(path))
         else:
-            if path in self.main.selected_files:
-                self.main.selected_files.remove(path)
+            if path in self.main.selected_files[self.main.plot_area_index]:
+                self.main.selected_files[self.main.plot_area_index].remove(path)
                 dataset = self.main.datasets.pop(path)
                 self.main.plot_area.remove(path, dataset)
                 item.setData(0, Qt.UserRole + 2, False)
                 item.setBackground(0, QBrush())
             else:
                 dataset = Data_Set_Import(path)
-                self.main.selected_files.append(path)
+                self.main.selected_files[self.main.plot_area_index].append(path)
                 self.main.datasets[path] = dataset
                 self.main.plot_area.manager.add(dataset)
                 self.main.plot_area.add(path, dataset)
@@ -136,17 +144,22 @@ class Sidebar(QWidget):
             item.setData(0, Qt.UserRole + 2, False)
             item.setBackground(0, QBrush())
         self.main.plot_area.remove_all()
-        self.main.selected_files = []
+        self.main.selected_files[self.main.plot_area_index] = []
         self.tree.clearSelection()
         self._update_label()
-        for filepath in self.main.selected_files.copy():
+        for filepath in self.main.selected_files[self.main.plot_area_index].copy():
             self.remove(filepath)
 
-    # def _on_plot(self):
-    #     self.main.plot_area.plot(self.main.selected_files)
+    def _open_meas(self):
+        path_meas = self.path.joinpath(str(self.path.name)+" measurements.txt")
+        if not path_meas.exists():
+            print('File not found at: ',path_meas)
+            return
+        print('Opening: ',path_meas)
+        subprocess.run(['notepad.exe', str(path_meas)])
 
     def _update_label(self):
-        files = self.main.selected_files
+        files = self.main.selected_files[self.main.plot_area_index]
         if not files:
             self.selected_label.setText("No files selected")
             self.selected_label.setStyleSheet("color: #aaa; font-size: 11px;")

@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
 
         self.save_folder = r"C:\Users\jnich\OneDrive - USherbrooke\Uni\PhD\Data\img\26_08_13-i"
 
-        self.selected_files = []
+        self.selected_files = {}
         self.datasets = {}
         self.fit_results = {}
 
@@ -34,6 +34,7 @@ class MainWindow(QMainWindow):
         self.toolbar = Toolbar(self)  
 
         self.plot_area = self.plot_areas.currentWidget()
+        self.plot_area_index = str(self.plot_areas.currentIndex())
 
         self.layout.addWidget(self.sidebar)
         self.layout.addWidget(self.plot_areas)

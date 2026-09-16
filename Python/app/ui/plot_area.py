@@ -167,7 +167,7 @@ class ScrollArea(QScrollArea):
         
 class PlotAreas(QTabWidget): 
     def __init__(self,main_window):
-        super().__init__(main_window, tabsClosable=True, movable=True, tabBarAutoHide=False)
+        super().__init__(main_window, tabsClosable=False, movable=False, tabBarAutoHide=False)
         self.main = main_window
         
         
@@ -175,9 +175,15 @@ class PlotAreas(QTabWidget):
         
     def _build(self):
         self.addTab(PlotArea(self.main), '1')
+        self.setStyleSheet("""
+            QTabBar::tab {
+                width: 60px;
+            }
+        """)
         
         self.tabBarDoubleClicked.connect(self._renameTabBar)
         self.currentChanged.connect(self._activeWidget)
+        self.main.selected_files[str(self.currentIndex())] = []
         
         
     def _renameTabBar(self,tab):
@@ -186,11 +192,14 @@ class PlotAreas(QTabWidget):
             self.setTabText(tab,text)
             
     def add(self):
-        self.addTab(PlotArea(self.main), str(self.count()+1))
+        index = self.addTab(PlotArea(self.main), str(self.count()+1))
+        self.main.selected_files[str(index)] = []
+        self.setCurrentIndex(index)
         
     def _activeWidget(self,tab):
         self.main.plot_area = self.currentWidget()
-        
+        self.main.plot_area_index = str(self.currentIndex())
+        self.main.sidebar._update_label()
         
         
         

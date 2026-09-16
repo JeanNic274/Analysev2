@@ -101,14 +101,13 @@ class Toolbar(QWidget):
         dialog.exec()
         filepath = dialog.path
         if filepath:
-            load_exp(self.main.plot_area, filepath)
+            load_exp(self.main.plot_area,self.main.plot_area_index, filepath)
         
     def _addTab(self):
         self.main.plot_areas.add()    
     
     def _reset(self):
         print("_reset")
-        print(self.main.plot_area)
 
     def _meastxt(self):
         meastxt(self.main.sidebar.path)
