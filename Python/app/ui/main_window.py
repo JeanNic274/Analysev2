@@ -8,7 +8,7 @@ print(f'---------------- imported sidebar:  {time.time()-t:.8f} ----------------
 t=time.time()
 from app.ui.toolbar import Toolbar
 print(f'---------------- imported toolbar:  {time.time()-t:.8f} --------------------')
-from app.ui.plot_area import PlotArea
+from app.ui.plot_area import PlotAreas
 print(f'---------------- imported PlotArea: {time.time()-t:.8f} --------------------')
 t=time.time()
 
@@ -30,11 +30,13 @@ class MainWindow(QMainWindow):
         self.layout.setContentsMargins(0, 0, 0, 0)
 
         self.sidebar = Sidebar(self)
-        self.plot_area = PlotArea(self)  
+        self.plot_areas = PlotAreas(self)  
         self.toolbar = Toolbar(self)  
 
+        self.plot_area = self.plot_areas.currentWidget()
+
         self.layout.addWidget(self.sidebar)
-        self.layout.addWidget(self.plot_area)
+        self.layout.addWidget(self.plot_areas)
         self.layout.addWidget(self.toolbar)
                 
     def closeEvent(self, event):

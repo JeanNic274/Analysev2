@@ -317,7 +317,7 @@ class BasePlot(QWidget):
             
     def save_graph(self,skip_name=False):
         if not skip_name:
-            filename, ok = QInputDialog.getText(self, 'Export graph', 'Enter file name.',text=self.save_name)
+            filename, ok = QInputDialog.getText(self, 'Export graph', 'Enter file name.',text=self.save_params['save_name'])
             if not ok:
                 return
             self.save_params['save_name'] = filename

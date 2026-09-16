@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import  QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy, QLayout
+from PySide6.QtWidgets import  QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy, QLayout, QTabWidget, QInputDialog
 from PySide6.QtCore import Qt
 
 from app.Plotting.line import SpectrumPlot, TRPLPlot, LinePlot, FocusPlot
@@ -163,3 +163,43 @@ class ScrollArea(QScrollArea):
         bar.setValue(bar.value() - delta)
 
         event.accept()
+        
+        
+class PlotAreas(QTabWidget): 
+    def __init__(self,main_window):
+        super().__init__(main_window, tabsClosable=True, movable=True, tabBarAutoHide=False)
+        self.main = main_window
+        
+        
+        self._build()
+        
+    def _build(self):
+        self.addTab(PlotArea(self.main), '1')
+        
+        self.tabBarDoubleClicked.connect(self._renameTabBar)
+        self.currentChanged.connect(self._activeWidget)
+        
+        
+    def _renameTabBar(self,tab):
+        text,ok = QInputDialog.getText(self, 'Tab name', 'Rename Tab:')
+        if ok:
+            self.setTabText(tab,text)
+            
+    def add(self):
+        self.addTab(PlotArea(self.main), str(self.count()+1))
+        
+    def _activeWidget(self,tab):
+        self.main.plot_area = self.currentWidget()
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        

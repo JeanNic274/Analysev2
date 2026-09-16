@@ -44,22 +44,27 @@ class Toolbar(QWidget):
         btn_load_exp.setFixedWidth(150)
         btn_load_exp.clicked.connect(self._load_exp)
 
-        btn_reset = QPushButton("Reset")
-        btn_reset.setFixedWidth(150)
-        btn_reset.clicked.connect(self._reset)
 
+        btn_newtab = QPushButton("New Tab")
+        btn_newtab.setFixedWidth(150)
+        btn_newtab.clicked.connect(self._addTab)
+        
         btn_meastxt = QPushButton("Meas.txt")
         btn_meastxt.setFixedWidth(150)
         btn_meastxt.clicked.connect(self._meastxt)
 
+        btn_reset = QPushButton("Reset")
+        btn_reset.setFixedWidth(150)
+        btn_reset.clicked.connect(self._reset)
 
         btn_layout.addWidget(btn_save_mng)
         btn_layout.addWidget(btn_sfile_mng)
         btn_layout.addWidget(btn_tfile_mng)
         btn_layout.addWidget(btn_save_exp)
         btn_layout.addWidget(btn_load_exp)
-        btn_layout.addWidget(btn_reset)
+        btn_layout.addWidget(btn_newtab)
         btn_layout.addWidget(btn_meastxt)
+        btn_layout.addWidget(btn_reset)
         layout.addWidget(btn_row)
         
         
@@ -98,8 +103,12 @@ class Toolbar(QWidget):
         if filepath:
             load_exp(self.main.plot_area, filepath)
         
+    def _addTab(self):
+        self.main.plot_areas.add()    
+    
     def _reset(self):
         print("_reset")
+        print(self.main.plot_area)
 
     def _meastxt(self):
         meastxt(self.main.sidebar.path)
