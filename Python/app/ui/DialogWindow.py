@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QApplication,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSettings
 
 
 class SpectrumFileManager(QDialog):
@@ -31,10 +31,14 @@ class SpectrumFileManager(QDialog):
         self.setWindowTitle("Spectrum File Manager")
         self.resize(700, 500)
 
-
+        self.settings_path = os.path.join('data','settings', "settingsFileSFM.ini")
 
         self._build()
         self._refresh()
+        
+        if os.path.exists(self.settings_path):
+            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
+            self.restoreGeometry(settings_obj.value("windowGeometry"))
 
 
     def _build(self):
@@ -54,12 +58,12 @@ class SpectrumFileManager(QDialog):
         # Buttons
         btn_new = QPushButton("New Group")
         btn_add = QPushButton("Add Selected Files")
-        btn_remove = QPushButton("Remove Files")
+        btn_ref = QPushButton("Refresh Graph")
         btn_reset = QPushButton("Reset Groups")
 
         btn_new.clicked.connect(self._new_group)
         btn_add.clicked.connect(self._add_files)
-        btn_remove.clicked.connect(self._remove_files)
+        btn_ref.clicked.connect(self._refresh_graph)
         btn_reset.clicked.connect(self._reset)
         
         # Layouts
@@ -71,7 +75,7 @@ class SpectrumFileManager(QDialog):
         file_layout = QVBoxLayout()
         file_layout.addWidget(self.files)
         file_layout.addWidget(btn_add)
-        file_layout.addWidget(btn_remove)
+        file_layout.addWidget(btn_ref)
         
         check_layout = QHBoxLayout()
         for attribute, var in [('Number','number'),('Name','name'),('Power',"power"), ('Position (x,y)',"pos"),('Positition (x,y,z)','posf'), ('Filter',"filter")]:
@@ -120,8 +124,9 @@ class SpectrumFileManager(QDialog):
             layout.setContentsMargins(2, 2, 2, 2)
             filename = QLabel(group_name)
             
+            
+            
             edit_group = QLineEdit()
-
             edit_group.setPlaceholderText("Custom Label")
             edit_group.setText(
                 getattr(self.main.plot_area.spectrum.groups[group_name],"text",None)
@@ -131,7 +136,9 @@ class SpectrumFileManager(QDialog):
                     self._custom_group_text_changed(filepath, edit)
             )
             layout.addWidget(filename)
+            layout.addSpacing(30)
             layout.addWidget(edit_group)
+            layout.addSpacing(50)
             self.groups.addItem(item)
             self.groups.setItemWidget(item, widget)
 
@@ -180,7 +187,11 @@ class SpectrumFileManager(QDialog):
             self.main.datasets[filepath].text = edit.text()+", "
     def _custom_group_text_changed(self, filepath, edit):
         if edit != "":
-            self.main.plot_area.spectrum.datasets[filepath].text = edit.text()+", "
+            dataset = self.main.plot_area.spectrum.datasets.get(filepath)
+            if dataset is None:
+                print('Make group before giving it a label.')
+                return
+            dataset.text = edit.text()+", "
 
     def _new_group(self):
         group_id = 0
@@ -208,25 +219,20 @@ class SpectrumFileManager(QDialog):
         self._refresh()
         # self.main.plot_area.spectrum.update_groups()
         
-    def _remove_files(self):
-        group_item = self.groups.currentItem()
-
-        if group_item is None:
-            return
-
-        group_name = group_item.text()
-        selected = self.files.selectedItems()
-
-        for item in selected:
-            filepath = item.text()
-            if filepath in self.main.plot_area.spectrum.groups[group_name]:
-                self.main.plot_area.spectrum.groups[group_name].remove(filepath)
+    def _refresh_graph(self):
+        self.main.plot_area.spectrum.update_groups()
+        self.force_refresh = 0
+        self.main.plot_area.spectrum.refresh_labels()
+        self._refresh()
                 
     def closeEvent(self, event):
         if self.force_refresh:
             self.main.plot_area.spectrum.update_groups()
             self.force_refresh = 0
         self.main.plot_area.spectrum.refresh_labels()
+        
+        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
+        settings_obj.setValue("windowGeometry", self.saveGeometry())
         event.accept()
 
 
@@ -241,10 +247,15 @@ class TRPLFileManager(QDialog):
         self.setWindowTitle("TRPL File Manager")
         self.resize(700, 500)
 
+        self.settings_path = os.path.join('data','settings', "settingsFileTFM.ini")
 
 
         self._build()
         self._refresh()
+        
+        if os.path.exists(self.settings_path):
+            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
+            self.restoreGeometry(settings_obj.value("windowGeometry"))
 
 
     def _build(self):
@@ -360,6 +371,8 @@ class TRPLFileManager(QDialog):
             # self.force_refresh = 0
             print('refresh curve WIP')
         self.main.plot_area.trpl.refresh_labels()
+        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
+        settings_obj.setValue("windowGeometry", self.saveGeometry())
         event.accept()
 
 
@@ -374,8 +387,15 @@ class Experiment_Picker(QDialog):
         self.setWindowTitle("Experiment Picker")
         self.resize(400, 500)
 
+        self.settings_path = os.path.join('data','settings', "settingsFileEP.ini")
+
+
         self._build()
         self._refresh()
+        
+        if os.path.exists(self.settings_path):
+            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
+            self.restoreGeometry(settings_obj.value("windowGeometry"))
 
 
     def _build(self):
@@ -422,7 +442,13 @@ class Experiment_Picker(QDialog):
             
     def _on_change(self):
         self.path = self.files.selectedItems()[0].data(Qt.UserRole)
-        self.accept()
+        self.accept()   
+            
+    def closeEvent(self, event):
+        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
+        settings_obj.setValue("windowGeometry", self.saveGeometry())
+        event.accept()
+
 
 
 class SaveManager(QDialog):
@@ -435,8 +461,15 @@ class SaveManager(QDialog):
         self.setWindowTitle("Save Manager")
         self.resize(700, 500)
 
+        self.settings_path = os.path.join('data','settings', "settingsFileSM.ini")
+
+
         self._build()
         self._refresh()
+        
+        if os.path.exists(self.settings_path):
+            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
+            self.restoreGeometry(settings_obj.value("windowGeometry"))
 
 
     def _build(self):
@@ -580,6 +613,12 @@ class SaveManager(QDialog):
         for graph in graphs:
             self._save_graph(graph)
         
+            
+    def closeEvent(self, event):
+        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
+        settings_obj.setValue("windowGeometry", self.saveGeometry())
+        event.accept()
+
 
 class FitManager(QDialog):
 
@@ -604,8 +643,14 @@ class FitManager(QDialog):
         self.setWindowTitle("Fit Manager")
         self.resize(700, 500)
 
+        self.settings_path = os.path.join('data','settings', "settingsFileFM.ini")
+        
         self._build()
         self._refresh()
+        
+        if os.path.exists(self.settings_path):
+            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
+            self.restoreGeometry(settings_obj.value("windowGeometry"))
 
 
     def _build(self):
@@ -712,8 +757,10 @@ class FitManager(QDialog):
 
         for idx, filepath in enumerate(self.graph.datasets):
             if (par_idx+1)>len(self.graph.fit_params['p0s'][idx]):
-                par_idx=2
-            self.graph.fit_params['p0s'][idx].append(self.graph.fit_params['p0s'][idx][par_idx])
+                # par_idx=2
+                self.graph.fit_params['p0s'][idx].append(0.5)
+            else:
+                self.graph.fit_params['p0s'][idx].append(self.graph.fit_params['p0s'][idx][par_idx])
         self._refresh()
         
     def _reset(self):
@@ -740,6 +787,11 @@ class FitManager(QDialog):
                 self.files.setItem(idx,id+1,QTableWidgetItem(str(p0)))
         self.files.resizeColumnsToContents()
         
+        
+    def closeEvent(self, event):
+        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
+        settings_obj.setValue("windowGeometry", self.saveGeometry())
+        event.accept()
             
             
 

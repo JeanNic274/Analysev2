@@ -25,7 +25,7 @@ col_names = {
     'trpl APD MH' :             ["ns","count1","count2"],
     'polarisation spectre' :    ["deg","detdeg","pixel","max_count_raw","max_wl","count"], #todo?
     'polarisation APD' :        ["deg","detdeg","count1","count2","count_raw"],
-    'spectre c2n' :             ["ev","count_cor","bugged_col"],
+    'spectre c2n' :             ["ev","count_cor"],
 }
 col_merged = {
     'spectre w/o bg':          ['count_cor_raw'],
@@ -273,7 +273,7 @@ def fit_data(df,graph,fit_idx):
     if df.measure_type == 'trpl':
         result = model.fit(yfit, pars, x=xfit,weights=1/np.sqrt(np.abs(yfit)))
     else:
-        result = model.fit(yfit, pars, x=xfit,)
+        result = model.fit(yfit, pars, x=xfit)#,weights=np.abs(yfit))
 
     if xfit0:
         xfit+=parameters['p0s'][fit_idx][0]

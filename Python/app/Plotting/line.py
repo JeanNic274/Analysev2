@@ -296,7 +296,7 @@ class BasePlot(QWidget):
         
     def _open_fit_params(self):
         dialog = FitManager(self)
-        dialog.exec()
+        dialog.show()
         
     def _save_fit(self):
         filename, ok = QInputDialog.getText(self,"Save Fit Results","Enter file name:")
@@ -531,7 +531,7 @@ class SpectrumPlot(BasePlot):
                 self.remove(group_id,refresh=False)
 
             for filepath in reversed(filepaths):
-                if filepath in self.main.datasets:
+                if filepath in self.lines:
                     self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False,keep=True)
         for group_id, filepaths in self.groups.items():
             if not filepaths:

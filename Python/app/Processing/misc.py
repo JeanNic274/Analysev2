@@ -20,7 +20,7 @@ class curve_number():
     
     def remove(self,dataset):
         temp = self.idx.get(dataset.measure_type,[dataset])
-        index = dataset.number-1
+        index = int(dataset.number)-1
         temp.pop(index)
         for i in range(index,len(temp)):
             temp[i].number = i+1
