@@ -19,8 +19,13 @@ class curve_number():
         self.idx[dataset.measure_type] = temp
     
     def remove(self,dataset):
-        temp = self.idx.get(dataset.measure_type,[dataset])
+        temp = self.idx.get(dataset.measure_type)
+        if not temp:
+            return
         index = int(dataset.number)-1
+        if index >= len(temp):
+            print('curve_number pop, index > len(list)')
+            return
         temp.pop(index)
         for i in range(index,len(temp)):
             temp[i].number = i+1

@@ -542,7 +542,7 @@ class SpectrumPlot(BasePlot):
             for filepath in reversed(filepaths):
                 if filepath in self.main.datasets:
                     datasets.append(self.main.datasets[filepath])
-                    self.main.datasets[filepath].number = str(int(group_id)+1)
+                    # self.main.datasets[filepath].number = str(int(group_id)+1)
 
             if not datasets:
                 continue
@@ -552,7 +552,8 @@ class SpectrumPlot(BasePlot):
                 continue
             
             self.datasets[group_id] = Data_Set_Import(attrs=datasets[-1].attrs,dataset=merged,name=datasets[-1].name)
-            self.datasets[group_id].number = group_id
+            # self.datasets[group_id].number = group_id
+            self.main.plot_area.manager.add(self.datasets[group_id])
             self.original_d[group_id] = self.datasets[group_id].data.copy()
             color=self._get_color(group_id)
 

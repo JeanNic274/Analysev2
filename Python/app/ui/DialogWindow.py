@@ -47,7 +47,7 @@ class SpectrumFileManager(QDialog):
 
         # Groups
         self.groups = QListWidget()
-
+        self.groups.itemDoubleClicked.connect(self._add_files)
         # Files
         self.files = QListWidget()
         
