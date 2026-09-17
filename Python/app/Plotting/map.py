@@ -9,8 +9,10 @@ from matplotlib.figure import Figure
 import matplotlib.colors as mcolors
 from matplotlib.patches import Circle
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog, QLabel
-from PySide6.QtCore import QSize
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog, QLabel, QColorDialog
+from PySide6.QtCore import QSize, Qt, Signal, QRectF
+from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QLinearGradient
+
 
 from app.Plotting.utils import *
 from app.Processing.data_import import Data_Set_Import
@@ -30,9 +32,11 @@ class BaseMap(QWidget):
         self.datasets = {}
         self.original_d = {}
 
-        self.cbars = {}          # NEW: one InteractiveColorbar per filepath
-        self.active_cbar = None  
-
+        self.colorbar = None
+        self.maximum = None
+        self.minimum = None
+        
+        
         self.vlines = []
         self.hlines = []
         self.annotations = []
@@ -54,9 +58,6 @@ class BaseMap(QWidget):
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # -----------------
-        # Left: button panel
-        # -----------------
         button_layout = QVBoxLayout()
         button_layout.setContentsMargins(4, 4, 4, 4)
         button_layout.setSpacing(5)
@@ -90,10 +91,10 @@ class BaseMap(QWidget):
             btn_yaxis_select = QPushButton("Set y axis")
             btn_yaxis_select.clicked.connect(self.yaxis_select)
             button_layout.addWidget(btn_yaxis_select)
-        if 'cmap' in self.buttons:
-            btn_cmap = QPushButton("cmap")
-            btn_cmap.clicked.connect(self.cmap_change)
-            button_layout.addWidget(btn_cmap)
+        # if 'cmap' in self.buttons:
+        #     btn_cmap = QPushButton("cmap")
+        #     btn_cmap.clicked.connect(self.cmap_change)
+        #     button_layout.addWidget(btn_cmap)
 
         button_layout.addStretch()
 
@@ -103,16 +104,9 @@ class BaseMap(QWidget):
         self.canvas = FigureCanvas(self.fig)
         self.canvas.mpl_connect("button_press_event", self._on_plot_double_click)
 
-        self.canvas.mpl_connect("button_press_event", self._on_cbar_press)
-        self.canvas.mpl_connect("motion_notify_event", self._on_cbar_motion)
-        self.canvas.mpl_connect("button_release_event", self._on_cbar_release)
-
         self.toolbar = NavigationToolbar(self.canvas, self)
 
-        gs = self.fig.add_gridspec(1, 42, wspace=0,hspace=0)
-        self.ax = self.fig.add_subplot(gs[0, :34])
-        self.ax_strip = self.fig.add_subplot(gs[0, 35:38])
-        self.ax.margins(0,0.05)
+        self.ax = self.fig.add_subplot(111)
     
         self.gen_axis() 
         
@@ -123,6 +117,16 @@ class BaseMap(QWidget):
         # Add layouts
         main_layout.addLayout(button_layout)
         main_layout.addLayout(graph_layout, 1)
+        
+        self.slider_layout = QVBoxLayout()
+        self.slider_layout.setContentsMargins(0,2,0,2)
+        self.slider = MultiSlider()
+
+
+        self.slider.valuesChanged.connect(self.slider_changed)
+
+        self.slider_layout.addWidget(self.slider)
+        main_layout.addLayout(self.slider_layout)
         # main_layout.addLayout(margin_layout)
         
         
@@ -140,19 +144,6 @@ class BaseMap(QWidget):
         if h > 0 and self.height() != h:
             self.setFixedHeight(h)
 
-
-    def _on_cbar_press(self, event):
-        if self.active_cbar is not None:
-            self.active_cbar.on_press(event)
-
-    def _on_cbar_motion(self, event):
-        if self.active_cbar is not None:
-            self.active_cbar.on_motion(event)
-            self.canvas.draw_idle()
-
-    def _on_cbar_release(self, event):
-        if self.active_cbar is not None:
-            self.active_cbar.on_release(event)
 
     def axhline(self):
         text, ok = QInputDialog.getText(self,"AxHLine", "Enter y coordinates separated by commas:")
@@ -242,12 +233,12 @@ class BaseMap(QWidget):
             self.yaxis = yaxis
         self._refresh() 
         
-    def cmap_change(self):
-        cmap, ok = QInputDialog.getText(self, 'Set cmap', 'Enter colormap name (ex: viridis, gist_rainbow_r, turbo, jet, CustomLC).')
-        if cmap and ok:
-            for filepath in self.datasets:
-                self.datasets[filepath].cmap = cmap
-        self._refresh_cmap() 
+    # def cmap_change(self):
+    #     cmap, ok = QInputDialog.getText(self, 'Set cmap', 'Enter colormap name (ex: viridis, gist_rainbow_r, turbo, jet, CustomLC).')
+    #     if cmap and ok:
+    #         for filepath in self.datasets:
+    #             self.datasets[filepath].cmap = cmap
+    #     self._refresh_cmap() 
     
     
     def save_graph(self,skip_name=False):
@@ -276,11 +267,22 @@ class BaseMap(QWidget):
 
 
     def _refresh(self):
-        if not self.xlim:
-            self.ax.autoscale(enable=True, axis='x')
-        if not self.ylim:
-            self.ax.autoscale(enable=True, axis='y')
-        self.ax.autoscale_view()
+        self.slider.setRange(self.minimum, self.maximum)
+        self._apply_shared_clim()
+        if self.lines:
+            xs_min, xs_max, ys_min, ys_max = [], [], [], []
+            for mesh in self.lines.values():
+                coords = mesh.get_coordinates()  # shape (ny, nx, 2) — x,y grid corners
+                xs_min.append(np.nanmin(coords[..., 0]))
+                xs_max.append(np.nanmax(coords[..., 0]))
+                ys_min.append(np.nanmin(coords[..., 1]))
+                ys_max.append(np.nanmax(coords[..., 1]))
+
+            self.ax.set_xlim(min(xs_min), max(xs_max))
+            self.ax.set_ylim(min(ys_min), max(ys_max))
+        else:
+            self.ax.autoscale(enable=True, axis='both')
+
         self.canvas.draw()
         self.canvas.flush_events()
         
@@ -296,6 +298,7 @@ class BaseMap(QWidget):
         self.datasets[filepath]=dataset
         
         if plot_now:
+            self.original_d[filepath] = dataset.data.copy()
             xu = np.unique(dataset.data[self.xaxis])
             yu = np.unique(dataset.data[self.yaxis])
 
@@ -303,17 +306,53 @@ class BaseMap(QWidget):
             xi = np.searchsorted(xu, dataset.data[self.xaxis])
             yi = np.searchsorted(yu, dataset.data[self.yaxis])
             grid[yi, xi] = dataset.data[self.zaxis]
-            pcolormesh = self.ax.pcolormesh(xu,yu,grid, cmap=dataset.cmap,antialiased=False,edgecolor='none', linewidth=0)
-            self.lines[filepath] = pcolormesh
-            self.original_d[filepath] = dataset.data.copy()
-            cbar = InteractiveColorbar(
-                self.ax_strip, pcolormesh, dataset.data[self.zaxis],
-                dataset.cmap, label=self.z_lab
+            pcolormesh = self.ax.pcolormesh(
+                xu, yu, grid,
+                cmap=dataset.cmap,
+                antialiased=False,
+                edgecolor='none',
+                linewidth=0
             )
-            self.cbars[filepath] = cbar
-            self.active_cbar = cbar
+            self.lines[filepath] = pcolormesh
+
+            
+            self._update_global_range(dataset)
+            
+            if self.colorbar is None:
+                self.colorbar = self.fig.colorbar(pcolormesh, ax=self.ax)
+                self.slider.setRange(self.minimum, self.maximum)
+                self._apply_shared_clim()
+
+            else:
+                self.colorbar.update_normal(pcolormesh)
+                
+            self.slider.setValues({
+                '#440154': self.minimum,
+                '#21918c': self.minimum+0.5*(self.maximum-self.minimum),
+                '#FDE725': self.maximum,
+                
+            })
+
+
+            
+            
             
             self._refresh()
+            
+
+    def _update_global_range(self, dataset):
+        data_min = dataset.data[self.zaxis].min()
+        data_max = dataset.data[self.zaxis].max()
+
+        self.minimum = data_min if self.minimum is None else min(self.minimum, data_min)
+        self.maximum = data_max if self.maximum is None else max(self.maximum, data_max)
+
+    def _apply_shared_clim(self):
+        for mesh in self.lines.values():
+            mesh.set_clim(vmin=self.minimum, vmax=self.maximum)
+        self.canvas.draw_idle()
+
+
 
     def remove(self, filepath, refresh=True):
         if filepath not in self.lines:
@@ -321,14 +360,13 @@ class BaseMap(QWidget):
 
         self.lines[filepath].remove()
         del self.lines[filepath]
-
-        if filepath in self.cbars:
-            if self.active_cbar is self.cbars[filepath]:
-                self.active_cbar = None
-            del self.cbars[filepath]
-
+        del self.datasets[filepath]
         if refresh:
-            self._refresh()
+            if self.datasets:
+                self.minimum = min(d.data[self.zaxis].min() for d in self.datasets.values())
+                self.maximum = max(d.data[self.zaxis].max() for d in self.datasets.values())
+                self._apply_shared_clim()
+                self._refresh()
             
     def remove_all(self,all_lines=False):
         for filepath in self.lines.copy():
@@ -344,6 +382,29 @@ class BaseMap(QWidget):
         self.refresh_curves()
         self._refresh_cmap()
         self._refresh()
+        
+    def slider_changed(self,values_dict):
+        if len(values_dict) < 2:
+            return  # need at least 2 stops for a valid gradient
+
+        sorted_items = sorted(values_dict.items(), key=lambda kv: kv[1])
+        handle_min = sorted_items[0][1]
+        handle_max = sorted_items[-1][1]
+
+        cmap, vmin, vmax = build_colormap_from_handles(
+            values_dict,
+            vmin=handle_min,
+            vmax=handle_max
+        )
+
+        for mesh in self.lines.values():
+            mesh.set_cmap(cmap)
+            mesh.set_clim(vmin=vmin, vmax=vmax)
+
+        if self.colorbar is not None:
+            self.colorbar.update_normal(next(iter(self.lines.values())))
+
+        self.canvas.draw_idle()
         
     
 
@@ -373,108 +434,334 @@ class MapPlot(BaseMap):
 
 
 
-class PiecewiseNorm(mcolors.Normalize):
-    def __init__(self, stops, frac):
-        self.stops = np.asarray(stops, dtype=float)
-        self.frac = np.asarray(frac, dtype=float)
-        super().__init__(vmin=self.stops[0], vmax=self.stops[-1], clip=True)
 
-    def __call__(self, value, clip=None):
-        data = np.ma.getdata(value) if np.ma.is_masked(value) else np.asarray(value)
-        result = np.interp(data, self.stops, self.frac)
-        return np.ma.masked_array(result)
+def build_colormap_from_handles(values_dict, vmin=None, vmax=None):
+    sorted_items = sorted(values_dict.items(), key=lambda kv: kv[1])
+    colors = [c for c, _ in sorted_items]
+    positions = [p for _, p in sorted_items]
 
-    def inverse(self, value):
-        return np.interp(value, self.frac, self.stops)
+    lo = vmin if vmin is not None else positions[0]
+    hi = vmax if vmax is not None else positions[-1]
+    span = hi - lo
+    if span == 0:
+        span = 1e-9  # avoid div by zero
 
-class InteractiveColorbar:
-    def __init__(self, ax_strip, mappable, data, cmap, label=""):
-        self.ax = ax_strip
-        self.mappable = mappable
-        if isinstance(cmap,str):
-            self.cmap = matplotlib.colormaps[cmap] 
+    stops = [(p - lo) / span for p in positions]
+    stops[0], stops[-1] = 0.0, 1.0  
+
+    normalized_colors = []
+    for c in colors:
+        if isinstance(c, str):
+            normalized_colors.append(c)  # hex string, e.g. "#440154"
         else:
-            self.cmap = cmap
+            # assume (r,g,b,a) in 0-255, convert to 0-1 floats
+            normalized_colors.append(tuple(v / 255 for v in c))
 
-        finite = data[np.isfinite(data)]
-        self.vmin = float(finite.min()) if finite.size else 0.0
-        self.vmax = float(finite.max()) if finite.size else 1.0
-        if self.vmin == self.vmax:
-            self.vmax = self.vmin + 1.0
+    cmap = mcolors.LinearSegmentedColormap.from_list(
+        "custom_slider_cmap",
+        list(zip(stops, normalized_colors))
+    )
+    return cmap, lo, hi   
+        
+        
+        
 
-        self.stops = [self.vmin, (self.vmin + self.vmax) / 2, self.vmax]
-        self.frac = [0.0, 0.5, 1.0]
-        self.norm = PiecewiseNorm(self.stops, self.frac)
-        self.mappable.set_norm(self.norm)
+class MultiSlider(QWidget):
+    valuesChanged = Signal(dict)
 
-        self.ax.clear()
-        self.ax.set_ylim(self.vmin, self.vmax)   # value axis is now Y
-        self.ax.set_xlim(0, 1)
-        self.ax.set_xticks([])
-        self.ax.yaxis.tick_right()
-        self.ax.yaxis.set_label_position("right")
-        self.ax.set_ylabel(label)
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
-        self.strip_img = self.ax.imshow(
-            self._strip_gradient(),
-            aspect="auto",
-            extent=[0, 1, self.vmin, self.vmax],
-            origin="lower",
+        self._minimum = 0.0
+        self._maximum = 100.0
+        self._values = {}
+
+        self._handle_radius = 7
+        self._track_height = 4
+        self._dragging = None
+        
+        self._show_labels = True
+        self._label_gap = 6        # px between handle edge and text
+        self._label_decimals = 0
+
+        self.setMinimumHeight(30)
+        self.setMinimumWidth(30)
+
+        self.setSizePolicy(
+            QSizePolicy.Fixed,
+            QSizePolicy.Expanding
         )
 
-        self.labels = ["low", "mid", "high"]
-        self.markers = []
-        self.value_texts = []
-        for s, lbl in zip(self.stops, self.labels):
-            c = Circle((0.5, s),radius=(self.vmax - self.vmin) * 0.015,color="k",zorder=5,picker=True,)
+        self.setMouseTracking(True)
+    def sizeHint(self):
+        return QSize(30 + self._label_width(), 200)
+
+    def minimumSizeHint(self):
+        return QSize(30 + self._label_width(), 60)
+    
+    
+    def _v_margin(self):
+        return self.height() * 0.15
+
+    def _track_bounds(self):
+        margin = self._v_margin()
+        top = margin + self._handle_radius
+        bottom = self.height() - margin - self._handle_radius
+        return top, bottom
+    
+    def _format_value(self, value):
+        return f"{value:.{self._label_decimals}f}"
+    
+    def _label_width(self):
+        if not self._show_labels or not self._values:
+            return 0
+        fm = self.fontMetrics()
+        widest = max(fm.horizontalAdvance(self._format_value(v)) for k,v in self._values.items()) 
+        return self._label_gap + widest
+
+    def _center_x(self):
+        # centre the track within the space left of the label column
+        usable = self.width() - self._label_width()
+        return usable / 2
+    
+    def setRange(self, minimum, maximum):
+        if maximum <= minimum:
+            raise ValueError("maximum must be greater than minimum")
+
+        self._minimum = minimum # 0.267004, 0.004874, 0.329415 
+        self._maximum = maximum # 0.993248, 0.906157, 0.143936
+
+        for k,v in self._values.items():
+            self._values[k] = max(minimum, min(maximum, v))
             
-            self.ax.add_patch(c)
-            self.markers.append(c)
-            # self.ax.annotate(lbl, (1.5, s), ha="left", va="center",
-            #                   fontsize=7, annotation_clip=False)
-            t = self.ax.text(-0.6, s, "", ha="right", va="center")
-            # t = self.ax.text(-0.6, s, f"{s:.2f}", ha="right", va="center", fontsize=7)
-            self.value_texts.append(t)
 
-        self._dragging_index = None
 
-    def _strip_gradient(self):
-        vals = np.linspace(self.vmin, self.vmax, 256)
-        t = np.interp(vals, self.stops, self.frac)
-        return self.cmap(t).reshape(-1, 1, 4)   # column instead of row
+        self.update()
+        self.valuesChanged.emit(self.values())
 
-    def redraw(self):
-        order = np.argsort(self.stops)
-        self.norm.stops = np.asarray([self.stops[i] for i in order], dtype=float)
-        self.norm.frac = np.asarray([self.frac[i] for i in order], dtype=float)
+    def setValues(self, values):
+        for k,v in values.items():
+            values[k] = max(self._minimum, min(self._maximum, float(v)))
 
-        self.mappable.set_norm(self.norm)
-        self.strip_img.set_data(self._strip_gradient())
+        self._values = values
+        self.update()
+        self.valuesChanged.emit(self.values())
 
-        for i, m in enumerate(self.markers):
-            m.center = (0.5, self.stops[i])
-            self.value_texts[i].set_position((-0.6, self.stops[i]))
+    def values(self):
+        return self._values.copy()
 
-    def on_press(self, event):
-        if event.inaxes != self.ax:
+    def addValue(self, value,color):
+        value = max(self._minimum, min(self._maximum, float(value)))
+
+        self._values[color]= value
+        # self._values.sort()
+
+        self.update()
+        self.valuesChanged.emit(self.values())
+
+    def removeValue(self, index):
+        if index in self._values:
+            self._values.pop(index)
+
+            self.update()
+            self.valuesChanged.emit(self.values())
+
+
+    def _value_to_y(self, value):
+        top, bottom = self._track_bounds()
+        span = self._maximum - self._minimum
+        if span == 0:
+            return bottom
+        frac = (value - self._minimum) / span
+        return bottom - frac * (bottom - top)
+
+    def _y_to_value(self, y):
+        top, bottom = self._track_bounds()
+        usable = bottom - top
+        if usable <= 0:
+            return self._minimum
+        frac = (bottom - y) / usable
+        frac = max(0.0, min(1.0, frac))
+        return self._minimum + frac * (self._maximum - self._minimum)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        center_x = self._center_x()
+        top, bottom = self._track_bounds()
+
+        track_rect = QRectF(
+            center_x - self._track_height / 2,
+            top,
+            self._track_height,
+            bottom - top
+        )
+
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(Qt.gray))
+        painter.drawRoundedRect(
+            track_rect,
+            self._track_height / 2,
+            self._track_height / 2
+        )
+
+        if len(self._values) >= 2:
+            sorted_items = sorted(self._values.items(), key=lambda item: item[1])
+
+            for i in range(len(sorted_items) - 1):
+                color1, val1 = sorted_items[i]
+                color2, val2 = sorted_items[i + 1]
+
+                y1 = self._value_to_y(val1)
+                y2 = self._value_to_y(val2)
+                y_top, y_bottom = min(y1, y2), max(y1, y2)
+
+                gradient = QLinearGradient(0, y_top, 0, y_bottom)
+                # y1/y2 might be inverted relative to value order (since y grows downward
+                # while value grows upward) so anchor stops by actual pixel position
+                if y1 <= y2:
+                    gradient.setColorAt(0, QColor(color1))
+                    gradient.setColorAt(1, QColor(color2))
+                else:
+                    gradient.setColorAt(0, QColor(color2))
+                    gradient.setColorAt(1, QColor(color1))
+
+                painter.setBrush(QBrush(gradient))
+                painter.setPen(Qt.NoPen)
+                painter.drawRect(QRectF(
+                    center_x - self._track_height / 2,
+                    y_top,
+                    self._track_height,
+                    y_bottom - y_top
+                ))
+
+        painter.setFont(self.font())
+        fm = painter.fontMetrics()
+
+        for k,value in self._values.items():
+            y = self._value_to_y(value)
+
+            painter.setBrush(QBrush(Qt.white))
+            painter.setPen(QPen(Qt.black, 1))
+            painter.drawEllipse(QRectF(
+                center_x - self._handle_radius,
+                y - self._handle_radius,
+                self._handle_radius * 2,
+                self._handle_radius * 2
+            ))
+
+            if self._show_labels:
+                text = self._format_value(value)
+                text_w = fm.horizontalAdvance(text)
+                text_h = fm.height()
+
+                text_x = center_x + self._handle_radius + self._label_gap
+                text_rect = QRectF(
+                    text_x,
+                    y - text_h / 2,
+                    text_w,
+                    text_h
+                )
+
+                painter.setPen(QPen(Qt.white))
+                painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, text)
+
+    def mousePressEvent(self, event):
+
+        y = event.position().y()
+
+        # Right click -> remove handle
+        if event.button() == Qt.RightButton:
+
+            index = self._handle_at(y)
+
+            if index is not None:
+                self.removeValue(index)
+
             return
-        for i, m in enumerate(self.markers):
-            contains, _ = m.contains(event)
-            if contains:
-                self._dragging_index = i
+        
+        # Left click
+        if event.button() == Qt.LeftButton:
+            index = self._handle_at(y)
+
+            if index is not None:
+                self._dragging = index
                 return
 
-    def on_motion(self, event):
-        i = self._dragging_index
-        if i is None or event.inaxes != self.ax or event.ydata is None:
+    def mouseDoubleClickEvent(self, event): #add handle
+
+        y = event.position().y()
+        color = QColorDialog.getColor()
+        if color.isValid(): 
+            color = color.name()
+            value = self._y_to_value(y)
+            self.addValue(value,color)
+
+
+    def mouseMoveEvent(self, event):
+
+        if self._dragging is None:
             return
-        self.stops[i] = float(np.clip(event.ydata, self.vmin, self.vmax))  # ydata now
-        self.redraw()
 
-    def on_release(self, event):
-        self._dragging_index = None
+        y = event.position().y()
+        value = self._y_to_value(y)
 
-    def reset_stops(self):
-        self.stops = [self.vmin, (self.vmin + self.vmax) / 2, self.vmax]
-        self.frac = [0.0, 0.5, 1.0]
-        self.redraw()
+        index = self._dragging
+
+        # Don't allow handles to cross
+        # if index > 0:
+        #     value = max(value, self._values[index - 1])
+
+        # if index < len(self._values) - 1:
+        #     value = min(value, self._values[index + 1])
+
+        self._values[index] = value
+
+        self.update()
+        self.valuesChanged.emit(self.values())
+
+    def mouseReleaseEvent(self, event):
+
+        if event.button() == Qt.LeftButton:
+            self._dragging = None
+
+
+    def _handle_at(self, y):
+
+        tolerance = self._handle_radius + 5
+
+        closest = None
+        closest_distance = float("inf")
+
+        for k,value in self._values.items():
+
+            handle_y = self._value_to_y(value)
+            distance = abs(y - handle_y)
+
+            if distance <= tolerance and distance < closest_distance:
+                closest = k
+                closest_distance = distance
+
+        return closest
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        

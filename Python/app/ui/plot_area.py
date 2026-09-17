@@ -76,7 +76,7 @@ class PlotArea(QWidget):
             self.lineplot = LinePlot(self.main,names)
             self.lineplot.setObjectName("Line")
             self.layout.addWidget(self.lineplot)
-        self.layout.addStretch()
+        # self.layout.addStretch()
         
         
     def add(self, filepath, dataset,plot_now= True):

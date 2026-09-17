@@ -30,10 +30,10 @@
 - [ ] map double click circle or text
 - [x] check load exp/ reset is not removing selected files label (under file tree)
 - [x] add number class that is called whenever curve number is requested
-- [ ] add colormap editer (à la labview)
+- [x] add colormap editer (à la labview)
 - [ ] permit reset groups (might be hard)
 
 make label text in grpah/plot_area instead of dataset (possible??)
 
-!! remove number with groups is bricked up (they are not assigned a number) !!
+!! remove number with groups is bricked up (they are not assigned a number)(fixed?) !!
 
