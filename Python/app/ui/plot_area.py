@@ -122,7 +122,7 @@ class PlotArea(QWidget):
                 self.focus.deleteLater()
                 self.focus = None
                 
-        elif dataset.measure_type == 'line' and self.lineplot:
+        elif self.lineplot:
             self.lineplot.remove(filepath,refresh=refresh)
             if not self.lineplot.lines:
                 self.layout.removeWidget(self.lineplot)

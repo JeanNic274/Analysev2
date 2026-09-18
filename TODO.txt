@@ -33,6 +33,8 @@
 - [x] add colormap editer (à la labview)
 - [ ] permit reset groups (might be hard)
 
+map get info
+
 make label text in grpah/plot_area instead of dataset (possible??)
 
 !! remove number with groups is bricked up (they are not assigned a number)(fixed?) !!

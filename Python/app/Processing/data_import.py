@@ -84,8 +84,9 @@ class Data_Set_Import:
             new_values.append(self.data['count_cor_raw'] / self.int_time)
             
         if 'count1' in self.data.dtype.names:
-            new_names.append('count')
-            new_values.append((self.data['count1']+self.data['count2'])/self.int_time)
+            if 'count_raw' not in self.data.dtype.names:
+                new_names.append('count')
+                new_values.append((self.data['count1']+self.data['count2'])/self.int_time)
 
         if new_names:
             self.data = rfn.append_fields(
