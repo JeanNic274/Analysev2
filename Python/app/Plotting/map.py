@@ -62,6 +62,15 @@ class BaseMap(QWidget):
         button_layout.setContentsMargins(4, 4, 4, 4)
         button_layout.setSpacing(5)
         # self.buttons = ['normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset']
+        if True:
+            btn_save = QPushButton("Save Graph")
+            btn_save.setFixedWidth(100)
+            btn_save.clicked.connect(self.save_graph)
+            button_layout.addWidget(btn_save)
+            btn_get_info = QPushButton("Get Info")
+            btn_get_info.setFixedWidth(100)
+            btn_get_info.clicked.connect(self._get_info)
+            button_layout.addWidget(btn_get_info)
         if 'normalize' in self.buttons:
             btn_normalize = QPushButton("Normalize")
             btn_normalize.setFixedWidth(100)
@@ -144,6 +153,14 @@ class BaseMap(QWidget):
         if h > 0 and self.height() != h:
             self.setFixedHeight(h)
 
+    def _get_info(self):
+        text, ok = QInputDialog.getText(self,"Info", "Enter attribute name")
+        if not ok:
+            return
+        obj = self
+        for attr in text.split("."):
+            obj = getattr(obj, attr)
+        print(attr,obj)
 
     def axhline(self):
         text, ok = QInputDialog.getText(self,"AxHLine", "Enter y coordinates separated by commas:")
@@ -243,16 +260,20 @@ class BaseMap(QWidget):
     
     def save_graph(self,skip_name=False):
         if not skip_name:
-            filename, ok = QInputDialog.getText(self, 'Export graph', 'Enter file name.',text=self.save_name)
-            self.save_params['save_name'] = filename
+            filename, ok = QInputDialog.getText(self, 'Export graph', 'Enter file name.',text=self.save_params['save_name'])
             if not ok:
                 return
-        prevent_overwrite_file(self.save_params['save_name']+self.save_params['extension'])
+            self.save_params['save_name'] = filename
+            
+        save_path = self.main.save_folder+"\\"+self.save_params['save_name']+self.save_params['extension']
+        prevent_overwrite_file(save_path)
         save_figure_export(
-            self.figure,
-            self.save_params['save_name']+self.save_params['extension'],
+            self.fig,
+            save_path,
+            self.save_params['transp'],
             **self.EXPORT_STYLE
         )
+
 
 
     def _on_plot_double_click(self, event):

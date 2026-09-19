@@ -161,7 +161,7 @@ class BasePlot(QWidget):
         obj = self
         for attr in text.split("."):
             obj = getattr(obj, attr)
-        print(obj)
+        print(attr,obj)
         
         
     def resizeEvent(self, event):
