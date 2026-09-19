@@ -39,3 +39,12 @@ make label text in grpah/plot_area instead of dataset (possible??)
 
 !! remove number with groups is bricked up (they are not assigned a number)(fixed?) !!
 
+PyHegel changes:
+Pyside -> Pyside6
+mpl backends -> qt5agg
+
+Added library:
+- IPython
+- Pyvisa
+- pytz
+
