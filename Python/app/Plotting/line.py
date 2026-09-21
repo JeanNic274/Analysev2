@@ -169,7 +169,7 @@ class BasePlot(QWidget):
         w = event.size().width()
         h = int(w * self.aspect_ratio)
         if w>1000:
-            right_margin = int(w*0.15)
+            right_margin = int(w*0.1)
         else:
             right_margin = 0
         self.layout().setContentsMargins(int(0.3*right_margin), 0, right_margin, 0)

@@ -25,13 +25,12 @@ from app.Processing.misc import  browse
 from config import DEFAULT_FOLDER
 
 
-class Sidebar(QWidget):
+class SidebarView(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main = main_window
         self.settings = QSettings("JN","AnalyseV2")
         self.path=Path(self.settings.value("last_folder",DEFAULT_FOLDER))
-        self.setFixedWidth(250)
         self._build()
 
     def _build(self):
@@ -172,3 +171,14 @@ class Sidebar(QWidget):
             
             
             
+class SidebarMeasure(QWidget):
+    def __init__(self, main_window):
+        super().__init__()
+        self.main = main_window
+        self.settings = QSettings("JN","AnalyseV2")
+        self.path=Path(self.settings.value("last_folder",DEFAULT_FOLDER))
+        self.setFixedWidth(250)
+        self._build()
+
+    def _build(self):
+        return

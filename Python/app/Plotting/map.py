@@ -5,6 +5,7 @@ matplotlib.use("QtAgg")  # PySide6 works with the QtAgg backend
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.figure import Figure
 import matplotlib.colors as mcolors
 from matplotlib.patches import Circle
@@ -115,7 +116,7 @@ class BaseMap(QWidget):
 
         self.toolbar = NavigationToolbar(self.canvas, self)
 
-        self.ax = self.fig.add_subplot(111)
+        self.ax = self.fig.add_subplot()
     
         self.gen_axis() 
         
@@ -144,7 +145,7 @@ class BaseMap(QWidget):
         w = event.size().width()
         h = int(w * self.aspect_ratio)
         if w>1000:
-            right_margin = int(w*0.15)
+            right_margin = int(w*0.1)
         else:
             right_margin = 0
         self.layout().setContentsMargins(int(0.3*right_margin), 0, right_margin, 0)
@@ -340,7 +341,9 @@ class BaseMap(QWidget):
             self._update_global_range(dataset)
             
             if self.colorbar is None:
-                self.colorbar = self.fig.colorbar(pcolormesh, ax=self.ax)
+                divider = make_axes_locatable(self.ax)
+                cax = divider.append_axes("right", size="5%", pad=0.05)
+                self.colorbar = self.fig.colorbar(pcolormesh, cax=cax)
                 self.slider.setRange(self.minimum, self.maximum)
                 self._apply_shared_clim()
 

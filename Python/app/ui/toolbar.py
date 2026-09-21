@@ -66,9 +66,22 @@ class Toolbar(QWidget):
         btn_layout.addWidget(btn_meastxt)
         btn_layout.addWidget(btn_reset)
         layout.addWidget(btn_row)
+        layout.addStretch()
         
+        self.btn_live_mode = QPushButton("Measurement Mode")
+        self.btn_live_mode.setFixedWidth(150)
         
+        self.btn_live_mode.setStyleSheet("QPushButton { background-color: red }"
+                      "QPushButton:pressed { background-color: green }"
+        )
         
+        self.btn_live_mode.clicked.connect(self._start_measurement_mode)
+        
+        layout.addWidget(self.btn_live_mode)
+        
+    def _start_measurement_mode(self):
+        self.btn_live_mode.setDown(True)
+        self.main.start_measurement_mode()        
         
     def _open_save_mng(self):
         dialog = SaveManager(self.main)
