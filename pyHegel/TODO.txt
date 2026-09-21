@@ -1,0 +1,22 @@
+Main TODO list:
+- Create a python analysis template
+- Make check function work
+- acq_histo2d,
+      -make simpler (automate) the calculation of redirect on log scale
+      -return proper xy-axis
+      -allow renormalized fetch
+      -make it work with scope (or scope2d see JOS)
+
+Agilent IO Libraries Service
+ Error 1923. Service Agilent PXI Resource Manager
+  Agilent LXI Mdns Responder failed to start
+
+Related to update to newer ipython
+-maybe get the default timezone for matplotlib using
+  https://github.com/regebro/tzlocal
+-Handle optional command line argument (like a file to execute) in pyHegel.py
+-Report fixes to matplotlib website
+  qt4 backend has added most keys (except backspace. But it is still behind gtk)
+  key_press_handler has not changed (still does not reorder overlayed axes so you can't
+  see the x,y values except for the last axes.)
+-create icons for pyHegel
