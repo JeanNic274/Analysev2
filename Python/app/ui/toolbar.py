@@ -11,7 +11,7 @@ class Toolbar(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main = main_window
-        self.setFixedWidth(200)
+        # self.setFixedWidth(200)
         self._build()
 
     def _build(self):

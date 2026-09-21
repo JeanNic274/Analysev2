@@ -199,7 +199,7 @@ class PlotAreas(QTabWidget):
     def _activeWidget(self,tab):
         self.main.plot_area = self.currentWidget()
         self.main.plot_area_index = str(self.currentIndex())
-        self.main.sidebar._update_label()
+        self.main.sidebar_view._update_label()
         
         
         

@@ -346,7 +346,6 @@ class BaseMap(QWidget):
                 self.colorbar = self.fig.colorbar(pcolormesh, cax=cax)
                 self.slider.setRange(self.minimum, self.maximum)
                 self._apply_shared_clim()
-
             else:
                 self.colorbar.update_normal(pcolormesh)
                 
@@ -425,7 +424,7 @@ class BaseMap(QWidget):
             mesh.set_cmap(cmap)
             mesh.set_clim(vmin=vmin, vmax=vmax)
 
-        if self.colorbar is not None:
+        if self.colorbar is not None and self.lines:
             self.colorbar.update_normal(next(iter(self.lines.values())))
 
         self.canvas.draw_idle()

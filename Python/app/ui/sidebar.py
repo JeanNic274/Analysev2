@@ -43,7 +43,9 @@ class SidebarView(QWidget):
         self.path_input.setStyleSheet('font-size: 10pt;')
         self.path_input.setPlaceholderText("Enter path...")
         self.path_input.returnPressed.connect(self._set_path)
-        layout.addWidget(QLabel("Browse Files"))
+        self.top_layout = QHBoxLayout()
+        self.top_layout.addWidget(QLabel("Browse Files"))
+        layout.addLayout(self.top_layout)
         layout.addWidget(self.path_input)
         
         layout_btn = QHBoxLayout()
@@ -175,10 +177,17 @@ class SidebarMeasure(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main = main_window
-        self.settings = QSettings("JN","AnalyseV2")
-        self.path=Path(self.settings.value("last_folder",DEFAULT_FOLDER))
-        self.setFixedWidth(250)
+        
         self._build()
 
     def _build(self):
-        return
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setAlignment(Qt.AlignTop)
+
+        btn_view_sidebar = QPushButton("File Browser")
+        # btn_view_sidebar.setFixedWidth(30)
+        btn_view_sidebar.clicked.connect(self.main.swap_sidebars)
+        layout.addWidget(btn_view_sidebar)
+        
+        
