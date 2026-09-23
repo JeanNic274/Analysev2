@@ -43,10 +43,15 @@ class SidebarView(QWidget):
         self.path_input.setStyleSheet('font-size: 10pt;')
         self.path_input.setPlaceholderText("Enter path...")
         self.path_input.returnPressed.connect(self._set_path)
-        self.top_layout = QHBoxLayout()
-        self.top_layout.addWidget(QLabel("Browse Files"))
-        layout.addLayout(self.top_layout)
-        layout.addWidget(self.path_input)
+        layout.addWidget(QLabel("Browse Files"))
+        
+        layout_top = QHBoxLayout()
+        btn_refresh = QPushButton("⟳")
+        btn_refresh.setFixedWidth(30)
+        btn_refresh.clicked.connect(self.refresh_tree)
+        layout_top.addWidget(btn_refresh)#
+        layout_top.addWidget(self.path_input)#
+        layout.addLayout(layout_top)
         
         layout_btn = QHBoxLayout()
         
@@ -95,6 +100,9 @@ class SidebarView(QWidget):
     
     def return_folder(self):
         self.populate_tree("")
+    
+    def refresh_tree(self):
+        self.populate_tree(self.path)
     
     def populate_tree(self,path):
         if path:
@@ -157,7 +165,7 @@ class SidebarView(QWidget):
             print('File not found at: ',path_meas)
             return
         print('Opening: ',path_meas)
-        subprocess.run(['notepad.exe', str(path_meas)])
+        pid = subprocess.Popen(['notepad.exe', str(path_meas)]).pid
 
     def _update_label(self):
         files = self.main.selected_files[self.main.plot_area_index]

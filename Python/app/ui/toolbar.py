@@ -68,7 +68,7 @@ class Toolbar(QWidget):
         layout.addWidget(btn_row)
         layout.addStretch()
         
-        self.btn_live_mode = QPushButton("Measurement Mode")
+        self.btn_live_mode = QPushButton("Lab Scan")
         self.btn_live_mode.setFixedWidth(150)
         
         self.btn_live_mode.setStyleSheet("QPushButton { background-color: red }"

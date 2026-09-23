@@ -73,9 +73,10 @@ class PlotArea(QWidget):
             
             
         elif self.lineplot is None:
-            self.lineplot = LinePlot(self.main,names)
-            self.lineplot.setObjectName("Line")
-            self.layout.addWidget(self.lineplot)
+            if plot_type != 'Empty file':
+                self.lineplot = LinePlot(self.main,names)
+                self.lineplot.setObjectName("Line")
+                self.layout.addWidget(self.lineplot)
         # self.layout.addStretch()
         
         
@@ -90,7 +91,7 @@ class PlotArea(QWidget):
             self.maps.add(filepath, dataset, plot_now)
         elif dataset.measure_type == 'focus':
             self.focus.add(filepath, dataset, plot_now)
-        else:
+        elif dataset.measure_type != 'Empty file':
             self.lineplot.add(filepath, dataset, plot_now)
 
     def remove(self, filepath, dataset,refresh=True,keep=False):

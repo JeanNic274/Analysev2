@@ -72,7 +72,7 @@ class MainWindow(QMainWindow):
         from app.ui.graphs import SpectrometerGraph
         
         if not self.measurement_mode_on:
-            btn_meas = QPushButton("Experiment")
+            btn_meas = QPushButton("Lab Scan")
             btn_meas.clicked.connect(self.swap_sidebars)
             self.sidebar_view.top_layout.addWidget(btn_meas)
             self.measurement_mode_on = True

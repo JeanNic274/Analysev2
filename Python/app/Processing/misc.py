@@ -150,6 +150,7 @@ def header_extract(file_path,map=False):
     header=[]
     with open(file_path) as f:
         comment_lines=0
+        check_line = 0
         for line in f:
             
             if line.startswith('#'):
@@ -159,13 +160,20 @@ def header_extract(file_path,map=False):
             else:
                 if line[:2].replace('.','',1).replace('-','',1).replace('E','',1).isdigit():
                     header.append(line)
+                    check_line=1
                     break
+                        
+        nb_data= sum(1 for _ in f)+check_line
     info={}
+    if nb_data<2:
+        info['file_type'],info['measure_type']= 'Empty file','Empty file'
+        return info
     info['file_type'],info['measure_type']=fetchtype(header)
     if len(header)<10:
         info['int_time']=1
         return info
     
+        
     
     info['name']=os.path.basename(file_path)[:-4]
     if info['name'].startswith('Data_'):
@@ -358,6 +366,7 @@ def browse(directory=DEFAULT_FOLDER):
     meas_file={}
     if not directory.exists():
         print('404 error directory not found.')
+        directory = Path("C:\\")
     if directory.joinpath(str(directory.name)+' measurements.txt').is_file():
         with open(directory.joinpath(str(directory.name)+' measurements.txt'),'r') as csvfile:
             f=csv.reader(csvfile,delimiter='\t')

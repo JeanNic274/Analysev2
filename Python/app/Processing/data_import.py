@@ -35,6 +35,9 @@ col_merged = {
 class Data_Set_Import:
 
     def import_data(self,file_path):
+        if self.file_type == "Empty file":
+            self.data = np.zeros(10)
+            return
         names = col_names.get(self.file_type)
         col_error = False
         if names is not None:
@@ -67,6 +70,8 @@ class Data_Set_Import:
             # self.data=np.genfromtxt(file_path,comments="#",delimiter="\t",encoding="latin-1",names=True)
         self.data = np.nan_to_num(self.data, nan=0)
     def init_data(self):
+        if self.file_type == "Empty file":
+            return
         new_names = []
         new_values = []
         if 'ev' in self.data.dtype.names:
