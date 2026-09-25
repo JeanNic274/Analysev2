@@ -123,7 +123,7 @@ class Toolbar(QWidget):
         print("_reset")
 
     def _meastxt(self):
-        meastxt(self.main.sidebar.path)
+        meastxt(self.main.sidebar_view.path)
 
 
 

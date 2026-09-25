@@ -34,6 +34,10 @@
 - [ ] permit reset groups (might be hard)
 make label text in grpah/plot_area instead of dataset (possible??)
 
+fit exp not working with 2+
+fit stretched not working
+set axis (map) not working -> maybe give drop down instead from df.names
+
 
 Measurement mode:
 - mpd_mh_trpl.ini (detection.py)

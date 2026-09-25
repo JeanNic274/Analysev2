@@ -39,6 +39,7 @@ import operator
 import numpy as np
 import warnings
 from gc import collect as collect_garbage
+from contextlib import contextmanager
 
 from . import traces
 from . import instruments_registry
@@ -53,7 +54,7 @@ from . import gui_tools
 local_config = config.load_local_config()
 
 from .instruments_base import _writevec as writevec, _normalize_usb, _normalize_gpib, _get_visa_idns, _writevec_flatten_list,\
-                             time_check as _time_check, CHECKING as checkmode, wait
+                             time_check as _time_check, CHECKING as checkmode, wait, _find_global_name
 from .util import _readfile_lastnames, _readfile_lastheaders, _readfile_lasttitles
 from .gui_tools import sleep
 from .comp2to3 import is_py3, warn_deprecation, comp_execfile, reload, string_types, string_bytes_types,\
@@ -2212,6 +2213,8 @@ def make_dir(directory, setsweep=True):
         sweep.path.set(dirname)
 
 
+
+
 def iprint(instrument, force=False):
     """
        Prints the value of all the device inside instrument.
@@ -2606,3 +2609,92 @@ def rsrc_manager_info():
 #var: adds a variable to an instrument
 #      maybe the same as: instr.newvar = instruments.MemoryDevice()
 
+
+def unload(obj):
+    """
+    This performs the same as
+       del obj
+       clear_state
+    so the the object should really be deleted if no other links to the object are kept.
+    The object is removed from the standard global environment.
+    If object is an instance, it removes the first one it finds.
+    If it is a string, the name is removed.
+    """
+    if not isinstance(obj, string_types):
+        obj = _find_global_name(obj)
+    del _globaldict[obj]
+    clear_state()
+
+
+def clear_state():
+    """
+    This clears the error state and execute a garbage collector to try and free
+    any object stuck in the last exception state.
+    It does the same as:
+        raise ValueError
+        collect_garbage
+    The collect_garbage is necessary in python 3 because exceptions include traceback
+    which generates reference cycles.
+    It also tries to clean the state when the %debug environment is used.
+    By default that also holds references, which normally requires to enter the %debug
+    again after generating a new exception to clear the previous references.
+    """
+    # Instead of raising a new Error (which is not possible since it would not
+    # allow me to do the garbage_collect after; catching the exception does not
+    # produce the same result, it has to reach the interpreter), we clean up its effect.
+    with _no_attribute_error():
+        del sys.last_type
+    with _no_attribute_error():
+        del sys.last_value
+    with _no_attribute_error():
+        del sys.last_traceback
+    with _no_attribute_error():
+        # This should be present in python 3.12, but ipython 8.23.0 at least  does not create it
+        #  In python they are all set in cpython/Python/pythonrun.c _PyErr_PrintEx
+        #   and in cpython/Lib/code.py  InteractiveInterpreter._showtraceback
+        #  In ipython they are set in ipython/IPython/core/interactiveshell.py  InteractiveShell._get_exc_info
+        #   but missing the las_exc
+        del sys.last_exc
+    ip = _get_ipython()
+    if ip is not None:
+        with _no_attribute_error():
+            # This is generated in IPython/core/ultratb.py structured_traceback
+            # it is deleted in some other places but not in that function.
+            del ip.InteractiveTB.tb
+        with _no_attribute_error():
+            # ipython 8.23 at least saves the last execution result which contains the exception
+            # This is overwritten on ervery run_cell (run_cell_async) from  IPython/core/interactiveshell.py
+            # Without this line, you need an extra line (can be just "pass") between the line that causes an
+            # exception and the line that does an unload.
+            # I could be more precise and do
+            ip.last_execution_result.error_in_exec = None
+        # Now clear debug state (if the user entered the debug state, there is leftover to clean)
+        with _no_attribute_error():
+            ip.InteractiveTB.pdb.reset()
+            del ip.InteractiveTB.pdb.curframe_locals
+        with _no_attribute_error():
+            # this works in python2, ipython 5.8
+            ip.InteractiveTB.pdb._ptcomp.ipy_completer.namespace = {}
+        with _no_attribute_error():
+            # This is needed at least for python 3.12, ipython 8.23.0
+            # This is holding some value prevent the deletion after the %debug
+            # env is entered.
+            ip.InteractiveTB.pdb.pt_app.app.key_processor._flush_wait_task = None
+    collect_garbage()
+
+def _get_ipython():
+    try:
+        ip = _globaldict['get_ipython']() # starting with ipython 0.11
+    except KeyError:
+        try:
+            ip = _globaldict['_ip'] # for ipython 0.10
+        except KeyError:
+            ip = None
+    return ip
+
+@contextmanager
+def _no_attribute_error():
+    try:
+        yield
+    except AttributeError:
+        pass
