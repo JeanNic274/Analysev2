@@ -32,6 +32,9 @@
 - [x] add number class that is called whenever curve number is requested
 - [x] add colormap editer (à la labview)
 - [ ] permit reset groups (might be hard)
+- [ ] fit linear background toggle
+- [ ] fit allow none to not ocunt as parameter (different number of peak per curve)
+- [ ] bug fit keeping in memeory removed dataset and saving it
 make label text in grpah/plot_area instead of dataset (possible??)
 
 fit exp not working with 2+

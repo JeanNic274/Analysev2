@@ -40,7 +40,7 @@ def save_exp(plot_area_widget,filename = 'test'):
 
 def load_exp(plot_area_widget,plot_area_index,filename = "test    2026-09-08 14-20-41"):
     print('Loading experiment: ', filename)
-    plot_area_widget.main.sidebar._clear_selection()
+    plot_area_widget.main.sidebar_view._clear_selection()
     
     with open(Path('data','experiments',filename), 'r') as file:
         experiment = json.load(file)

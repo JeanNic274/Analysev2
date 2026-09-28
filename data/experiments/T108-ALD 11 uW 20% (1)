@@ -3,7 +3,7 @@
         "attributes": {
             "xlim": null,
             "ylim": null,
-            "title": "power",
+            "title": "",
             "vlines": [],
             "hlines": [],
             "yaxis": "count_cor",
@@ -18,8 +18,8 @@
             "y_lab": "Counts/s",
             "labels": {
                 "number": true,
-                "name": false,
-                "power": 0,
+                "name": true,
+                "power": true,
                 "pos": true,
                 "posf": 0,
                 "filter": 0
@@ -49,33 +49,31 @@
             }
         },
         "filepaths": [
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_16.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_22.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_29.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_33.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_38.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_42.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_45.txt"
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_22\\Data_260922_8_26.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_6.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_12.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_21.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_28.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_33.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_41.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_46.txt"
         ]
     },
     "trpl": {
         "attributes": {
-            "xlim": [
-                0.0,
-                10.0
-            ],
+            "xlim": null,
             "ylim": null,
-            "title": "power, filter",
+            "title": "",
             "vlines": [],
             "hlines": [],
             "yaxis": "count",
             "x_lab": "Time (ns)",
             "y_lab": "Counts/s",
             "labels": {
-                "number": true,
-                "name": false,
+                "number": 1,
+                "name": 1,
                 "power": 0,
-                "pos": true,
+                "pos": 0,
                 "posf": 0,
                 "filter": 0
             },
@@ -103,13 +101,13 @@
             }
         },
         "filepaths": [
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_12.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_19.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_26.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_31.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_35.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_40.txt",
-            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_13\\Data_260813_0_47.txt"
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_2.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_10.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_19.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_26.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_31.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_39.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_09_23\\Data_260923_0_44.txt"
         ]
     }
 }

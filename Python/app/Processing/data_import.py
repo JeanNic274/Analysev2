@@ -271,10 +271,15 @@ def fit_data(df,graph,fit_idx):
             ('beta',p0[2],True,0,1),
             )
         
-            
-    if cstmodel:
+    if cstmodel==1:
         model+=models.ConstantModel()
         pars.add('c',p0[-1],True,0,None)
+    elif cstmodel ==2:
+        model+=models.LinearModel()
+        pars.add_many(
+            ('slope',p0[-1],True,0,None),
+            ('intercept',p0[-2],True,None,None)
+        )
         
     if df.measure_type == 'trpl':
         result = model.fit(yfit, pars, x=xfit,weights=1/np.sqrt(np.abs(yfit)))
