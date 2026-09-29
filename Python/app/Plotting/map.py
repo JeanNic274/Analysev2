@@ -10,7 +10,7 @@ from matplotlib.figure import Figure
 import matplotlib.colors as mcolors
 from matplotlib.patches import Circle
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog, QLabel, QColorDialog
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog, QLabel, QColorDialog, QComboBox
 from PySide6.QtCore import QSize, Qt, Signal, QRectF
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QLinearGradient
 
@@ -97,10 +97,12 @@ class BaseMap(QWidget):
             btn_axhline = QPushButton("Ax H Line")
             btn_axhline.clicked.connect(self.axhline)
             button_layout.addWidget(btn_axhline)
-        if 'set y axis' in self.buttons:
-            btn_yaxis_select = QPushButton("Set y axis")
-            btn_yaxis_select.clicked.connect(self.yaxis_select)
-            button_layout.addWidget(btn_yaxis_select)
+        if True:
+            # btn_yaxis_select = QComboBox("Set y axis")
+            self.btn_yaxis_select = QComboBox()
+            self.btn_yaxis_select.currentTextChanged.connect(self.axis_select)
+            self.btn_yaxis_select.setFixedWidth(100)
+            button_layout.addWidget(self.btn_yaxis_select)
         # if 'cmap' in self.buttons:
         #     btn_cmap = QPushButton("cmap")
         #     btn_cmap.clicked.connect(self.cmap_change)
@@ -245,11 +247,9 @@ class BaseMap(QWidget):
         self.ylim=self.ax.get_ylim() 
 
 
-    def yaxis_select(self):
-        yaxis, ok = QInputDialog.getText(self, 'Set y axis', 'Enter y axis name.')
-        if yaxis and ok:
-            self.yaxis = yaxis
-        self._refresh() 
+    def axis_select(self,axis):
+        self.zaxis = axis
+        self._refresh_full() 
         
     # def cmap_change(self):
     #     cmap, ok = QInputDialog.getText(self, 'Set cmap', 'Enter colormap name (ex: viridis, gist_rainbow_r, turbo, jet, CustomLC).')
@@ -309,6 +309,8 @@ class BaseMap(QWidget):
         self.canvas.flush_events()
         
     def _refresh_cmap(self):
+        self.maximum = 0
+        self.minimum = np.inf
         filepath = list(self.lines.keys())[-1]
         dataset = self.datasets[filepath]
         self.remove(filepath,refresh=False)
@@ -318,6 +320,12 @@ class BaseMap(QWidget):
 
     def add(self, filepath, dataset, plot_now = True):
         self.datasets[filepath]=dataset
+        
+        if self.btn_yaxis_select.currentIndex() ==-1:
+            self.btn_yaxis_select.blockSignals(True)
+            self.btn_yaxis_select.addItems(dataset.data.dtype.names)
+            self.btn_yaxis_select.setCurrentText(self.zaxis)
+            self.btn_yaxis_select.blockSignals(False)
         
         if plot_now:
             self.original_d[filepath] = dataset.data.copy()
@@ -396,10 +404,16 @@ class BaseMap(QWidget):
             self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
         self._refresh()
         
+        
     def refresh_curves(self):
-        for key, data in self.datasets.items():
-            self.remove(key)
-            self.add(key,data)
+        for filepath in self.datasets.copy():
+            self.refresh_curve(filepath)
+            
+    def refresh_curve(self,filepath):
+        data = self.datasets[filepath]
+        self.remove(filepath,refresh=False)
+        self.add(filepath,data)
+        
             
     def _refresh_full(self):
         self.refresh_curves()

@@ -1,7 +1,9 @@
 import time
+from pathlib import Path
 t=time.time()
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton, QApplication, QSplitter
 from PySide6.QtGui import QGuiApplication, Qt
+from PySide6.QtCore import QSettings
 print(f'---------------- imported Pyside6:  {time.time()-t:.8f} --------------------')
 t=time.time()
 from app.ui.sidebar import SidebarView, SidebarMeasure
@@ -19,7 +21,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("PL ViewerV2")
         # self.resize(1200, 800)
 
-        self.save_folder = r"C:\Users\jnich\OneDrive - USherbrooke\Uni\PhD\Data\img\26_08_13-i"
+        self.settings = QSettings("JN","AnalyseV2-MainWindow")
+        self.save_folder=Path(self.settings.value("save_folder",r"C:"))
 
         self.selected_files = {}
         self.datasets = {}

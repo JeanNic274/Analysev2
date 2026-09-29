@@ -165,7 +165,9 @@ def fit_data(df,graph,fit_idx):
     
     p0=parameters['p0s'][fit_idx][2:]
     xfit0=0
-    
+    p0 = [x for x in p0 if x is not None]
+
+
     if parameters['model']=='Gaussian':
         nb_func=len(p0)//3
         cstmodel=len(p0)%3
@@ -250,11 +252,11 @@ def fit_data(df,graph,fit_idx):
             model+=models.ExponentialModel(prefix=pref)
 
             pars.add_many(
-                (pref+"amplitude",p0[2*p_idx+3],True,0,None),
-                (pref+'decay',p0[2*p_idx+4],True,0,None),
+                (pref+"amplitude",p0[2*p_idx+2],True,0,None),
+                (pref+'decay',p0[2*p_idx+3],True,0,None),
                 )
     
-    if parameters['model']=='Stretched':
+    if parameters['model']=='StretchedExp':
         
         xfit-=parameters['p0s'][fit_idx][0]
         xfit0=1

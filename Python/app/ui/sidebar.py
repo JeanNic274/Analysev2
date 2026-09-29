@@ -29,7 +29,7 @@ class SidebarView(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main = main_window
-        self.settings = QSettings("JN","AnalyseV2")
+        self.settings = QSettings("JN","AnalyseV2-Sidebar")
         self.path=Path(self.settings.value("last_folder",DEFAULT_FOLDER))
         self._build()
 

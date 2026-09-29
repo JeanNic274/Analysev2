@@ -1,7 +1,7 @@
 # import numpy as np
 from sys import float_info
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog, QComboBox
 from PySide6.QtCore import QSize, QTimer
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -65,23 +65,19 @@ class BasePlot(QWidget):
         # self.buttons = ['normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset']
         if 'save' in self.buttons:
             btn_save = QPushButton("Save Graph")
-            btn_save.setFixedWidth(100)
             btn_save.clicked.connect(self.save_graph)
             button_layout.addWidget(btn_save)
         if True:
             btn_get_info = QPushButton("Get Info")
-            btn_get_info.setFixedWidth(100)
             btn_get_info.clicked.connect(self._get_info)
             button_layout.addWidget(btn_get_info)
         if 'legend' in self.buttons:
             btn_legend = QPushButton("Legend")
-            btn_legend.setFixedWidth(100)
             btn_legend.clicked.connect(self.legend_toggle)
             button_layout.addWidget(btn_legend)
             
         if 'normalize' in self.buttons:
             btn_normalize = QPushButton("Normalize")
-            btn_normalize.setFixedWidth(100)
             btn_normalize.clicked.connect(self.normalize)
             button_layout.addWidget(btn_normalize)
         if 'ev_swap' in self.buttons:
@@ -108,14 +104,20 @@ class BasePlot(QWidget):
             btn_axhline = QPushButton("Ax H Line")
             btn_axhline.clicked.connect(self.axhline)
             button_layout.addWidget(btn_axhline)
-        if 'set y axis' in self.buttons:
-            btn_yaxis_select = QPushButton("Set y axis")
-            btn_yaxis_select.clicked.connect(self.yaxis_select)
-            button_layout.addWidget(btn_yaxis_select)
-        if 'set x axis' in self.buttons:
-            btn_xaxis_select = QPushButton("Set x axis")
-            btn_xaxis_select.clicked.connect(self.xaxis_select)
-            button_layout.addWidget(btn_xaxis_select)
+        if True:
+            # btn_yaxis_select = QComboBox("Set y axis")
+            self.btn_yaxis_select = QComboBox()
+            self.btn_yaxis_select.currentTextChanged.connect(self.yaxis_select)
+            self.btn_yaxis_select.setFixedWidth(100)
+            button_layout.addWidget(self.btn_yaxis_select)
+            
+            # btn_xaxis_select = QComboBox("Set x axis")
+            self.btn_xaxis_select = QComboBox()
+            self.btn_xaxis_select.currentTextChanged.connect(self.xaxis_select)
+            self.btn_xaxis_select.setFixedWidth(100)
+            button_layout.addWidget(self.btn_xaxis_select)
+            
+            
         if 'set y_offset' in self.buttons:
             btn_y_offset = QPushButton("Set y offset")
             btn_y_offset.clicked.connect(self.set_y_offset)
@@ -276,15 +278,12 @@ class BasePlot(QWidget):
         offset_lines(self,filepath=filepath,xaxis=self.xaxis,yaxis=self.yaxis)
         self._refresh()
 
-    def yaxis_select(self):
-        yaxis, ok = QInputDialog.getText(self, 'Set y axis', 'Enter y axis name.')
-        if yaxis and ok:
-            self.yaxis = yaxis
+    def yaxis_select(self,yaxis):
+        self.yaxis = yaxis
         self.refresh_curves() 
-    def xaxis_select(self):
-        xaxis, ok = QInputDialog.getText(self, 'Set x axis', 'Enter x axis name.')
-        if xaxis and ok:
-            self.xaxis = xaxis
+        
+    def xaxis_select(self,xaxis):
+        self.xaxis = xaxis
         self.refresh_curves() 
         
     def legend_toggle(self):
@@ -353,6 +352,15 @@ class BasePlot(QWidget):
         if not self.available_colors:
             # Reuse colors after cycle
             self.available_colors = list(self.colors)
+        if self.btn_yaxis_select.currentIndex() ==-1:
+            self.btn_yaxis_select.blockSignals(True)
+            self.btn_xaxis_select.blockSignals(True)
+            self.btn_yaxis_select.addItems(dataset.data.dtype.names)
+            self.btn_xaxis_select.addItems(dataset.data.dtype.names)
+            self.btn_yaxis_select.setCurrentText(self.yaxis)
+            self.btn_xaxis_select.setCurrentText(self.xaxis)
+            self.btn_yaxis_select.blockSignals(False)
+            self.btn_xaxis_select.blockSignals(False)
         
         color=self._get_color(filepath)
         # color = self.available_colors.pop(0)
