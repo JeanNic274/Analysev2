@@ -6,13 +6,14 @@ from PySide6.QtGui import QGuiApplication, Qt
 from PySide6.QtCore import QSettings
 print(f'---------------- imported Pyside6:  {time.time()-t:.8f} --------------------')
 t=time.time()
-from app.ui.sidebar import SidebarView, SidebarMeasure
+from Python.app.ui.sidebar import SidebarView, SidebarMeasure
 print(f'---------------- imported sidebar:  {time.time()-t:.8f} --------------------')
 t=time.time()
-from app.ui.toolbar import Toolbar
+from Python.app.ui.toolbar import Toolbar
 print(f'---------------- imported toolbar:  {time.time()-t:.8f} --------------------')
-from app.ui.plot_area import PlotAreas
+from Python.app.ui.plot_area import PlotAreas
 print(f'---------------- imported PlotArea: {time.time()-t:.8f} --------------------')
+from Python.app.Measurements.Fake_instruments import *
 t=time.time()
 
 class MainWindow(QMainWindow):
@@ -29,8 +30,11 @@ class MainWindow(QMainWindow):
         self.fit_results = {}
 
         self.measurement_mode_on = False
-        self.spectrometer_graph = None
+        # Device graphs
+        self.graph_spectrometer = None
         
+        #Devices
+        self.device_spectrometer = None
         self.graph_windows = {}
 
         central = QWidget()
@@ -65,14 +69,14 @@ class MainWindow(QMainWindow):
         self.main_layout.addWidget(self.layout)
                 
     def closeEvent(self, event):
-        print(f'Closing app. Runtime: {time.time()-t:.3f} s')
+        print(f'Closing Python.app. Runtime: {time.time()-t:.3f} s')
         QApplication.closeAllWindows()
         event.accept()
         
     def start_measurement_mode(self):
         print("_MMode WIP")
         # ------------ imports for measurement mode ------------
-        from app.ui.graphs import SpectrometerGraph
+        from Python.app.ui.graphs import SpectrometerGraph
         
         if not self.measurement_mode_on:
             btn_meas = QPushButton("Lab Scan")
@@ -83,9 +87,13 @@ class MainWindow(QMainWindow):
             self.sidebar.setCurrentIndex(1) 
             
         # ----- Spectrometer 
-        if self.spectrometer_graph is None:
-            self.spectrometer_graph = SpectrometerGraph(self,480,1)
-            self.spectrometer_graph.show()
+        if self.graph_spectrometer is None:
+            self.graph_spectrometer = SpectrometerGraph(self,480,1)
+            self.graph_spectrometer.show()
+            
+        if self.device_spectrometer == None:
+            print('OK')
+            self.device_spectrometer = Fake_spectrometer()
 
 
 

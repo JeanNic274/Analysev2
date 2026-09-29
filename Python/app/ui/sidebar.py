@@ -17,12 +17,14 @@ import subprocess
 # from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
 # print('imported config', time.time()-t)
 # t=time.time()
-from app.Processing.data_import import Data_Set_Import
+from Python.app.Processing.data_import import Data_Set_Import
 # print('imported Data_Set_Import', time.time()-t)
 # t=time.time()
-from app.Processing.misc import  browse
+from Python.app.Processing.misc import  browse
 # print('imported time.time()-t)
-from config import DEFAULT_FOLDER
+
+from pyHegel.pyHegel import commands
+from Python.config import DEFAULT_FOLDER
 
 
 class SidebarView(QWidget):
@@ -39,11 +41,17 @@ class SidebarView(QWidget):
         layout.setAlignment(Qt.AlignTop)
 
         # path input
+        self.top_layout = QHBoxLayout()
+        
         self.path_input = QLineEdit()
         self.path_input.setStyleSheet('font-size: 10pt;')
         self.path_input.setPlaceholderText("Enter path...")
         self.path_input.returnPressed.connect(self._set_path)
-        layout.addWidget(QLabel("Browse Files"))
+        self.top_layout.addWidget(QLabel("Browse Files"))
+        
+        
+        
+        layout.addLayout(self.top_layout)
         
         layout_top = QHBoxLayout()
         btn_refresh = QPushButton("⟳")
@@ -186,16 +194,55 @@ class SidebarMeasure(QWidget):
         super().__init__()
         self.main = main_window
         
+        self.FAKE = True
+        
         self._build()
 
     def _build(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setAlignment(Qt.AlignTop)
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(4, 4, 4, 4)
+        self.layout.setAlignment(Qt.AlignTop)
 
         btn_view_sidebar = QPushButton("File Browser")
         # btn_view_sidebar.setFixedWidth(30)
         btn_view_sidebar.clicked.connect(self.main.swap_sidebars)
-        layout.addWidget(btn_view_sidebar)
+        self.layout.addWidget(btn_view_sidebar)
+        
+        self.UI_spectrometer = UI_SpectroMeter(self)
+        self.add_device_ui(self.UI_spectrometer.layout)
         
         
+        
+    def add_device_ui(self,dev_ui):
+        self.layout.addLayout(dev_ui)
+        
+        
+        
+class UI_SpectroMeter(QWidget):
+    def __init__(self,main_window):
+        super().__init__()
+        self.main = main_window
+        
+        self.val = None
+        self._build()
+        
+        
+    def _build(self):
+        
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(QLabel('Spectrometer'))
+        
+        btn_measure = QPushButton('Measure')        
+        if self.main.FAKE:
+            btn_measure.clicked.connect(self.start_measure)
+        
+        layer1 = QHBoxLayout()
+        
+        layer1.addWidget(btn_measure)
+        
+        self.layout.addLayout(layer1)
+
+
+    def start_measure(self):
+        self.val = commands.get(self.main.main.device_spectrometer)
+        self.main.main.graph_spectrometer.update_val(self.val)

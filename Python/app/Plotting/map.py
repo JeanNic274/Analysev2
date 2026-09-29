@@ -15,10 +15,10 @@ from PySide6.QtCore import QSize, Qt, Signal, QRectF
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QLinearGradient
 
 
-from app.Plotting.utils import *
-from app.Processing.data_import import Data_Set_Import
-from app.Processing.io import prevent_overwrite_file, save_figure_export
-import app.Plotting.cmaps
+from Python.app.Plotting.utils import *
+from Python.app.Processing.data_import import Data_Set_Import
+from Python.app.Processing.io import prevent_overwrite_file, save_figure_export
+import Python.app.Plotting.cmaps
 
 class BaseMap(QWidget):
     def __init__(self, main_window):
@@ -99,7 +99,8 @@ class BaseMap(QWidget):
             button_layout.addWidget(btn_axhline)
         if True:
             # btn_yaxis_select = QComboBox("Set y axis")
-            self.btn_yaxis_select = QComboBox()
+            self.btn_yaxis_select = MyQComboBox()
+            self.btn_yaxis_select.view().setAutoScroll(False)
             self.btn_yaxis_select.currentTextChanged.connect(self.axis_select)
             self.btn_yaxis_select.setFixedWidth(100)
             button_layout.addWidget(self.btn_yaxis_select)
@@ -309,7 +310,7 @@ class BaseMap(QWidget):
         self.canvas.flush_events()
         
     def _refresh_cmap(self):
-        self.maximum = 0
+        self.maximum = -np.inf
         self.minimum = np.inf
         filepath = list(self.lines.keys())[-1]
         dataset = self.datasets[filepath]

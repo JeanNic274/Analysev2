@@ -10,7 +10,7 @@ import os
 # from lmfit import Model, Parameters, models
 # print('imported lmfit', time.time()-t)
 # t=time.time()
-from app.Processing.misc import header_extract
+from Python.app.Processing.misc import header_extract
 # print('imported header_extract', time.time()-t)
 
 col_names = {

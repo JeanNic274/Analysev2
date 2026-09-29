@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import  QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy, QLayout, QTabWidget, QInputDialog
 from PySide6.QtCore import Qt
 
-from app.Plotting.line import SpectrumPlot, TRPLPlot, LinePlot, FocusPlot
-from app.Plotting.map import MapPlot
-from app.Processing.misc import curve_number
+from Python.app.Plotting.line import SpectrumPlot, TRPLPlot, LinePlot, FocusPlot
+from Python.app.Plotting.map import MapPlot
+from Python.app.Processing.misc import curve_number
 
 class PlotArea(QWidget):
     def __init__(self, main_window):

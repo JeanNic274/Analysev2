@@ -28,7 +28,8 @@ import time
 import sys
 
 # use absolute path here to allow running this script directly (instead of importing it)
-from pyHegel.comp2to3 import get_ident, is_py2
+from pyHegel.pyHegel.comp2to3 import get_ident, is_py2
+
 
 def _sleep_delayed_signal_handler(signum, stack_frame):
     # replaces ipython 0.10 use of ctypes.pythonapi.PyThreadState_SetAsyncExc

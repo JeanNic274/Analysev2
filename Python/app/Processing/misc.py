@@ -4,7 +4,7 @@ import re
 import csv
 import sys
 
-from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
+from Python.config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
 
 
 class curve_number():

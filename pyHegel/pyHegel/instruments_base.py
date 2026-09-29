@@ -70,6 +70,7 @@ try:
     _load_resource_manager()
 except ImportError as exc:
     print('Error loading visa resource manager. You will have reduced functionality.')
+    print(exc)
 
 try:
     _globaldict # keep the previous values (when reloading this file)
@@ -1411,7 +1412,7 @@ class BaseInstrument(object):
     # add _quiet_delete here in case we call __del__ before __init__ because of problem in subclass
     _quiet_delete = False
     _quiet_load = True
-    def __init__(self, quiet_delete=False, quiet_load=True):
+    def __init__(self, quiet_delete=False, quiet_load=False):
         self._quiet_load = quiet_load
         self._quiet_delete = quiet_delete
         self.header_val = None

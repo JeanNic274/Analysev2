@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-from app.Processing.data_import import Data_Set_Import
+from Python.app.Processing.data_import import Data_Set_Import
 
 def save_exp(plot_area_widget,filename = 'test'):
     save_path = Path('data','experiments',filename)

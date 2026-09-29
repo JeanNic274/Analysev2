@@ -1,5 +1,6 @@
-from pyHegel.pyHegel import commands, instruments
-from app.Measurements.devices import *
+from pyHegel.pyHegel import commands
+from pyHegel.pyHegel import instruments
+from Python.app.Measurements.devices import *
 
 
 def set_laser(power=None, pulsed=False, laser=None, freq_khz=10000, softlock=False, engaged=True):

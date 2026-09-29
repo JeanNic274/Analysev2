@@ -11,10 +11,10 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 
-from app.Plotting.utils import *
-from app.Processing.data_import import Data_Set_Import
-from app.Processing.io import prevent_overwrite_file, save_figure_export, save_fit
-from app.ui.DialogWindow import FitManager
+from Python.app.Plotting.utils import *
+from Python.app.Processing.data_import import Data_Set_Import
+from Python.app.Processing.io import prevent_overwrite_file, save_figure_export, save_fit
+from Python.app.ui.DialogWindow import FitManager
 
 plt.rcParams.update({
     "font.size": 16,
@@ -185,14 +185,17 @@ class BasePlot(QWidget):
         self.canvas.flush_events()
 
   
-    def update_data(self,data):
-        self.line.set_ydata(data[self.yaxis])
-        self.line.set_xdata(data[self.xaxis])
+    def update_data(self,xdata=None,ydata=None):
+        if ydata is not None:
+            self.line.set_ydata(ydata)
+        if xdata is not None:
+            self.line.set_xdata(xdata)
+        self._refresh()
         
     def gen_axis(self):
         self.ax.set_ylabel(self.ylab)
         self.ax.set_xlabel(self.xlab)
-        self.line = self.ax.plot([self.xlim[0],self.xlim[1]],[-1,-1],color='k')
+        self.line, = self.ax.plot([self.xlim[0],self.xlim[1]],[-1,-1],color='k')
         self.ax.set_ylim(0,10)
         self._refresh()
         
@@ -230,6 +233,10 @@ class SpectrometerGraph(QWidget):
         self.graph._refresh()
         
         layout.addWidget(self.graph)
+        
+    def update_val(self,val):
+        self.graph.update_data(xdata=val[0],ydata=val[1])
+        
         
     
     def closeEvent(self, event):

@@ -10,10 +10,10 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 
-from app.Plotting.utils import *
-from app.Processing.data_import import Data_Set_Import
-from app.Processing.io import prevent_overwrite_file, save_figure_export, save_fit
-from app.ui.DialogWindow import FitManager
+from Python.app.Plotting.utils import *
+from Python.app.Processing.data_import import Data_Set_Import
+from Python.app.Processing.io import prevent_overwrite_file, save_figure_export, save_fit
+from Python.app.ui.DialogWindow import FitManager
 
 plt.rcParams.update({
     "font.size": 16,
@@ -106,13 +106,15 @@ class BasePlot(QWidget):
             button_layout.addWidget(btn_axhline)
         if True:
             # btn_yaxis_select = QComboBox("Set y axis")
-            self.btn_yaxis_select = QComboBox()
+            self.btn_yaxis_select = MyQComboBox()
+            self.btn_yaxis_select.view().setAutoScroll(False)
             self.btn_yaxis_select.currentTextChanged.connect(self.yaxis_select)
             self.btn_yaxis_select.setFixedWidth(100)
             button_layout.addWidget(self.btn_yaxis_select)
             
             # btn_xaxis_select = QComboBox("Set x axis")
-            self.btn_xaxis_select = QComboBox()
+            self.btn_xaxis_select = MyQComboBox()
+            self.btn_xaxis_select.view().setAutoScroll(False)
             self.btn_xaxis_select.currentTextChanged.connect(self.xaxis_select)
             self.btn_xaxis_select.setFixedWidth(100)
             button_layout.addWidget(self.btn_xaxis_select)

@@ -374,7 +374,7 @@ class _Clock(instruments.BaseInstrument):
         self.alias = self.time
         # This needs to be last to complete creation
         super(_Clock, self)._create_devs()
-clock = _Clock()
+# clock = _Clock()
 
 
 def _get_dev_kw(dev, **extra_kw):
@@ -1565,8 +1565,8 @@ class _Sweep(instruments.BaseInstrument):
             del t
 
 
-sweep = _Sweep()
-sweep_multi = sweep.sweep_multi
+# sweep = _Sweep()
+# sweep_multi = sweep.sweep_multi
 
 
 def use_sweep_path(filename):

@@ -2,8 +2,9 @@ import time
 from pathlib import Path
 import pyvisa
 
-from pyHegel.pyHegel import commands, instruments
-from app.Measurements.devices import *
+from pyHegel.pyHegel import commands
+from pyHegel.pyHegel import instruments
+from Python.app.Measurements.devices import *
 
 try: from snAPI.Main import *
 except ImportError as e: print(e)
@@ -15,7 +16,7 @@ from thorlabs_tsi_sdk.tl_camera import TLCameraSDK
 from thorlabs_tsi_sdk.tl_camera_enums import OPERATION_MODE
 
 
-from Python.app.Measurements.filters import filterwheel, filter_switch, detector_switch
+from Python.Python.app.Measurements.filters import filterwheel, filter_switch, detector_switch
 
 
 
