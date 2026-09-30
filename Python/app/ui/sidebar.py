@@ -1,12 +1,16 @@
 # import time
 # t=time.time()
+import itertools
+
+import numpy as np
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
-    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel,
+    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox
 )
 # print('imported QTWidget', time.time()-t)
 # t=time.time()
-from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel, QSettings
+from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel, QSettings, QThread, QObject, Signal
 from PySide6.QtGui import QBrush
 # print('imported QtCore', time.time()-t)
 # t=time.time()
@@ -209,27 +213,38 @@ class SidebarMeasure(QWidget):
         self.layout.addWidget(btn_view_sidebar)
         
         self.UI_spectrometer = UI_SpectroMeter(self)
-        self.add_device_ui(self.UI_spectrometer.layout)
+        self.add_device_ui(self.UI_spectrometer)
         
         
         
     def add_device_ui(self,dev_ui):
-        self.layout.addLayout(dev_ui)
+        self.layout.addWidget(dev_ui)
         
         
         
-class UI_SpectroMeter(QWidget):
+class UI_SpectroMeter(QFrame):
     def __init__(self,main_window):
         super().__init__()
         self.main = main_window
+        # self.setFrameShape(QFrame.Box)       # or StyledPanel, Panel, etc.
+        # self.setFrameShadow(QFrame.Raised)
+        self.setFrameShape(QFrame.StyledPanel)
+        
         
         self.val = None
         self._build()
         
         
+        
+        
     def _build(self):
         
-        self.layout = QVBoxLayout()
+        # self.setStyleSheet("border: 1px solid red; margin: 1px; padding: 1px;")
+        
+        self.layout = QVBoxLayout(self)
+        self.layout.setSpacing(5)
+        self.layout.setContentsMargins(5, 1, 5, 1)
+        
         self.layout.addWidget(QLabel('Spectrometer'))
         
         btn_measure = QPushButton('Measure')        
@@ -241,8 +256,178 @@ class UI_SpectroMeter(QWidget):
         layer1.addWidget(btn_measure)
         
         self.layout.addLayout(layer1)
+        
 
 
     def start_measure(self):
-        self.val = commands.get(self.main.main.device_spectrometer)
+        self._thread = QThread()
+        self._worker = MeasureWorker(self.main.main.device_spectrometer)
+        self._worker.moveToThread(self._thread)
+
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_measure_done)
+        self._worker.error.connect(self._on_measure_error)
+
+        # cleanup when done
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+
+        self._thread.start()
+
+    def _on_measure_done(self, val):
+        self.val = val
         self.main.main.graph_spectrometer.update_val(self.val)
+
+    def _on_measure_error(self, message):
+        QMessageBox.critical(self, "Measurement error", message)
+        
+        
+class UI_Scan(QFrame):
+    def __init__(self,main_window):
+        super().__init__()
+        self.main = main_window
+        
+        self.setFrameShape(QFrame.StyledPanel)
+        
+        self.val = None
+        self._build()
+        
+    def _build(self):
+        self.layout = QVBoxLayout(self)
+        self.layout.setSpacing(5)
+        self.layout.setContentsMargins(5, 1, 5, 1)
+        
+        self.layout.addWidget(QLabel('Scan'))
+        
+        btn_measure = QPushButton('Start')        
+        if self.main.FAKE:
+            btn_measure.clicked.connect(self.start_measure)
+        
+        layer1 = QHBoxLayout()
+        
+        layer1.addWidget(btn_measure)
+        
+        self.layout.addLayout(layer1)
+
+    def start_scan(self, axes):
+        device = self.main.main.device_spectrometer
+
+        def move_fn(coords):
+            self.main.main.stage.move_to(coords)
+
+        def measure_fn():
+            return sn.getCountRates()
+
+        self._scan_thread = QThread()
+        self._scan_worker = ScanWorker(axes, move_fn, measure_fn)
+        self._scan_worker.moveToThread(self._scan_thread)
+
+        self._scan_thread.started.connect(self._scan_worker.run)
+        self._scan_worker.point_measured.connect(self._on_point_measured)
+        self._scan_worker.progress.connect(self._on_scan_progress)
+        self._scan_worker.finished.connect(self._on_scan_finished)
+        self._scan_worker.error.connect(self._on_scan_error)
+
+        self._scan_worker.finished.connect(self._scan_thread.quit)
+        self._scan_worker.finished.connect(self._scan_worker.deleteLater)
+        self._scan_thread.finished.connect(self._scan_thread.deleteLater)
+
+        self._scan_thread.start()
+
+    def _on_point_measured(self, coords, value):
+        self.main.main.graph_spectrometer.update_val(value, coords) # runs on main thread
+
+    def _on_scan_progress(self, current, total):
+        self.progress_bar.setValue(int(current / total * 100))
+
+    def _on_scan_finished(self):
+        self.status_label.setText("Scan complete")
+
+    def _on_scan_error(self, message):
+        QMessageBox.critical(self, "Scan error", message)
+
+    def stop_scan(self):
+        if hasattr(self, '_scan_worker'):
+            self._scan_worker.request_stop()
+        
+        
+        
+        
+        
+        
+        
+class MeasureWorker(QObject):
+    finished = Signal(object)  
+    error = Signal(str)
+
+    def __init__(self, device):
+        super().__init__()
+        self.device = device
+
+    def run(self):
+        try:
+            val = commands.get(self.device)
+            self.finished.emit(val)
+        except Exception as e:
+            self.error.emit(str(e))
+            
+            
+            
+            
+            
+            
+class ScanWorker(QObject):
+    point_measured = Signal(dict, object)   # (coords_dict, measured_value) - emitted after each point
+    finished = Signal()
+    error = Signal(str)
+    progress = Signal(int, int)             # (current_index, total_points)
+
+    def __init__(self, axes, move_fn, measure_fn):
+        """
+        axes: dict like {'x': [-10, 10, 1], 'y': [0, 5, 1]}
+              meaning start, stop, step (inclusive)
+        move_fn: callable(coords_dict) -> moves the instrument to that position
+        measure_fn: callable() -> returns a measurement value
+        """
+        super().__init__()
+        self.axes = axes
+        self.move_fn = move_fn
+        self.measure_fn = measure_fn
+        self._stop_requested = False
+
+    def request_stop(self):
+        self._stop_requested = True
+
+    def _build_grid(self):
+        axis_names = list(self.axes.keys())
+        axis_ranges = []
+        for name in axis_names:
+            start, stop, step = self.axes[name]
+            # include stop point, guard against float drift
+            values = np.arange(start, stop + step / 2, step)
+            axis_ranges.append(values)
+
+        combos = itertools.product(*axis_ranges)
+        return axis_names, list(combos)
+
+    def run(self):
+        try:
+            axis_names, combos = self._build_grid()
+            total = len(combos)
+
+            for i, combo in enumerate(combos):
+                if self._stop_requested:
+                    break
+
+                coords = dict(zip(axis_names, combo))
+
+                self.move_fn(coords)
+                value = self.measure_fn()
+
+                self.point_measured.emit(coords, value)
+                self.progress.emit(i + 1, total)
+
+            self.finished.emit()
+        except Exception as e:
+            self.error.emit(str(e))

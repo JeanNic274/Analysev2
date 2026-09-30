@@ -65,7 +65,7 @@ class MainWindow(QMainWindow):
         self.layout.addWidget(self.sidebar)
         self.layout.addWidget(self.plot_areas)
         self.layout.addWidget(self.toolbar)
-        self.layout.setSizes([250, 800,200])  # pixel widths, sidebar, plot area, toolbar
+        self.layout.setSizes([150, 800,100])  # pixel widths, sidebar, plot area, toolbar
         self.main_layout.addWidget(self.layout)
                 
     def closeEvent(self, event):
@@ -88,11 +88,10 @@ class MainWindow(QMainWindow):
             
         # ----- Spectrometer 
         if self.graph_spectrometer is None:
-            self.graph_spectrometer = SpectrometerGraph(self,480,1)
+            self.graph_spectrometer = SpectrometerGraph(self)
             self.graph_spectrometer.show()
             
         if self.device_spectrometer == None:
-            print('OK')
             self.device_spectrometer = Fake_spectrometer()
 
 
