@@ -1,4 +1,4 @@
-# import time
+import time
 # t=time.time()
 import itertools
 
@@ -6,7 +6,7 @@ import numpy as np
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
-    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox
+    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox
 )
 # print('imported QTWidget', time.time()-t)
 # t=time.time()
@@ -26,6 +26,8 @@ from Python.app.Processing.data_import import Data_Set_Import
 # t=time.time()
 from Python.app.Processing.misc import  browse
 # print('imported time.time()-t)
+from Python.app.ui.graphs import *
+from Python.app.Measurements.devices import Scanner
 
 from pyHegel.pyHegel import commands
 from Python.config import DEFAULT_FOLDER
@@ -200,6 +202,7 @@ class SidebarMeasure(QWidget):
         
         self.FAKE = True
         
+        
         self._build()
 
     def _build(self):
@@ -215,11 +218,133 @@ class SidebarMeasure(QWidget):
         self.UI_spectrometer = UI_SpectroMeter(self)
         self.add_device_ui(self.UI_spectrometer)
         
+        self.UI_MH150 = UI_MH150(self)
+        self.add_device_ui(self.UI_MH150)
+        
+        self.UI_Scan = UI_Scan(self)
+        self.add_device_ui(self.UI_Scan)
         
         
     def add_device_ui(self,dev_ui):
         self.layout.addWidget(dev_ui)
         
+        
+class UI_MH150(QFrame):    
+    def __init__(self,main_window):
+        super().__init__()
+        self.main = main_window
+        # self.setFrameShape(QFrame.Box)       # or StyledPanel, Panel, etc.
+        # self.setFrameShadow(QFrame.Raised)
+        self.setFrameShape(QFrame.StyledPanel)
+        self.update_graph = True
+        
+        self.val = None
+        self._build()
+        
+        
+        
+        
+    def _build(self):
+        
+        # self.setStyleSheet("border: 1px solid red; margin: 1px; padding: 1px;")
+        
+        self.layout = QVBoxLayout(self)
+        self.layout.setSpacing(5)
+        self.layout.setContentsMargins(5, 1, 5, 1)
+        
+        self.layout.addWidget(QLabel('MultiHarp150'))
+        
+        layer1 = QHBoxLayout()
+        
+        self.btn_read_cont = QCheckBox('Read Cont.')        
+        self.btn_read_cont.toggled.connect(self.on_continuous_toggled)
+        self.btn_rate_graph = QCheckBox('Rate Graph')        
+        self.btn_rate_graph.toggled.connect(self.rate_graph_toggle)
+        
+        
+        layer1.addWidget(self.btn_read_cont)
+        layer1.addWidget(self.btn_rate_graph)
+        
+        layer2 = QHBoxLayout()
+        
+        self.label_counts1 = QLabel("Ch1: —")
+        self.label_counts2 = QLabel("Ch2: —")
+        self.label_countst = QLabel("Total: —")
+        layer2.addWidget(self.label_counts1)
+        layer2.addWidget(self.label_counts2)
+        layer2.addWidget(self.label_countst)
+        
+        self.layout.addLayout(layer1)
+        self.layout.addLayout(layer2)
+        
+
+    def on_continuous_toggled(self, checked):
+        if checked:
+            self._start_continuous_read()
+            if self.main.main.graph_rate_graph:
+                self.main.main.graph_rate_graph.graph.resume()
+        else:
+            self._stop_continuous_read()
+            if self.main.main.graph_rate_graph:
+                self.main.main.graph_rate_graph.graph.pause()
+                
+    def rate_graph_toggle(self,checked):
+        if checked:
+            self.main.main.graph_rate_graph = RateGraph(self.main)
+            self.main.main.graph_rate_graph.show()
+        else:
+            if self.main.main.graph_rate_graph:
+                self.main.main.graph_rate_graph.close()
+                self.main.main.graph_rate_graph = None
+            
+    def _start_continuous_read(self):
+        device = self.main.main.device_MH150
+        
+        if hasattr(self, '_cont_thread') and self._cont_thread is not None and self._cont_thread.isRunning():
+            return
+        
+        def measure_fn(): 
+            return device.getCountRates()
+
+        self._cont_thread = QThread()
+        self._cont_worker = ContinuousReadWorker(measure_fn, interval_ms=500)
+        self._cont_worker.moveToThread(self._cont_thread)
+
+        self._cont_thread.started.connect(self._cont_worker.run)
+        self._cont_worker.reading.connect(self._on_continuous_reading)
+        self._cont_worker.error.connect(self._on_continuous_error)
+
+        self._cont_worker.finished.connect(self._cont_thread.quit)
+        self._cont_worker.finished.connect(self._cont_worker.deleteLater)
+        self._cont_thread.finished.connect(self._cont_thread.deleteLater)
+
+        self._cont_thread.finished.connect(self._clear_cont_refs)
+        self._cont_thread.start()
+
+    def _stop_continuous_read(self):
+        if hasattr(self, '_cont_worker'):
+            self._cont_worker.stop()
+        
+
+    def _on_continuous_reading(self, value):
+        self.val = value+ (value[0]+value[1],)
+        self.label_countst.setText(f"Total: {self.val[2]}")
+        self.label_counts1.setText(f"Ch1: {self.val[0]}")
+        self.label_counts2.setText(f"Ch2: {self.val[1]}")
+        if self.btn_rate_graph.isChecked():
+            # if self.update_graph: # if 500 ms is too fast can update every 2 points
+            self.main.main.graph_rate_graph.add_data(self.val)
+            #     self.update_graph = False
+            # else:
+            #     self.update_graph = True
+
+    def _on_continuous_error(self, message):
+        QMessageBox.critical(self, "Measurement error", message)
+        self.btn_read_cont.setChecked(False)
+    def _clear_cont_refs(self):
+        self._cont_thread = None
+        self._cont_worker = None
+
         
         
 class UI_SpectroMeter(QFrame):
@@ -302,25 +427,36 @@ class UI_Scan(QFrame):
         
         btn_measure = QPushButton('Start')        
         if self.main.FAKE:
-            btn_measure.clicked.connect(self.start_measure)
+            btn_measure.clicked.connect(self.start_scan)
         
         layer1 = QHBoxLayout()
         
         layer1.addWidget(btn_measure)
         
         self.layout.addLayout(layer1)
-
-    def start_scan(self, axes):
-        device = self.main.main.device_spectrometer
-
-        def move_fn(coords):
-            self.main.main.stage.move_to(coords)
+        
+    def start_scan(self, axes={'x':[0,5,1],'y':[10,15,1]}):
+        axes={'x':[0,10,1],'y':[10,20,1]}
+        device = self.main.main.device_MH150
+        
+        self.main.main.scanner = Scanner(axes)
+        
+        move_fns = self.main.main.scanner.move_fns()
+        
+        
+        missing = set(axes.keys()) - set(move_fns.keys()) # Check all scan axis ok
+        if missing:
+            raise ValueError(f"Missing move function for axes: {missing}")
 
         def measure_fn():
-            return sn.getCountRates()
+            return device.getCountRates()
 
+        graph = ScanPlot(self)
+        graph.show()
+        self.main.main.graphs_scan.append(graph)
+        
         self._scan_thread = QThread()
-        self._scan_worker = ScanWorker(axes, move_fn, measure_fn)
+        self._scan_worker = ScanWorker(axes, move_fns, measure_fn)
         self._scan_worker.moveToThread(self._scan_thread)
 
         self._scan_thread.started.connect(self._scan_worker.run)
@@ -332,20 +468,29 @@ class UI_Scan(QFrame):
         self._scan_worker.finished.connect(self._scan_thread.quit)
         self._scan_worker.finished.connect(self._scan_worker.deleteLater)
         self._scan_thread.finished.connect(self._scan_thread.deleteLater)
+        self._scan_thread.finished.connect(self._clear_scan_refs)
 
         self._scan_thread.start()
 
-    def _on_point_measured(self, coords, value):
-        self.main.main.graph_spectrometer.update_val(value, coords) # runs on main thread
+    def _on_point_measured(self, idx, coords, value):
+        self.main.main.graphs_scan[-1].update_data(self._scan_worker.data, new_value = value)
 
     def _on_scan_progress(self, current, total):
-        self.progress_bar.setValue(int(current / total * 100))
+        # self.progress_bar.setValue(int(current / total * 100))
+        pass
 
     def _on_scan_finished(self):
-        self.status_label.setText("Scan complete")
+        # self.status_label.setText("Scan complete")
+        print()
+        print("Scan complete")
+        self.main.main.scanner = None
 
     def _on_scan_error(self, message):
         QMessageBox.critical(self, "Scan error", message)
+        
+    def _clear_scan_refs(self):
+        self._scan_thread = None
+        self._scan_worker = None
 
     def stop_scan(self):
         if hasattr(self, '_scan_worker'):
@@ -373,59 +518,98 @@ class MeasureWorker(QObject):
             self.error.emit(str(e))
             
             
+class ContinuousReadWorker(QObject):
+    reading = Signal(object)   # emits each measured value
+    error = Signal(str)
+    finished = Signal()
+
+    def __init__(self, measure_fn, interval_ms=500, graph = None):
+        super().__init__()
+        self.measure_fn = measure_fn
+        self.interval_ms = interval_ms
+        self._running = True
+
+    def stop(self):
+        self._running = False
+
+    def run(self):
+        try:
+            while self._running:
+                value = self.measure_fn()
+                self.reading.emit(value)
+
+                # sleep in small chunks so stop() is noticed quickly
+                # rather than blocking a full interval after stop() is called
+                slept = 0
+                chunk = 100  # ms
+                while slept < self.interval_ms and self._running:
+                    QThread.msleep(chunk)
+                    slept += chunk
+        except Exception as e:
+            self.error.emit(str(e))
+        finally:
+            self.finished.emit()        
             
             
-            
-            
-class ScanWorker(QObject):
-    point_measured = Signal(dict, object)   # (coords_dict, measured_value) - emitted after each point
+class ScanWorker(QObject): 
+    point_measured = Signal(tuple, dict, object)
     finished = Signal()
     error = Signal(str)
-    progress = Signal(int, int)             # (current_index, total_points)
+    progress = Signal(int, int)
 
-    def __init__(self, axes, move_fn, measure_fn):
+    def __init__(self, axes, move_fns, measure_fn):
         """
         axes: dict like {'x': [-10, 10, 1], 'y': [0, 5, 1]}
-              meaning start, stop, step (inclusive)
-        move_fn: callable(coords_dict) -> moves the instrument to that position
-        measure_fn: callable() -> returns a measurement value
+        move_fns: dict like {'x': move_x_fn, 'y': move_y_fn}
+                  each move_fns[name](value) moves just that axis
+        measure_fn: callable() -> value
         """
         super().__init__()
         self.axes = axes
-        self.move_fn = move_fn
+        self.move_fns = move_fns
         self.measure_fn = measure_fn
         self._stop_requested = False
+
+        self.axis_names = list(axes.keys())
+        self.axis_values = []
+        for name in self.axis_names:
+            start, stop, step = axes[name]
+            values = np.arange(start, stop + step / 2, step)
+            self.axis_values.append(values)
+
+        self.shape = tuple(len(v) for v in self.axis_values)
+        self.data = np.full(self.shape, np.nan)
 
     def request_stop(self):
         self._stop_requested = True
 
-    def _build_grid(self):
-        axis_names = list(self.axes.keys())
-        axis_ranges = []
-        for name in axis_names:
-            start, stop, step = self.axes[name]
-            # include stop point, guard against float drift
-            values = np.arange(start, stop + step / 2, step)
-            axis_ranges.append(values)
-
-        combos = itertools.product(*axis_ranges)
-        return axis_names, list(combos)
-
     def run(self):
         try:
-            axis_names, combos = self._build_grid()
+            index_ranges = [range(len(v)) for v in self.axis_values]
+            combos = list(itertools.product(*index_ranges[::-1]))
             total = len(combos)
 
-            for i, combo in enumerate(combos):
+            last_coords = {name: None for name in self.axis_names}
+
+            for i, rev_idx in enumerate(combos):
                 if self._stop_requested:
                     break
 
-                coords = dict(zip(axis_names, combo))
+                idx = rev_idx[::-1]
+                coords = {
+                    name: self.axis_values[a][idx[a]]
+                    for a, name in enumerate(self.axis_names)
+                }
 
-                self.move_fn(coords)
-                value = self.measure_fn()
+                # only move axes whose value actually changed
+                for name in self.axis_names:
+                    if coords[name] != last_coords[name]:
+                        self.move_fns[name](coords[name])
+                        last_coords[name] = coords[name]
 
-                self.point_measured.emit(coords, value)
+                value = np.sum(self.measure_fn())
+                self.data[idx] = value
+                self.point_measured.emit(idx, coords, value)
                 self.progress.emit(i + 1, total)
 
             self.finished.emit()

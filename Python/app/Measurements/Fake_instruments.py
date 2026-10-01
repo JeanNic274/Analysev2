@@ -1,7 +1,7 @@
 
 import time
 import numpy as np
-
+import sys
 
 
 
@@ -27,6 +27,8 @@ class Fake_MH150():
         pass
     
     
+    def getCountRates(self):
+        return 1000*np.random.randint(1,100), 1000*np.random.randint(1,100)
     
     
     
@@ -35,10 +37,16 @@ class Fake_MH150():
     
 class Fake_NanoPositionner():
     def __init__(self):
+        self.move = move_nano()    
+        
+class move_nano():
+    def __init__(self):
         pass
     
-
-        
+    def setControlTargetPosition(self,axis,pos):
+        sys.stdout.write("\r"+f"Going: {axis}, {pos}")
+        sys.stdout.flush()
+        time.sleep(0.11)
     
 
 

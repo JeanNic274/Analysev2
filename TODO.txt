@@ -39,6 +39,8 @@
 make label text in grpah/plot_area instead of dataset (possible??)
 
 
+Do detection class like Scanner
+
 clean up import to use ., .., ..., ...
 
 Measurement mode:

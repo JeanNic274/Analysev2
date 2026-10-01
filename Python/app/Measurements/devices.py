@@ -1,7 +1,8 @@
 import time
 
 import Python.app.Measurements.Fake_instruments as FAKE
-from Python.app.Measurements.detection import start_apds, start_apds_trpl, start_spectro
+# from Python.app.Measurements.detection import start_apds, start_apds_trpl, start_spectro
+from Python.app.Measurements.Fake_instruments import *
 
 def close_device_all(sn=None, amc=None,showcmd=True, daq=None, t_ch1=None, t_ch2=None, spectro=None, camera=None,laser=None):
     try:
@@ -39,9 +40,28 @@ def start_default_devices(spectro=True):
     return spectro_device
 
 
-def FAKE_start_default_devices(spectro=True):
-    if spectro:
-        spectro_device = FAKE.Fake_spectrometer()
+
+class Scanner():
+    def __init__(self,axes):
+        self.axes = axes
+        self.NanoPos = None
         
-    return spectro_device
+    def move_fns(self):
+        fns = {}
+        for axe in self.axes:
+            if axe =='x':
+                if self.NanoPos is None:
+                    self.NanoPos = Fake_NanoPositionner()
+                fns[axe] = lambda v: self.NanoPos.move.setControlTargetPosition(0,v)
+            if axe =='y':
+                if self.NanoPos is None:
+                    self.NanoPos = Fake_NanoPositionner()
+                fns[axe] = lambda v: self.NanoPos.move.setControlTargetPosition(1,v)
+            if axe =='z':
+                if self.NanoPos is None:
+                    self.NanoPos = Fake_NanoPositionner()
+                fns[axe] = lambda v: self.NanoPos.move.setControlTargetPosition(2,v)
+            
+        return fns
+
     

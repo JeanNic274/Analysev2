@@ -32,9 +32,12 @@ class MainWindow(QMainWindow):
         self.measurement_mode_on = False
         # Device graphs
         self.graph_spectrometer = None
+        self.graph_rate_graph = None
+        self.graphs_scan=[]
         
         #Devices
         self.device_spectrometer = None
+        self.device_MH150 = None
         self.graph_windows = {}
 
         central = QWidget()
@@ -93,6 +96,10 @@ class MainWindow(QMainWindow):
             
         if self.device_spectrometer == None:
             self.device_spectrometer = Fake_spectrometer()
+            
+        # ----- 
+        if self.device_MH150 == None:
+            self.device_MH150 = Fake_MH150()
 
 
 

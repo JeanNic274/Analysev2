@@ -490,9 +490,9 @@ def build_colormap_from_handles(values_dict, vmin=None, vmax=None):
     normalized_colors = []
     for c in colors:
         if isinstance(c, str):
-            normalized_colors.append(c)  # hex string, e.g. "#440154"
+            normalized_colors.append(c)  # hex string
         else:
-            # assume (r,g,b,a) in 0-255, convert to 0-1 floats
+            # assume (r,g,b,a) in 0-255, converts to 0-1 floats
             normalized_colors.append(tuple(v / 255 for v in c))
 
     cmap = mcolors.LinearSegmentedColormap.from_list(
