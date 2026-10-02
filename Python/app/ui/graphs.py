@@ -11,6 +11,7 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib import ticker
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from Python.app.Plotting.utils import *
 from Python.app.Processing.data_import import Data_Set_Import
@@ -302,7 +303,6 @@ class BaseMap(QWidget):
             self.ax = self.figure.add_subplot(111)
             self.ax.margins(0,0.01)
     
-            self.gen_axis() 
         
             self.figure.set_layout_engine('tight')
             self._bg = self.canvas.copy_from_bbox(self.ax.bbox) 
@@ -310,11 +310,22 @@ class BaseMap(QWidget):
             
         #--------------------------------------------------------#
         
-        graph_layout.addWidget(self.toolbar)
-        graph_layout.addWidget(self.canvas)
+            graph_layout.addWidget(self.toolbar)
+            graph_layout.addWidget(self.canvas)
 
-        main_layout.addLayout(button_layout)
-        main_layout.addLayout(graph_layout, 1)
+            main_layout.addLayout(button_layout)
+            main_layout.addLayout(graph_layout, 1)
+            
+            self.slider_layout = QVBoxLayout()
+            self.slider_layout.setContentsMargins(0,2,0,2)
+            self.slider = MultiSlider()
+
+
+            self.slider.valuesChanged.connect(self.slider_changed)
+
+            self.slider_layout.addWidget(self.slider)
+            main_layout.addLayout(self.slider_layout)
+            self.gen_axis() 
             
     def _get_info(self):
         text, ok = QInputDialog.getText(self,"Info", "Enter attribute name")
@@ -401,21 +412,34 @@ class BaseMap(QWidget):
   
     def update_data(self, data,new_value):
         self.image.set_data(data)
-
+        if self.data_min == np.inf:
+            self.data_min = new_value
+            self.data_max = new_value+1
+            self.slider.setRange(new_value,new_value+1)
+            
+        
         if new_value is not None and not np.isnan(new_value):
             if self.data_min is None or new_value < self.data_min:
                 self.data_min = new_value
-                self.image.set_clim(vmin=self.data_min, vmax=self.data_max)
+                self.slider.setRange(self.data_min, self.data_max)
+                self.slider.setValues({
+                    '#440154': self.data_min,
+                    '#21918c': self.data_min+0.5*(self.data_max-self.data_min),
+                    '#FDE725': self.data_max,
+                    
+                })
             if self.data_max is None or new_value > self.data_max:
                 self.data_max = new_value
-                self.image.set_clim(vmin=self.data_min, vmax=self.data_max)
+                self.slider.setRange(self.data_min, self.data_max)
+                self.slider.setValues({
+                    '#440154': self.data_min,
+                    '#21918c': self.data_min+0.5*(self.data_max-self.data_min),
+                    '#FDE725': self.data_max,
+                    
+                })
+                
         self.canvas.draw_idle()
                 
-    def _apply_shared_clim(self):
-        for mesh in self.lines.values():
-            mesh.set_clim(vmin=self.minimum, vmax=self.maximum)
-        self.canvas.draw_idle()
-        
 
     def slider_changed(self,values_dict):
         if len(values_dict) < 2:
@@ -431,12 +455,11 @@ class BaseMap(QWidget):
             vmax=handle_max
         )
 
-        for mesh in self.lines.values():
-            mesh.set_cmap(cmap)
-            mesh.set_clim(vmin=vmin, vmax=vmax)
+        self.image.set_cmap(cmap)
+        self.image.set_clim(vmin=vmin, vmax=vmax)
 
-        if self.colorbar is not None and self.lines:
-            self.colorbar.update_normal(next(iter(self.lines.values())))
+        if self.colorbar is not None:
+            self.colorbar.update_normal(self.image)
 
         self.canvas.draw_idle()
         
@@ -572,13 +595,18 @@ class RateGraph(QWidget):
         
         
 class ScanPlot(BaseMap):
-    def __init__(self,main_window):
+    def __init__(self,main_window,axes):
         self.buttons = [ 'axvline', 'axhline', 'clear']
         self.x_lab = "x (μm)"
         self.y_lab = "y (μm)"
         self.z_lab = "Counts/s"
+        self.xmin = axes[list(axes.keys())[0]][0]
+        self.xmax = axes[list(axes.keys())[0]][1]
+        self.ymin = axes[list(axes.keys())[1]][0]
+        self.ymax = axes[list(axes.keys())[1]][1]
         
         super().__init__(main_window)
+        
         
         self.xaxis = 'x'
         self.yaxis = 'y'
@@ -586,9 +614,20 @@ class ScanPlot(BaseMap):
 
 
     def gen_axis(self):
-        self.image = self.ax.imshow([[1,1],[1,1]], cmap='viridis', origin='lower')
+        self.image = self.ax.imshow([[1,1],[1,1]],extent = (self.xmin,self.xmax,self.ymin,self.ymax), cmap='viridis', origin='lower')
         self.ax.set_aspect('equal')
         self.ax.set_ylabel(self.y_lab)
         self.ax.set_xlabel(self.x_lab)
+        self.ax.set_xlim(self.xmin,self.xmax)
+        self.ax.set_ylim(self.ymin,self.ymax)
+        divider = make_axes_locatable(self.ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        self.colorbar = self.figure.colorbar(self.image, cax=cax)
+        self.slider.setValues({
+            '#440154': 100,
+            '#21918c': 80,
+            '#FDE725': 60,
+            
+        })
         # self.ax.xaxis.set_major_locator(plt.MaxNLocator(9))
         # self.ax.yaxis.set_major_locator(plt.MaxNLocator(9))

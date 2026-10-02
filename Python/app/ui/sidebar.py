@@ -6,7 +6,7 @@ import numpy as np
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
-    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox
+    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView
 )
 # print('imported QTWidget', time.time()-t)
 # t=time.time()
@@ -433,10 +433,34 @@ class UI_Scan(QFrame):
         
         layer1.addWidget(btn_measure)
         
+        
+        layer2 = QHBoxLayout()
+        
+        layer2.addWidget(QLabel('Scan Parameters: '))
+        
+        layer2.addWidget(MyQComboBox())
+        
+        layer3 = QHBoxLayout()
+        self.scan_parameters = QTableWidget()
+        layer3.addWidget(self.scan_parameters)
+        
+        self.scan_parameters.setDragEnabled(1)
+        self.scan_parameters.setAcceptDrops(1)
+        self.scan_parameters.setDefaultDropAction(Qt.DropAction.CopyAction)
+        self.scan_parameters.setColumnCount(4)
+        self.scan_parameters.setHorizontalHeaderLabels(('Start','Stop','Step','On'))
+        
+        self.scan_parameters.setRowCount(3)
+        scan_params = ('x','y','z')
+        self.scan_parameters.setVerticalHeaderLabels(scan_params)
+        self.scan_parameters.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        
         self.layout.addLayout(layer1)
+        self.layout.addLayout(layer2)
+        self.layout.addLayout(layer3)
         
     def start_scan(self, axes={'x':[0,5,1],'y':[10,15,1]}):
-        axes={'x':[0,10,1],'y':[10,20,1]}
+        axes={'x':[0,10,1],'y':[10,15,1]}
         device = self.main.main.device_MH150
         
         self.main.main.scanner = Scanner(axes)
@@ -451,7 +475,7 @@ class UI_Scan(QFrame):
         def measure_fn():
             return device.getCountRates()
 
-        graph = ScanPlot(self)
+        graph = ScanPlot(self,axes)
         graph.show()
         self.main.main.graphs_scan.append(graph)
         
@@ -570,7 +594,7 @@ class ScanWorker(QObject):
         self.measure_fn = measure_fn
         self._stop_requested = False
 
-        self.axis_names = list(axes.keys())
+        self.axis_names = list(reversed(axes.keys()))
         self.axis_values = []
         for name in self.axis_names:
             start, stop, step = axes[name]
@@ -586,22 +610,23 @@ class ScanWorker(QObject):
     def run(self):
         try:
             index_ranges = [range(len(v)) for v in self.axis_values]
-            combos = list(itertools.product(*index_ranges[::-1]))
+            combos = list(itertools.product(*index_ranges))
             total = len(combos)
 
             last_coords = {name: None for name in self.axis_names}
 
-            for i, rev_idx in enumerate(combos):
+            for i, idx in enumerate(combos):
+            # for i, rev_idx in enumerate(combos):
                 if self._stop_requested:
                     break
 
-                idx = rev_idx[::-1]
+                # idx = rev_idx[::-1]
                 coords = {
                     name: self.axis_values[a][idx[a]]
                     for a, name in enumerate(self.axis_names)
                 }
 
-                # only move axes whose value actually changed
+                # only move relevant axes
                 for name in self.axis_names:
                     if coords[name] != last_coords[name]:
                         self.move_fns[name](coords[name])
