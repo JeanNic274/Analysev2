@@ -28,7 +28,7 @@ class Fake_MH150():
     
     
     def getCountRates(self):
-        return 1000*np.random.randint(1,100), 1000*np.random.randint(1,100)
+        return (1000*np.random.randint(1,100), 1000*np.random.randint(1,100))
     
     
     

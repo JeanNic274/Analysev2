@@ -203,13 +203,14 @@ class BasePlot(QWidget):
             line.set_data(np.append(line.get_xdata(),t),np.append(line.get_ydata(),ydata))
         self._refresh()
         
-    def update_data(self,xdatas=None,ydatas=None):
+    def update_data(self,ydatas=None,xdatas=None, new_value = None):
         if ydatas is not None:
             for line,ydata in zip(self.lines,ydatas):
                 line.set_ydata(ydata)
         if xdatas is not None:
             for line,xdata in zip(self.lines,xdatas):
                 line.set_xdata(xdata)
+            
         self._refresh()
         
     def gen_axis(self):
@@ -217,7 +218,7 @@ class BasePlot(QWidget):
         self.ax.set_ylabel(self.ylab)
         self.ax.set_xlabel(self.xlab)
         self.ax.set_ylim(0,10)
-        for idx,_ in enumerate(range(self.n_lines)):
+        for idx in range(self.n_lines):
             line, = self.ax.plot([],[],color=self.color[idx])
             self.lines.append(line)
             
@@ -410,7 +411,8 @@ class BaseMap(QWidget):
         self.canvas.flush_events()
 
   
-    def update_data(self, data,new_value):
+    def update_data(self, data,new_value,coords = None):
+        new_value = new_value[-1]
         self.image.set_data(data)
         if self.data_min == np.inf:
             self.data_min = new_value
@@ -419,7 +421,7 @@ class BaseMap(QWidget):
             
         
         if new_value is not None and not np.isnan(new_value):
-            if self.data_min is None or new_value < self.data_min:
+            if new_value < self.data_min:
                 self.data_min = new_value
                 self.slider.setRange(self.data_min, self.data_max)
                 self.slider.setValues({
@@ -428,7 +430,7 @@ class BaseMap(QWidget):
                     '#FDE725': self.data_max,
                     
                 })
-            if self.data_max is None or new_value > self.data_max:
+            if new_value > self.data_max:
                 self.data_max = new_value
                 self.slider.setRange(self.data_min, self.data_max)
                 self.slider.setValues({
@@ -592,9 +594,42 @@ class RateGraph(QWidget):
         self.main.graph_rate_graph = None
         self.main.UI_MH150.btn_rate_graph.setChecked(False)
         event.accept()
+
+
+class ScanPlot1D(BasePlot):
+    def __init__(self,main_window,axes):
+        self.buttons = [ 'axvline', 'axhline', 'clear']
+        self.x_lab = "f (μm)"
+        self.y_lab = "Counts/s"
+        self.axes = axes
+        self.axes_key = next(iter(axes))
+        super().__init__(main_window,n_lines=3)
         
         
-class ScanPlot(BaseMap):
+        self.xaxis = 'x'
+        self.yaxis = 'count'
+
+
+    def gen_axis(self):
+        self.lines = []
+        self.ax.set_ylabel(self.ylab)
+        self.ax.set_xlabel(self.xlab)
+        X = np.arange(self.axes[self.axes_key][0],self.axes[self.axes_key][1],self.axes[self.axes_key][1])
+        Y= np.full_like(X,fill_value=np.nan)
+        for idx in range(self.n_lines):
+            line, = self.ax.plot(X,Y,color=self.color[idx])
+            self.lines.append(line)
+            
+            
+    
+    def update_data(self,ydatas=None, new_value = None,coords = None):
+        for line,ydata in zip(self.lines,new_value):
+            line.set_data(np.append(line.get_xdata(),coords[self.axes_key]),np.append(line.get_ydata(),ydata))
+            
+        self._refresh()
+        
+        
+class ScanPlot2D(BaseMap):
     def __init__(self,main_window,axes):
         self.buttons = [ 'axvline', 'axhline', 'clear']
         self.x_lab = "x (μm)"

@@ -413,6 +413,7 @@ class UI_Scan(QFrame):
         super().__init__()
         self.main = main_window
         
+        self.params_enabled = {}
         self.setFrameShape(QFrame.StyledPanel)
         
         self.val = None
@@ -443,24 +444,101 @@ class UI_Scan(QFrame):
         layer3 = QHBoxLayout()
         self.scan_parameters = QTableWidget()
         layer3.addWidget(self.scan_parameters)
-        
+        self.scan_parameters.setStyleSheet("""
+            QTableWidget::item {
+                padding-left: 5px;
+                padding-right: 5px;
+                padding-top: 1px;
+                padding-bottom: 1px;
+            }
+        """)
         self.scan_parameters.setDragEnabled(1)
         self.scan_parameters.setAcceptDrops(1)
         self.scan_parameters.setDefaultDropAction(Qt.DropAction.CopyAction)
         self.scan_parameters.setColumnCount(4)
-        self.scan_parameters.setHorizontalHeaderLabels(('Start','Stop','Step','On'))
+        self.scan_parameters.setHorizontalHeaderLabels(('Start','Stop','Step',''))
         
         self.scan_parameters.setRowCount(3)
         scan_params = ('x','y','z')
         self.scan_parameters.setVerticalHeaderLabels(scan_params)
-        self.scan_parameters.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        # self.scan_parameters.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        for i in range(self.scan_parameters.columnCount()-1):
+            self.scan_parameters.horizontalHeader().setSectionResizeMode(i,QHeaderView.Stretch)
+        self.scan_parameters.setColumnWidth(3,10)
+        self.scan_parameters.horizontalHeader().setSectionResizeMode(3,QHeaderView.Fixed)
+        # self.scan_parameters.setColumnWidth(3,10)
+        
+        for i, param in enumerate(scan_params):
+            self.params_enabled[param] = QTableWidgetItem()
+            self.params_enabled[param].setTextAlignment(4)
+            self.params_enabled[param].setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            self.scan_parameters.setItem(i,3,self.params_enabled[param])
+            start_item = QTableWidgetItem()
+            stop_item = QTableWidgetItem()
+            step_item = QTableWidgetItem()
+        # default scan param for dev
+            start_item.setText("0")
+            stop_item.setText("10")
+            step_item.setText("1")
+            self.scan_parameters.setItem(i,0,start_item)
+            self.scan_parameters.setItem(i,1,stop_item)
+            self.scan_parameters.setItem(i,2,step_item)
+            
+        # default enabled:
+        self.params_enabled[scan_params[0]].setCheckState(Qt.Checked)
+        self.params_enabled[scan_params[1]].setCheckState(Qt.Checked)
+        self.params_enabled[scan_params[2]].setCheckState(Qt.Unchecked)
+        
         
         self.layout.addLayout(layer1)
         self.layout.addLayout(layer2)
         self.layout.addLayout(layer3)
         
-    def start_scan(self, axes={'x':[0,5,1],'y':[10,15,1]}):
-        axes={'x':[0,10,1],'y':[10,15,1]}
+        
+    
+    def get_scan_parameters(self):
+        result = {}
+        last_col = self.scan_parameters.columnCount() - 1
+
+        for row in range(self.scan_parameters.rowCount()):
+            header_item = self.scan_parameters.verticalHeaderItem(row)
+            key = header_item.text() if header_item else str(row)
+
+            checkbox_item = self.scan_parameters.item(row, last_col)
+            is_checked = checkbox_item.checkState() == Qt.Checked if checkbox_item else False
+
+            if not is_checked:
+                continue  # skip if not checked
+
+            values = []
+            for col in range(last_col):  
+                item = self.scan_parameters.item(row, col)
+                try:
+                    values.append(float(item.text()))
+                except (ValueError, AttributeError):
+                    QMessageBox.critical(self, f"Error Scan Parameters",f"Bad input at: {(row, col)}")
+                    return None
+                
+            if values[0]==values[1]:
+                QMessageBox.critical(self, f"Error Scan Parameters",f"Stop cannot be the same as Start")
+                return None
+                
+            if values[0]>values[1]:
+                values[0], values[1] = values[1], values[0]
+                
+                
+            result[key] = values
+
+        return result
+    
+    
+    def start_scan(self, axes=None):
+        axes = self.get_scan_parameters()
+        
+        if axes == None:
+            return
+        
+        # axes={'x':[0,10,1],'y':[10,15,1]}
         device = self.main.main.device_MH150
         
         self.main.main.scanner = Scanner(axes)
@@ -474,8 +552,10 @@ class UI_Scan(QFrame):
 
         def measure_fn():
             return device.getCountRates()
-
-        graph = ScanPlot(self,axes)
+        if len(axes) == 1:
+            graph = ScanPlot1D(self,axes)
+        else:
+            graph = ScanPlot2D(self,axes)
         graph.show()
         self.main.main.graphs_scan.append(graph)
         
@@ -497,7 +577,7 @@ class UI_Scan(QFrame):
         self._scan_thread.start()
 
     def _on_point_measured(self, idx, coords, value):
-        self.main.main.graphs_scan[-1].update_data(self._scan_worker.data, new_value = value)
+        self.main.main.graphs_scan[-1].update_data(self._scan_worker.data, new_value = value,coords=coords)
 
     def _on_scan_progress(self, current, total):
         # self.progress_bar.setValue(int(current / total * 100))
@@ -632,9 +712,10 @@ class ScanWorker(QObject):
                         self.move_fns[name](coords[name])
                         last_coords[name] = coords[name]
 
-                value = np.sum(self.measure_fn())
-                self.data[idx] = value
-                self.point_measured.emit(idx, coords, value)
+                value = self.measure_fn()
+                values = (value) + (np.sum(value),)
+                self.data[idx] = values[-1]
+                self.point_measured.emit(idx, coords, values)
                 self.progress.emit(i + 1, total)
 
             self.finished.emit()
