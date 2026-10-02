@@ -10,7 +10,7 @@ import os
 # from lmfit import Model, Parameters, models
 # print('imported lmfit', time.time()-t)
 # t=time.time()
-from app.Processing.misc import header_extract
+from Python.app.Processing.misc import header_extract
 # print('imported header_extract', time.time()-t)
 
 col_names = {
@@ -35,6 +35,9 @@ col_merged = {
 class Data_Set_Import:
 
     def import_data(self,file_path):
+        if self.file_type == "Empty file":
+            self.data = np.zeros(10)
+            return
         names = col_names.get(self.file_type)
         col_error = False
         if names is not None:
@@ -67,6 +70,8 @@ class Data_Set_Import:
             # self.data=np.genfromtxt(file_path,comments="#",delimiter="\t",encoding="latin-1",names=True)
         self.data = np.nan_to_num(self.data, nan=0)
     def init_data(self):
+        if self.file_type == "Empty file":
+            return
         new_names = []
         new_values = []
         if 'ev' in self.data.dtype.names:
@@ -160,7 +165,9 @@ def fit_data(df,graph,fit_idx):
     
     p0=parameters['p0s'][fit_idx][2:]
     xfit0=0
-    
+    p0 = [x for x in p0 if x is not None]
+
+
     if parameters['model']=='Gaussian':
         nb_func=len(p0)//3
         cstmodel=len(p0)%3
@@ -245,11 +252,11 @@ def fit_data(df,graph,fit_idx):
             model+=models.ExponentialModel(prefix=pref)
 
             pars.add_many(
-                (pref+"amplitude",p0[2*p_idx+3],True,0,None),
-                (pref+'decay',p0[2*p_idx+4],True,0,None),
+                (pref+"amplitude",p0[2*p_idx+2],True,0,None),
+                (pref+'decay',p0[2*p_idx+3],True,0,None),
                 )
     
-    if parameters['model']=='Stretched':
+    if parameters['model']=='StretchedExp':
         
         xfit-=parameters['p0s'][fit_idx][0]
         xfit0=1
@@ -266,10 +273,15 @@ def fit_data(df,graph,fit_idx):
             ('beta',p0[2],True,0,1),
             )
         
-            
-    if cstmodel:
+    if cstmodel==1:
         model+=models.ConstantModel()
         pars.add('c',p0[-1],True,0,None)
+    elif cstmodel ==2:
+        model+=models.LinearModel()
+        pars.add_many(
+            ('slope',p0[-1],True,0,None),
+            ('intercept',p0[-2],True,None,None)
+        )
         
     if df.measure_type == 'trpl':
         result = model.fit(yfit, pars, x=xfit,weights=1/np.sqrt(np.abs(yfit)))

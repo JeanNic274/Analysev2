@@ -1,0 +1,183 @@
+{
+    "spectrum": {
+        "attributes": {
+            "xlim": null,
+            "ylim": null,
+            "title": "",
+            "vlines": [],
+            "hlines": [],
+            "yaxis": "count_cor",
+            "groups": {
+                "0": [],
+                "1": [],
+                "2": [],
+                "3": [],
+                "4": []
+            },
+            "x_lab": "Wavelength (nm)",
+            "y_lab": "Counts/s",
+            "labels": {
+                "number": true,
+                "name": true,
+                "power": true,
+                "pos": true,
+                "posf": 0,
+                "filter": 0
+            },
+            "toggles": {
+                "normalize": 0,
+                "annotations": [],
+                "yoffset": 0,
+                "legend": 1,
+                "xoffsets": {}
+            },
+            "fit_params": {
+                "model": "Cauchy",
+                "P_init": false,
+                "Single": false,
+                "p0s": [
+                    [
+                        420.0,
+                        470.0,
+                        1.0,
+                        430.0,
+                        1.0
+                    ],
+                    [
+                        420.0,
+                        470.0,
+                        1.0,
+                        430.0,
+                        1.0
+                    ],
+                    [
+                        420.0,
+                        470.0,
+                        1.0,
+                        430.0,
+                        1.0
+                    ],
+                    [
+                        420.0,
+                        470.0,
+                        1.0,
+                        430.0,
+                        1.0
+                    ]
+                ],
+                "fit_results": {
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_9.txt": {
+                        "a0_amplitude": 250.34932600075166,
+                        "a0_center": 442.19904172194646,
+                        "a0_sigma": 10.717018608413252
+                    },
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_23.txt": {
+                        "a0_amplitude": 139.469746755804,
+                        "a0_center": 444.6670262876885,
+                        "a0_sigma": 9.330085856408015
+                    },
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_27.txt": {
+                        "a0_amplitude": 86.5028331517941,
+                        "a0_center": 424.805347141796,
+                        "a0_sigma": 7.8533051998559795
+                    },
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_47.txt": {
+                        "a0_amplitude": 180.77939892681988,
+                        "a0_center": 439.8840331901395,
+                        "a0_sigma": 4.078237765995384
+                    }
+                },
+                "Print": true
+            }
+        },
+        "filepaths": [
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_9.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_23.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_27.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_47.txt"
+        ]
+    },
+    "trpl": {
+        "attributes": {
+            "xlim": null,
+            "ylim": null,
+            "title": "",
+            "vlines": [],
+            "hlines": [],
+            "yaxis": "count",
+            "x_lab": "Time (ns)",
+            "y_lab": "Counts/s",
+            "labels": {
+                "number": true,
+                "name": true,
+                "power": true,
+                "pos": true,
+                "posf": 0,
+                "filter": 0
+            },
+            "toggles": {
+                "normalize": 0,
+                "annotations": [],
+                "yoffset": 0,
+                "legend": 1,
+                "xoffsets": {}
+            },
+            "fit_params": {
+                "model": "Exponential",
+                "P_init": false,
+                "Single": false,
+                "p0s": [
+                    [
+                        1.2,
+                        2.0,
+                        1.0,
+                        1.0
+                    ],
+                    [
+                        1.2,
+                        4.5,
+                        1.0,
+                        1.0
+                    ],
+                    [
+                        1.2,
+                        3.0,
+                        1.0,
+                        1.0
+                    ],
+                    [
+                        1.2,
+                        3.0,
+                        1.0,
+                        1.0
+                    ]
+                ],
+                "fit_results": {
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_7.txt": {
+                        "a0_amplitude": 8.90259668111367,
+                        "a0_decay": 0.6836690177950058
+                    },
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_21.txt": {
+                        "a0_amplitude": 118.63619853941982,
+                        "a0_decay": 0.9566478949194197
+                    },
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_25.txt": {
+                        "a0_amplitude": 105.97556668761224,
+                        "a0_decay": 0.5286316148178114
+                    },
+                    "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_50.txt": {
+                        "a0_amplitude": 500.5293304629188,
+                        "a0_decay": 0.43553044660444806
+                    }
+                },
+                "Print": true
+            }
+        },
+        "filepaths": [
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_7.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_21.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_25.txt",
+            "C:\\Users\\jnich\\OneDrive - USherbrooke\\Uni\\PhD\\Data\\micro-PL\\26_08_10\\Data_260810_0_50.txt"
+        ]
+    }
+}

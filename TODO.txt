@@ -32,10 +32,43 @@
 - [x] add number class that is called whenever curve number is requested
 - [x] add colormap editer (à la labview)
 - [ ] permit reset groups (might be hard)
-
-map get info
-
+- [x] fit linear background toggle (ish doesnt work for 2 fit param function, but whatever)
+- [ ] fit model for each curve
+- [x] fit allow none to not ocunt as parameter (different number of peak per curve)
+- [ ] bug fit keeping in memory removed dataset and saving it (cannot reproduce)
 make label text in grpah/plot_area instead of dataset (possible??)
+
+
+Do detection class like Scanner
+
+clean up import to use ., .., ..., ...
+
+Measurement mode:
+- mpd_mh_trpl.ini (detection.py)
+- find unload
+- find thorlabs tsi sdk (detection.py)
 
 !! remove number with groups is bricked up (they are not assigned a number)(fixed?) !!
 
+PyHegel changes:
+Pyside -> Pyside6
+mpl backends -> qt5agg
+commented _sweep instruments and _Clock in commands.py
+
+====== Installing pyHegel ======
+activate venv
+cd pyHegel
+python -m pip install -e .
+================================
+
+
+Added library:
+- IPython
+- Pyvisa
+- pyvisa-py
+- pytz
+- snAPI
+- nidaqmx
+- serial
+- pylablib
+x instrumental-lib

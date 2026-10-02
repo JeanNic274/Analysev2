@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-from app.Processing.data_import import Data_Set_Import
+from Python.app.Processing.data_import import Data_Set_Import
 
 def save_exp(plot_area_widget,filename = 'test'):
     save_path = Path('data','experiments',filename)
@@ -40,7 +40,7 @@ def save_exp(plot_area_widget,filename = 'test'):
 
 def load_exp(plot_area_widget,plot_area_index,filename = "test    2026-09-08 14-20-41"):
     print('Loading experiment: ', filename)
-    plot_area_widget.main.sidebar._clear_selection()
+    plot_area_widget.main.sidebar_view._clear_selection()
     
     with open(Path('data','experiments',filename), 'r') as file:
         experiment = json.load(file)

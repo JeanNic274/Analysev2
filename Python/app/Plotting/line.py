@@ -1,8 +1,8 @@
 # import numpy as np
 from sys import float_info
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog
-from PySide6.QtCore import QSize
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog, QComboBox
+from PySide6.QtCore import QSize, QTimer
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -10,10 +10,10 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 
-from app.Plotting.utils import *
-from app.Processing.data_import import Data_Set_Import
-from app.Processing.io import prevent_overwrite_file, save_figure_export, save_fit
-from app.ui.DialogWindow import FitManager
+from Python.app.Plotting.utils import *
+from Python.app.Processing.data_import import Data_Set_Import
+from Python.app.Processing.io import prevent_overwrite_file, save_figure_export, save_fit
+from Python.app.ui.DialogWindow import FitManager
 
 plt.rcParams.update({
     "font.size": 16,
@@ -21,9 +21,9 @@ plt.rcParams.update({
 })
 
 class BasePlot(QWidget):
-    def __init__(self, main_window):
+    def __init__(self, main_window, xlim = None, resize_override = True):
         super().__init__()
-
+        
         self.main = main_window
         self.EXPORT_STYLE = {"width": 6.4,"height": 4.8,"dpi": 200,"font_size": 10,"legend_font_size": 9,}
         self.save_params = {'save_name':'temp','extension':'.png','transp':True}
@@ -42,7 +42,7 @@ class BasePlot(QWidget):
         self.used_colors = {}
 
         self.title = ""
-        self.xlim = None
+        self.xlim = xlim
         self.ylim = None
 
 
@@ -63,24 +63,21 @@ class BasePlot(QWidget):
         button_layout.setContentsMargins(4, 4, 4, 4)
         button_layout.setSpacing(5)
         # self.buttons = ['normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset']
-        if True:
+        if 'save' in self.buttons:
             btn_save = QPushButton("Save Graph")
-            btn_save.setFixedWidth(100)
             btn_save.clicked.connect(self.save_graph)
             button_layout.addWidget(btn_save)
+        if True:
             btn_get_info = QPushButton("Get Info")
-            btn_get_info.setFixedWidth(100)
             btn_get_info.clicked.connect(self._get_info)
             button_layout.addWidget(btn_get_info)
-            
+        if 'legend' in self.buttons:
             btn_legend = QPushButton("Legend")
-            btn_legend.setFixedWidth(100)
             btn_legend.clicked.connect(self.legend_toggle)
             button_layout.addWidget(btn_legend)
             
         if 'normalize' in self.buttons:
             btn_normalize = QPushButton("Normalize")
-            btn_normalize.setFixedWidth(100)
             btn_normalize.clicked.connect(self.normalize)
             button_layout.addWidget(btn_normalize)
         if 'ev_swap' in self.buttons:
@@ -107,14 +104,22 @@ class BasePlot(QWidget):
             btn_axhline = QPushButton("Ax H Line")
             btn_axhline.clicked.connect(self.axhline)
             button_layout.addWidget(btn_axhline)
-        if 'set y axis' in self.buttons:
-            btn_yaxis_select = QPushButton("Set y axis")
-            btn_yaxis_select.clicked.connect(self.yaxis_select)
-            button_layout.addWidget(btn_yaxis_select)
-        if 'set x axis' in self.buttons:
-            btn_xaxis_select = QPushButton("Set x axis")
-            btn_xaxis_select.clicked.connect(self.xaxis_select)
-            button_layout.addWidget(btn_xaxis_select)
+        if True:
+            # btn_yaxis_select = QComboBox("Set y axis")
+            self.btn_yaxis_select = MyQComboBox()
+            self.btn_yaxis_select.view().setAutoScroll(False)
+            self.btn_yaxis_select.currentTextChanged.connect(self.yaxis_select)
+            self.btn_yaxis_select.setFixedWidth(100)
+            button_layout.addWidget(self.btn_yaxis_select)
+            
+            # btn_xaxis_select = QComboBox("Set x axis")
+            self.btn_xaxis_select = MyQComboBox()
+            self.btn_xaxis_select.view().setAutoScroll(False)
+            self.btn_xaxis_select.currentTextChanged.connect(self.xaxis_select)
+            self.btn_xaxis_select.setFixedWidth(100)
+            button_layout.addWidget(self.btn_xaxis_select)
+            
+            
         if 'set y_offset' in self.buttons:
             btn_y_offset = QPushButton("Set y offset")
             btn_y_offset.clicked.connect(self.set_y_offset)
@@ -169,7 +174,7 @@ class BasePlot(QWidget):
         w = event.size().width()
         h = int(w * self.aspect_ratio)
         if w>1000:
-            right_margin = int(w*0.15)
+            right_margin = int(w*0.1)
         else:
             right_margin = 0
         self.layout().setContentsMargins(int(0.3*right_margin), 0, right_margin, 0)
@@ -178,6 +183,7 @@ class BasePlot(QWidget):
         if h > 0 and self.height() != h:
             self.setFixedHeight(h)
     
+        
 
     def axhline(self):
         text, ok = QInputDialog.getText(self,"AxHLine", "Enter y coordinates separated by commas:")
@@ -274,15 +280,12 @@ class BasePlot(QWidget):
         offset_lines(self,filepath=filepath,xaxis=self.xaxis,yaxis=self.yaxis)
         self._refresh()
 
-    def yaxis_select(self):
-        yaxis, ok = QInputDialog.getText(self, 'Set y axis', 'Enter y axis name.')
-        if yaxis and ok:
-            self.yaxis = yaxis
+    def yaxis_select(self,yaxis):
+        self.yaxis = yaxis
         self.refresh_curves() 
-    def xaxis_select(self):
-        xaxis, ok = QInputDialog.getText(self, 'Set x axis', 'Enter x axis name.')
-        if xaxis and ok:
-            self.xaxis = xaxis
+        
+    def xaxis_select(self,xaxis):
+        self.xaxis = xaxis
         self.refresh_curves() 
         
     def legend_toggle(self):
@@ -351,6 +354,15 @@ class BasePlot(QWidget):
         if not self.available_colors:
             # Reuse colors after cycle
             self.available_colors = list(self.colors)
+        if self.btn_yaxis_select.currentIndex() ==-1:
+            self.btn_yaxis_select.blockSignals(True)
+            self.btn_xaxis_select.blockSignals(True)
+            self.btn_yaxis_select.addItems(dataset.data.dtype.names)
+            self.btn_xaxis_select.addItems(dataset.data.dtype.names)
+            self.btn_yaxis_select.setCurrentText(self.yaxis)
+            self.btn_xaxis_select.setCurrentText(self.xaxis)
+            self.btn_yaxis_select.blockSignals(False)
+            self.btn_xaxis_select.blockSignals(False)
         
         color=self._get_color(filepath)
         # color = self.available_colors.pop(0)
@@ -449,18 +461,18 @@ class BasePlot(QWidget):
 
 
 class SpectrumPlot(BasePlot):
-    def __init__(self, main_window):
-        self.buttons = ['save','normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset','fit']
+    def __init__(self, main_window, buttons = ['save','normalize', 'ev_swap', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set y_offset','fit', 'legend'], yaxis = 'count_cor', labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}, xlim = None):
+        self.buttons = buttons
         self.xaxis = 'nm'
-        self.yaxis = 'count_cor'
-        super().__init__(main_window)
+        self.yaxis = yaxis
+        super().__init__(main_window,xlim)
 
 
         self.x_lab = "Wavelength (nm)"
         self.y_lab = "Counts/s"
 
         self.fit_params = {'model':'Gaussian', 'P_init':False,'Single':False,'p0s':[[420.0,450.0,1.0,430.0,1.0]],'fit_results':{},'Print':True}
-        self.labels = {'number': 1,'name': 1,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
+        self.labels = labels
         self.groups = {str(i): [] for i in range(5)}
         self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1,'xoffsets':{}}
         
@@ -579,7 +591,7 @@ class SpectrumPlot(BasePlot):
 
 class TRPLPlot(BasePlot):
     def __init__(self, main_window):
-        self.buttons = ['save','normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis','fit']
+        self.buttons = ['save','normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis','fit', 'legend']
         self.x_lab = "Time (ns)"
         self.y_lab = "Counts/s"
         self.xaxis = 'ns'
@@ -599,7 +611,7 @@ class TRPLPlot(BasePlot):
    
 class FocusPlot(BasePlot):
     def __init__(self, main_window):
-        self.buttons = ['save','normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis','fit']
+        self.buttons = ['save','normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis','fit', 'legend']
         self.x_lab = "f (μm)"
         self.y_lab = "Counts/s"
         self.xaxis = 'f'
@@ -618,25 +630,35 @@ class FocusPlot(BasePlot):
      
 
 class LinePlot(BasePlot):
-    def __init__(self, main_window,names):
-        self.buttons = ['save','normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set x axis','fit']
-        self.x_lab = "x"
-        self.y_lab = "y"
-        self.xaxis = names[0]
-        self.yaxis = names[-1]
-        self.names = names
-        print('Found axis are: ',names)
-        print('Plotting with ',names[0], ' as x axis and ', names[-1], 'as y axis.')
-        super().__init__(main_window)
-
+    def __init__(self, main_window,names = None, buttons = ['save','normalize', 'set_title', 'set_xlim', 'set_ylim', 'axvline', 'axhline', 'set y axis', 'set x axis','fit', 'legend'], labels = {'number': 0,'name': 0,'power': 0,'pos': 0,'posf': 0,'filter': 0,},yaxis=None,xlim=None, xlab = 'x', ylab = 'y', resize_override = True):
+        self.buttons = buttons
+        self.x_lab = xlab
+        self.y_lab = ylab
+        if names:
+            self.xaxis = names[0]
+            self.yaxis = names[-1]
+            self.names = names
+            print('Found axis are: ',names)
+            print('Plotting with ',names[0], ' as x axis and ', names[-1], 'as y axis.')
+        else:
+            self.yaxis= yaxis
+        
+        self.xlim = xlim
+        
+        super().__init__(main_window,resize_override = resize_override)
 
         self.fit_params = {'model':'Exponential', 'P_init':False,'Single':False, 'p0s':[[0.0,10.0,1.0,1.0]],'fit_results':{},'Print':True}
-        self.labels = {'number': 0,'name': 0,'power': 0,'pos': 0,'posf': 0,'filter': 0,}
+        self.labels = labels
         self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1,'xoffsets':{}}
         
     def gen_axis(self):
         self.ax.set_ylabel(self.y_lab)
         self.ax.set_xlabel(self.x_lab)
+        
+        if self.xlim:
+            self.ax.set_xlim(self.xlim)
+            
+        self._refresh()
         
 
     

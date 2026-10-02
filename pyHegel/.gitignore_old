@@ -1,0 +1,15 @@
+# *~
+# *.pyc
+# .spyderproject
+# .spyproject
+
+# # eliminate latex output
+# *.out
+# *.log
+# *.dvi
+# *.aux
+
+# # python install
+# dist/
+# build/
+# *.egg-info/

@@ -1,15 +1,19 @@
 import time
+from pathlib import Path
 t=time.time()
-from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout
-print(f'---------------- imported QtWidgets:{time.time()-t:.8f} --------------------')
+from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton, QApplication, QSplitter
+from PySide6.QtGui import QGuiApplication, Qt
+from PySide6.QtCore import QSettings
+print(f'---------------- imported Pyside6:  {time.time()-t:.8f} --------------------')
 t=time.time()
-from app.ui.sidebar import Sidebar
+from Python.app.ui.sidebar import SidebarView, SidebarMeasure
 print(f'---------------- imported sidebar:  {time.time()-t:.8f} --------------------')
 t=time.time()
-from app.ui.toolbar import Toolbar
+from Python.app.ui.toolbar import Toolbar
 print(f'---------------- imported toolbar:  {time.time()-t:.8f} --------------------')
-from app.ui.plot_area import PlotAreas
+from Python.app.ui.plot_area import PlotAreas
 print(f'---------------- imported PlotArea: {time.time()-t:.8f} --------------------')
+from Python.app.Measurements.Fake_instruments import *
 t=time.time()
 
 class MainWindow(QMainWindow):
@@ -18,18 +22,43 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("PL ViewerV2")
         # self.resize(1200, 800)
 
-        self.save_folder = r"C:\Users\jnich\OneDrive - USherbrooke\Uni\PhD\Data\img\26_08_13-i"
+        self.settings = QSettings("JN","AnalyseV2-MainWindow")
+        self.save_folder=Path(self.settings.value("save_folder",r"C:"))
 
         self.selected_files = {}
         self.datasets = {}
         self.fit_results = {}
 
+        self.measurement_mode_on = False
+        # Device graphs
+        self.graph_spectrometer = None
+        self.graph_rate_graph = None
+        self.graphs_scan=[]
+        
+        #Devices
+        self.device_spectrometer = None
+        self.device_MH150 = None
+        self.graph_windows = {}
+
         central = QWidget()
         self.setCentralWidget(central)
-        self.layout = QHBoxLayout(central)
-        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout = QHBoxLayout(central)
+        self.layout = QSplitter(Qt.Horizontal)
+        # self.layout.setContentsMargins(0, 0, 0, 0)
 
-        self.sidebar = Sidebar(self)
+        self.sidebar = QStackedWidget()
+        # if QGuiApplication.primaryScreen().size().toTuple()[0] >1500:
+        #     self.sidebar.setFixedWidth(300)
+        #     # print("SB size: 300")
+        # else:
+        #     # print("SB size: 225")
+        #     self.sidebar.setFixedWidth(225)
+        self.sidebar_view = SidebarView(self)
+        self.sidebar_measure = SidebarMeasure(self)
+        
+        self.sidebar.addWidget(self.sidebar_view)  # index 0
+        self.sidebar.addWidget(self.sidebar_measure) 
+        
         self.plot_areas = PlotAreas(self)  
         self.toolbar = Toolbar(self)  
 
@@ -39,7 +68,43 @@ class MainWindow(QMainWindow):
         self.layout.addWidget(self.sidebar)
         self.layout.addWidget(self.plot_areas)
         self.layout.addWidget(self.toolbar)
+        self.layout.setSizes([150, 800,100])  # pixel widths, sidebar, plot area, toolbar
+        self.main_layout.addWidget(self.layout)
                 
     def closeEvent(self, event):
-        print(f'Closing app. Runtime: {time.time()-t:.3f} s')
+        print(f'Closing Python.app. Runtime: {time.time()-t:.3f} s')
+        QApplication.closeAllWindows()
         event.accept()
+        
+    def start_measurement_mode(self):
+        print("_MMode WIP")
+        # ------------ imports for measurement mode ------------
+        from Python.app.ui.graphs import SpectrometerGraph
+        
+        if not self.measurement_mode_on:
+            btn_meas = QPushButton("Lab Scan")
+            btn_meas.clicked.connect(self.swap_sidebars)
+            self.sidebar_view.top_layout.addWidget(btn_meas)
+            self.measurement_mode_on = True
+            
+            self.sidebar.setCurrentIndex(1) 
+            
+        # ----- Spectrometer 
+        if self.graph_spectrometer is None:
+            self.graph_spectrometer = SpectrometerGraph(self)
+            self.graph_spectrometer.show()
+            
+        if self.device_spectrometer == None:
+            self.device_spectrometer = Fake_spectrometer()
+            
+        # ----- 
+        if self.device_MH150 == None:
+            self.device_MH150 = Fake_MH150()
+
+
+
+    
+    def swap_sidebars(self):
+        self.sidebar.setCurrentIndex((self.sidebar.currentIndex()+1)%2) 
+            
+            

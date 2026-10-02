@@ -480,7 +480,7 @@ class SaveManager(QDialog):
         folder_edit = QLineEdit()
         folder_edit.setPlaceholderText("File name")
         folder_edit.setText(
-            self.main.save_folder
+            str(self.main.save_folder)
         )
 
         folder_edit.editingFinished.connect(
@@ -503,7 +503,7 @@ class SaveManager(QDialog):
         
         
         btn_save_all = QPushButton("Save All")
-
+        btn_save_all.setAutoDefault(False)
         btn_save_all.clicked.connect(self._save_all)
             
         
@@ -590,6 +590,9 @@ class SaveManager(QDialog):
     def _save_folder_changed(self, main_window, edit):
         if edit != "":
             main_window.save_folder = edit.text()
+            os.makedirs(edit.text(),exist_ok=True)
+            self.main.settings.setValue("save_folder", str(edit.text()))
+            
             
     def _custom_text_changed(self, graph, edit):
         if edit != "":
@@ -629,7 +632,7 @@ class FitManager(QDialog):
         self.models_param = {
             'Gaussian' :    ['x_min','x_max','A   ','mu  ','sig '],
             'Exponential' : ['x_min','x_max','A   ','tau '],
-            'Stertched' :   ['x_min','x_max','A   ','tau ','beta'],
+            'StretchedExp' :   ['x_min','x_max','A   ','tau ','beta'],
             'Cauchy' :      ['x_min','x_max','A   ','mu  ','sig '],
             'PseudoVoigt' : ['x_min','x_max','A   ','mu  ','sig ','frac'],
         }
@@ -698,8 +701,10 @@ class FitManager(QDialog):
 
         btn_add_param = QPushButton("Add")
         btn_add_param.clicked.connect(self._add_par)
+        btn_add_param.setAutoDefault(False)
         btn_rem_param = QPushButton("Remove")
         btn_rem_param.clicked.connect(self._rem_par)
+        btn_rem_param.setAutoDefault(False)
 
         check_layout.addWidget(btn_add_param)
         check_layout.addWidget(btn_rem_param)
@@ -717,6 +722,7 @@ class FitManager(QDialog):
         
         btn_start_fit = QPushButton("Start Fit")
         btn_start_fit.clicked.connect(self._do_fit)
+        btn_start_fit.setAutoDefault(False)
         
         layout.addLayout(check_layout)
         layout.addWidget(qlab2)
@@ -745,7 +751,11 @@ class FitManager(QDialog):
 
     def _on_cell_change(self,row,col):
         if col:
-            self.graph.fit_params['p0s'][row][col-1] = float(self.files.item(row,col).text())
+            out = self.files.item(row,col).text()
+            if out =='None':
+                self.graph.fit_params['p0s'][row][col-1] = None
+            else:
+                self.graph.fit_params['p0s'][row][col-1] = float(out)
             
     def _rem_par(self):
         for idx, filepath in enumerate(self.graph.datasets):

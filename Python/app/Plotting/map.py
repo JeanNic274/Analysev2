@@ -5,19 +5,20 @@ matplotlib.use("QtAgg")  # PySide6 works with the QtAgg backend
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.figure import Figure
 import matplotlib.colors as mcolors
 from matplotlib.patches import Circle
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog, QLabel, QColorDialog
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog, QLabel, QColorDialog, QComboBox
 from PySide6.QtCore import QSize, Qt, Signal, QRectF
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QLinearGradient
 
 
-from app.Plotting.utils import *
-from app.Processing.data_import import Data_Set_Import
-from app.Processing.io import prevent_overwrite_file, save_figure_export
-import app.Plotting.cmaps
+from Python.app.Plotting.utils import *
+from Python.app.Processing.data_import import Data_Set_Import
+from Python.app.Processing.io import prevent_overwrite_file, save_figure_export
+import Python.app.Plotting.cmaps
 
 class BaseMap(QWidget):
     def __init__(self, main_window):
@@ -96,10 +97,13 @@ class BaseMap(QWidget):
             btn_axhline = QPushButton("Ax H Line")
             btn_axhline.clicked.connect(self.axhline)
             button_layout.addWidget(btn_axhline)
-        if 'set y axis' in self.buttons:
-            btn_yaxis_select = QPushButton("Set y axis")
-            btn_yaxis_select.clicked.connect(self.yaxis_select)
-            button_layout.addWidget(btn_yaxis_select)
+        if True:
+            # btn_yaxis_select = QComboBox("Set y axis")
+            self.btn_yaxis_select = MyQComboBox()
+            self.btn_yaxis_select.view().setAutoScroll(False)
+            self.btn_yaxis_select.currentTextChanged.connect(self.axis_select)
+            self.btn_yaxis_select.setFixedWidth(100)
+            button_layout.addWidget(self.btn_yaxis_select)
         # if 'cmap' in self.buttons:
         #     btn_cmap = QPushButton("cmap")
         #     btn_cmap.clicked.connect(self.cmap_change)
@@ -115,7 +119,7 @@ class BaseMap(QWidget):
 
         self.toolbar = NavigationToolbar(self.canvas, self)
 
-        self.ax = self.fig.add_subplot(111)
+        self.ax = self.fig.add_subplot()
     
         self.gen_axis() 
         
@@ -144,7 +148,7 @@ class BaseMap(QWidget):
         w = event.size().width()
         h = int(w * self.aspect_ratio)
         if w>1000:
-            right_margin = int(w*0.15)
+            right_margin = int(w*0.1)
         else:
             right_margin = 0
         self.layout().setContentsMargins(int(0.3*right_margin), 0, right_margin, 0)
@@ -244,11 +248,9 @@ class BaseMap(QWidget):
         self.ylim=self.ax.get_ylim() 
 
 
-    def yaxis_select(self):
-        yaxis, ok = QInputDialog.getText(self, 'Set y axis', 'Enter y axis name.')
-        if yaxis and ok:
-            self.yaxis = yaxis
-        self._refresh() 
+    def axis_select(self,axis):
+        self.zaxis = axis
+        self._refresh_full() 
         
     # def cmap_change(self):
     #     cmap, ok = QInputDialog.getText(self, 'Set cmap', 'Enter colormap name (ex: viridis, gist_rainbow_r, turbo, jet, CustomLC).')
@@ -308,6 +310,8 @@ class BaseMap(QWidget):
         self.canvas.flush_events()
         
     def _refresh_cmap(self):
+        self.maximum = -np.inf
+        self.minimum = np.inf
         filepath = list(self.lines.keys())[-1]
         dataset = self.datasets[filepath]
         self.remove(filepath,refresh=False)
@@ -317,6 +321,12 @@ class BaseMap(QWidget):
 
     def add(self, filepath, dataset, plot_now = True):
         self.datasets[filepath]=dataset
+        
+        if self.btn_yaxis_select.currentIndex() ==-1:
+            self.btn_yaxis_select.blockSignals(True)
+            self.btn_yaxis_select.addItems(dataset.data.dtype.names)
+            self.btn_yaxis_select.setCurrentText(self.zaxis)
+            self.btn_yaxis_select.blockSignals(False)
         
         if plot_now:
             self.original_d[filepath] = dataset.data.copy()
@@ -340,10 +350,11 @@ class BaseMap(QWidget):
             self._update_global_range(dataset)
             
             if self.colorbar is None:
-                self.colorbar = self.fig.colorbar(pcolormesh, ax=self.ax)
+                divider = make_axes_locatable(self.ax)
+                cax = divider.append_axes("right", size="5%", pad=0.05)
+                self.colorbar = self.fig.colorbar(pcolormesh, cax=cax)
                 self.slider.setRange(self.minimum, self.maximum)
                 self._apply_shared_clim()
-
             else:
                 self.colorbar.update_normal(pcolormesh)
                 
@@ -394,10 +405,16 @@ class BaseMap(QWidget):
             self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)
         self._refresh()
         
+        
     def refresh_curves(self):
-        for key, data in self.datasets.items():
-            self.remove(key)
-            self.add(key,data)
+        for filepath in self.datasets.copy():
+            self.refresh_curve(filepath)
+            
+    def refresh_curve(self,filepath):
+        data = self.datasets[filepath]
+        self.remove(filepath,refresh=False)
+        self.add(filepath,data)
+        
             
     def _refresh_full(self):
         self.refresh_curves()
@@ -422,7 +439,7 @@ class BaseMap(QWidget):
             mesh.set_cmap(cmap)
             mesh.set_clim(vmin=vmin, vmax=vmax)
 
-        if self.colorbar is not None:
+        if self.colorbar is not None and self.lines:
             self.colorbar.update_normal(next(iter(self.lines.values())))
 
         self.canvas.draw_idle()
@@ -473,9 +490,9 @@ def build_colormap_from_handles(values_dict, vmin=None, vmax=None):
     normalized_colors = []
     for c in colors:
         if isinstance(c, str):
-            normalized_colors.append(c)  # hex string, e.g. "#440154"
+            normalized_colors.append(c)  # hex string
         else:
-            # assume (r,g,b,a) in 0-255, convert to 0-1 floats
+            # assume (r,g,b,a) in 0-255, converts to 0-1 floats
             normalized_colors.append(tuple(v / 255 for v in c))
 
     cmap = mcolors.LinearSegmentedColormap.from_list(

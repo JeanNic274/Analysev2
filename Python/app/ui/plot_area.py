@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import  QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy, QLayout, QTabWidget, QInputDialog
 from PySide6.QtCore import Qt
 
-from app.Plotting.line import SpectrumPlot, TRPLPlot, LinePlot, FocusPlot
-from app.Plotting.map import MapPlot
-from app.Processing.misc import curve_number
+from Python.app.Plotting.line import SpectrumPlot, TRPLPlot, LinePlot, FocusPlot
+from Python.app.Plotting.map import MapPlot
+from Python.app.Processing.misc import curve_number
 
 class PlotArea(QWidget):
     def __init__(self, main_window):
@@ -73,9 +73,10 @@ class PlotArea(QWidget):
             
             
         elif self.lineplot is None:
-            self.lineplot = LinePlot(self.main,names)
-            self.lineplot.setObjectName("Line")
-            self.layout.addWidget(self.lineplot)
+            if plot_type != 'Empty file':
+                self.lineplot = LinePlot(self.main,names)
+                self.lineplot.setObjectName("Line")
+                self.layout.addWidget(self.lineplot)
         # self.layout.addStretch()
         
         
@@ -90,7 +91,7 @@ class PlotArea(QWidget):
             self.maps.add(filepath, dataset, plot_now)
         elif dataset.measure_type == 'focus':
             self.focus.add(filepath, dataset, plot_now)
-        else:
+        elif dataset.measure_type != 'Empty file':
             self.lineplot.add(filepath, dataset, plot_now)
 
     def remove(self, filepath, dataset,refresh=True,keep=False):
@@ -199,7 +200,7 @@ class PlotAreas(QTabWidget):
     def _activeWidget(self,tab):
         self.main.plot_area = self.currentWidget()
         self.main.plot_area_index = str(self.currentIndex())
-        self.main.sidebar._update_label()
+        self.main.sidebar_view._update_label()
         
         
         
