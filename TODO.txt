@@ -41,7 +41,6 @@ make label text in grpah/plot_area instead of dataset (possible??)
 
 Do detection class like Scanner
 
-clean up import to use ., .., ..., ...
 
 Measurement mode:
 - mpd_mh_trpl.ini (detection.py)
@@ -63,12 +62,4 @@ python -m pip install -e .
 
 
 Added library:
-- IPython
-- Pyvisa
-- pyvisa-py
-- pytz
-- snAPI
-- nidaqmx
-- serial
-- pylablib
-x instrumental-lib
+ - qtconsole ipykernel

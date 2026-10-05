@@ -1,9 +1,10 @@
 import time
 from pathlib import Path
+
 t=time.time()
-from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton, QApplication, QSplitter
+from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton, QApplication, QSplitter, QVBoxLayout, QDockWidget
 from PySide6.QtGui import QGuiApplication, Qt
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, QObject, Signal
 print(f'---------------- imported Pyside6:  {time.time()-t:.8f} --------------------')
 t=time.time()
 from Python.app.ui.sidebar import SidebarView, SidebarMeasure
@@ -21,7 +22,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("PL ViewerV2")
         # self.resize(1200, 800)
-
+        
         self.settings = QSettings("JN","AnalyseV2-MainWindow")
         self.save_folder=Path(self.settings.value("save_folder",r"C:"))
 
@@ -70,11 +71,51 @@ class MainWindow(QMainWindow):
         self.layout.addWidget(self.toolbar)
         self.layout.setSizes([150, 800,100])  # pixel widths, sidebar, plot area, toolbar
         self.main_layout.addWidget(self.layout)
-                
+        self._restore_geometry()
+
+    def _restore_geometry(self):
+        geometry = self.settings.value("window_geometry")
+        if geometry is not None:
+            self.restoreGeometry(geometry)
+        else:
+            self.resize(1200, 800)
+            
+        splitter_size = self.settings.value("splitter_sizes")
+        if splitter_size is not None:
+            self.layout.restoreState(self.settings.value("splitter_sizes"))
+
+    def _stop_all_threads(self):
+        # continuous read worker
+        if hasattr(self, '_cont_worker') and self._cont_worker is not None:
+            self._cont_worker.stop()
+        if hasattr(self, '_cont_thread') and self._cont_thread is not None:
+            try:
+                if self._cont_thread.isRunning():
+                    self._cont_thread.quit()
+                    self._cont_thread.wait(2000)  # wait up to 2s for clean exit
+            except RuntimeError:
+                pass
+
+        # scan worker
+        if hasattr(self, '_scan_worker') and self._scan_worker is not None:
+            self._scan_worker.request_stop()
+        if hasattr(self, '_scan_thread') and self._scan_thread is not None:
+            try:
+                if self._scan_thread.isRunning():
+                    self._scan_thread.quit()
+                    self._scan_thread.wait(2000)
+            except RuntimeError:
+                pass
+
     def closeEvent(self, event):
         print(f'Closing Python.app. Runtime: {time.time()-t:.3f} s')
+        self.settings.setValue("window_geometry", self.saveGeometry())
+        self.settings.setValue("splitter_sizes", self.layout.saveState())
+        self._stop_all_threads()
         QApplication.closeAllWindows()
-        event.accept()
+        super().closeEvent(event)
+        import os
+        os._exit(0)
         
     def start_measurement_mode(self):
         print("_MMode WIP")
@@ -102,9 +143,8 @@ class MainWindow(QMainWindow):
             self.device_MH150 = Fake_MH150()
 
 
-
-    
     def swap_sidebars(self):
         self.sidebar.setCurrentIndex((self.sidebar.currentIndex()+1)%2) 
             
-            
+    
+    

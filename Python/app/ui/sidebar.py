@@ -6,12 +6,12 @@ import numpy as np
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
-    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView
+    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView, QScrollArea
 )
 # print('imported QTWidget', time.time()-t)
 # t=time.time()
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel, QSettings, QThread, QObject, Signal
-from PySide6.QtGui import QBrush
+from PySide6.QtGui import QBrush, QPalette, QColor, QColorConstants
 # print('imported QtCore', time.time()-t)
 # t=time.time()
 from pathlib import Path
@@ -195,17 +195,29 @@ class SidebarView(QWidget):
             
             
             
-class SidebarMeasure(QWidget):
+class SidebarMeasure(QScrollArea):
     def __init__(self, main_window):
         super().__init__()
         self.main = main_window
         
         self.FAKE = True
-        
-        
         self._build()
 
     def _build(self):
+        
+        self.setStyleSheet(
+            """
+            QScrollArea { background-color: #121212 } 
+            """
+        )
+        
+        # self.setStyleSheet(
+        #     """
+        #     QAbstractScrollArea #scrollAreaWidgetContents {
+        #         background-color: black;
+        #     }
+        #     """
+        # )
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(4, 4, 4, 4)
         self.layout.setAlignment(Qt.AlignTop)
@@ -215,15 +227,17 @@ class SidebarMeasure(QWidget):
         btn_view_sidebar.clicked.connect(self.main.swap_sidebars)
         self.layout.addWidget(btn_view_sidebar)
         
-        self.UI_spectrometer = UI_SpectroMeter(self)
-        self.add_device_ui(self.UI_spectrometer)
-        
         self.UI_MH150 = UI_MH150(self)
         self.add_device_ui(self.UI_MH150)
         
         self.UI_Scan = UI_Scan(self)
         self.add_device_ui(self.UI_Scan)
         
+        self.UI_spectrometer = UI_SpectroMeter(self)
+        self.add_device_ui(self.UI_spectrometer)
+        
+        
+        self.layout.addStretch()
         
     def add_device_ui(self,dev_ui):
         self.layout.addWidget(dev_ui)
@@ -439,11 +453,11 @@ class UI_Scan(QFrame):
         
         layer2.addWidget(QLabel('Scan Parameters: '))
         
-        layer2.addWidget(MyQComboBox())
-        
         layer3 = QHBoxLayout()
+        
         self.scan_parameters = QTableWidget()
         layer3.addWidget(self.scan_parameters)
+        self.scan_parameters.setMinimumHeight(1)
         self.scan_parameters.setStyleSheet("""
             QTableWidget::item {
                 padding-left: 5px;
@@ -452,21 +466,23 @@ class UI_Scan(QFrame):
                 padding-bottom: 1px;
             }
         """)
+        self.scan_parameters.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.scan_parameters.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scan_parameters.setDragEnabled(1)
         self.scan_parameters.setAcceptDrops(1)
         self.scan_parameters.setDefaultDropAction(Qt.DropAction.CopyAction)
+        
         self.scan_parameters.setColumnCount(4)
         self.scan_parameters.setHorizontalHeaderLabels(('Start','Stop','Step',''))
         
         self.scan_parameters.setRowCount(3)
         scan_params = ('x','y','z')
         self.scan_parameters.setVerticalHeaderLabels(scan_params)
-        # self.scan_parameters.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         for i in range(self.scan_parameters.columnCount()-1):
             self.scan_parameters.horizontalHeader().setSectionResizeMode(i,QHeaderView.Stretch)
+            
         self.scan_parameters.setColumnWidth(3,10)
         self.scan_parameters.horizontalHeader().setSectionResizeMode(3,QHeaderView.Fixed)
-        # self.scan_parameters.setColumnWidth(3,10)
         
         for i, param in enumerate(scan_params):
             self.params_enabled[param] = QTableWidgetItem()
@@ -489,6 +505,7 @@ class UI_Scan(QFrame):
         self.params_enabled[scan_params[1]].setCheckState(Qt.Checked)
         self.params_enabled[scan_params[2]].setCheckState(Qt.Unchecked)
         
+        resize_table_to_contents(self.scan_parameters)
         
         self.layout.addLayout(layer1)
         self.layout.addLayout(layer2)
@@ -721,3 +738,10 @@ class ScanWorker(QObject):
             self.finished.emit()
         except Exception as e:
             self.error.emit(str(e))
+            
+def resize_table_to_contents(table):
+    header_height = table.horizontalHeader().height()
+    rows_height = sum(table.rowHeight(r) for r in range(table.rowCount()))
+    frame = table.frameWidth() * 2
+    total_height = header_height + rows_height + frame
+    table.setFixedHeight(total_height)

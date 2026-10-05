@@ -120,7 +120,7 @@ class Toolbar(QWidget):
         self.main.plot_areas.add()    
     
     def _reset(self):
-        print("_reset")
+        self.main.close()
 
     def _meastxt(self):
         meastxt(self.main.sidebar_view.path)
