@@ -52,6 +52,10 @@ class Fake_MH150():
     
     
     
+class Fake_ESP300():
+    def __init__(self):
+        pass
+    
     
     
     

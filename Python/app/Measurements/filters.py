@@ -1,9 +1,65 @@
 import time
 import serial
-
+import pyvisa
 
 try: from pylablib.devices import Thorlabs
 except ImportError as e: print(e)
+
+
+
+
+def set_filter_wheel(slot = None, offset =11.224,  home_first = False, apd_final_state = False, wlight_final_state = False, moveto = None):
+    
+    ESP_address="GPIB1::7::INSTR"
+    
+    invalid_parameters = []
+    if slot == 15:
+        slot = 0.5
+        
+    if slot < 0 or slot > 14: 
+        invalid_parameters.append("slot"+str(slot))
+        return
+    target_steps = int(-(slot + offset) * 1400)
+    
+    try:
+        with serial.Serial(port='COM4', baudrate=38400, timeout=1) as drive:
+            power_whitelight(drive, False)
+            power_apds(drive, False)
+            
+            if home_first:
+                seek_home_precise(drive)
+
+            send_cmd(drive, "VE1.0") 
+            send_cmd(drive, f"FP{target_steps}")
+            
+            time.sleep(0.2)
+            while True:
+                if "0009" in send_cmd(drive, "SC"): break
+                time.sleep(0.05)
+            
+            power_apds(drive, apd_final_state)
+            if not apd_final_state:
+                power_whitelight(drive, wlight_final_state)
+                
+    except serial.SerialException:
+        invalid_parameters.append("Error during serial communication")
+        
+    rm = pyvisa.ResourceManager()
+    esp = rm.open_resource(ESP_address)
+    
+    targets = {'0': "2PA-24", '1': "2PA0", '2': "2PA25"}
+    
+    if moveto in targets:
+        try:
+            esp.write(targets[moveto])
+            time.sleep(5)
+        except:
+            invalid_parameters.append("Error with esp moveto")
+            
+        
+    return invalid_parameters
+
+
 
 
 def send_cmd(drive, command, delay=0.05):

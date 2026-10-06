@@ -1,10 +1,11 @@
 import itertools
+import configparser
 
 import numpy as np
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
-    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView, QScrollArea, QTextEdit
+    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView, QScrollArea, QTextEdit, QButtonGroup
 )
 # print('imported QTWidget', time.time()-t)
 # t=time.time()
@@ -232,6 +233,9 @@ class SidebarMeasure(QScrollArea):
         self.UI_Laser = UI_Laser(self)
         self.add_device_ui(self.UI_Laser)
         
+        self.UI_FilterWheel = UI_FilterWheel(self)
+        self.add_device_ui(self.UI_FilterWheel)
+        
         self.layout.addStretch()
         
     def add_device_ui(self,dev_ui):
@@ -250,7 +254,6 @@ class UI_MH150(QFrame):
         self.setFrameShape(QFrame.StyledPanel)
         self.update_graph = True
         
-        self.val = None
         self._build()
         
         
@@ -394,6 +397,12 @@ class UI_SpectroMeter(QFrame):
 
 
     def start_measure(self):
+        if self.main.main.graph_spectrometer is None:
+            self.main.main.graph_spectrometer = SpectrometerGraph(self.main.main)
+            self.main.main.graph_spectrometer.show()
+        else:
+            self.main.main.graph_spectrometer.raise_()
+            
         self._thread = QThread()
         self._worker = MeasureWorker(self.main.main.device_spectrometer.readval)
         self._worker.moveToThread(self._thread)
@@ -437,6 +446,7 @@ class UI_Scan(QFrame):
         
         self.btn_measure = QPushButton('Start')        
         self.btn_measure.setCheckable(True)
+        self.btn_measure.setStyleSheet("QPushButton:checked { background-color: red }")
         
         self.btn_measure.toggled.connect(self.start_scan)
         
@@ -645,7 +655,6 @@ class UI_Laser(QFrame):
         self.setFrameShape(QFrame.StyledPanel)
         
         
-        self.val = None
         self._build()
         
     def _build(self):
@@ -733,14 +742,14 @@ class UI_Laser(QFrame):
             # laser = instruments.picoQuant.PicoQuant_Taiko_PDL_M1()
             raise ValueError()
         
-        if power is not None:
+        if power is not None and power != "":
             print(f"\nSetting CW power to {power}%...")
             try:
                 pwr = int(float(power) * 10)
                 cmds.set(device.cw_power_permille, pwr)
                 print(f"CW power is now: {power}%")
             except ValueError:
-                invalid_parameters.append(power)
+                invalid_parameters.append('power '+power)
                 
         if softlock is not None:
             cmds.set(device.softlock_en, softlock)
@@ -752,7 +761,7 @@ class UI_Laser(QFrame):
                 cmds.set(device.freq, frq)
                 print(f"Frequency is now: {freq} kHz")
             except ValueError:
-                invalid_parameters.append(freq)
+                invalid_parameters.append('freq '+freq)
         if mode is not None:
             cmds.set(device.laser_mode, mode)    
         return invalid_parameters
@@ -771,7 +780,6 @@ class UI_NanoPos(QFrame):
         self._cont_thread = {}
         self._cont_worker = {}
         
-        self.val = None
         self._build()
         
     def _build(self):
@@ -895,6 +903,115 @@ class UI_NanoPos(QFrame):
         self._cont_thread[ax] = None
         self._cont_worker[ax] = None
 
+
+class UI_FilterWheel(QFrame):
+    def __init__(self,main_window):
+        super().__init__()
+        self.main = main_window
+        
+        self.setFrameShape(QFrame.StyledPanel)
+        
+        self._build()
+        
+    def _build(self):
+        self.layout = QVBoxLayout(self)
+        self.layout.setSpacing(5)
+        self.layout.setContentsMargins(5, 1, 5, 1)
+        
+        self.layout.addWidget(QLabel('ESP300'))
+        
+        layer1 = QHBoxLayout()
+        
+        self.btn_toggle_apd = QPushButton('APD')        
+        self.btn_toggle_apd.setStyleSheet("QPushButton:checked {background-color : red}")      
+        self.btn_toggle_apd.setCheckable(True)
+        self.btn_toggle_apd.clicked.connect(self._on_change__set_filterwheel)
+        layer1.addWidget(self.btn_toggle_apd)
+        
+        layer1.addStretch()
+        
+        self.btn_toggle_wlight = QPushButton('Light')        
+        self.btn_toggle_wlight.setCheckable(True)
+        self.btn_toggle_wlight.setStyleSheet("QPushButton:checked {background-color : red}")      
+        self.btn_toggle_wlight.clicked.connect(self._on_change__set_filterwheel)
+        layer1.addWidget(self.btn_toggle_wlight)
+        
+        
+        self.button_group = QButtonGroup(self)
+        self.button_group.addButton(self.btn_toggle_wlight)
+        self.button_group.addButton(self.btn_toggle_apd)
+        self.button_group.setExclusive(True)
+        
+        
+        
+        layer2 = QHBoxLayout()
+        
+        config = configparser.ConfigParser()
+        config.read(r"data\settings\instruments_configs\filterwheel.ini")
+        
+        layer2.addWidget(QLabel('Filter Wheel: '))
+        
+        self.filter_wheel = MyQComboBox()        
+        
+        for v in config["Filters"].values():
+            self.filter_wheel.addItem(v)
+            
+        self.filter_wheel.currentIndexChanged.connect(self._on_change__set_filterwheel)
+        layer2.addWidget(self.filter_wheel)
+        
+        layer2.addStretch()
+        
+        layer3 = QHBoxLayout()
+        
+        layer3.addWidget(QLabel('Filter: '))
+        
+        self.filter_notch = MyQComboBox()        
+        
+        for v in config["Notch"].values():
+            self.filter_notch.addItem(v)
+            
+        self.filter_notch.currentIndexChanged.connect(self._on_change__set_filterwheel)
+        layer3.addWidget(self.filter_notch)
+        layer3.addStretch()
+        
+        
+        self.layout.addLayout(layer1)
+        self.layout.addLayout(layer2)
+        self.layout.addLayout(layer3)
+        
+    def _on_change__set_filterwheel(self):
+        self._thread = QThread()
+        self._worker = CommWorker(self.main.main.device_ESP300,self._set_filterwheel)
+        self._worker.moveToThread(self._thread)
+
+        self._worker.kwargs = {
+                                  "apd_final_state"     : self.btn_toggle_apd.isChecked(),
+                                  "wlight_final_state"  : self.btn_toggle_wlight.isChecked(),
+                                  "slot"                : self.filter_wheel.currentIndex(), 
+                                  "moveto"              : self.filter_notch.currentIndex()
+                                  }
+
+        self._thread.started.connect(self._worker.run)
+        self._worker.error.connect(self._on_measure_error)
+        self._worker.value_error.connect(self._on_value_error)
+
+        # cleanup when done
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+
+        self._thread.start()
+
+    def _on_value_error(self, messages):
+        for value in messages:
+            QMessageBox.warning(self, f"Invalid numeric value", f"Invalid numeric value for {value}")
+
+    def _on_measure_error(self, message):
+        QMessageBox.critical(self, "Comm. error", message)
+        
+    def _set_filterwheel(self,**kwargs):
+        print(kwargs)
+        return []
 
 #************************ Workers for non main-thread operations ************************#
         

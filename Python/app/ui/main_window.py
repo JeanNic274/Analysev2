@@ -49,6 +49,7 @@ class MainWindow(QMainWindow):
         self.device_MH150 = None
         self.device_laser = None
         self.device_nanopositionner = None
+        self.device_ESP300 = None
         self.graph_windows = {}
 
         central = QWidget()
@@ -94,34 +95,11 @@ class MainWindow(QMainWindow):
         if splitter_size is not None:
             self.layout.restoreState(self.settings.value("splitter_sizes"))
 
-    def _stop_all_threads(self):
-        # continuous read worker
-        if hasattr(self, '_cont_worker') and self._cont_worker is not None:
-            self._cont_worker.stop()
-        if hasattr(self, '_cont_thread') and self._cont_thread is not None:
-            try:
-                if self._cont_thread.isRunning():
-                    self._cont_thread.quit()
-                    self._cont_thread.wait(2000)  # wait up to 2s for clean exit
-            except RuntimeError:
-                pass
-
-        # scan worker
-        if hasattr(self, '_scan_worker') and self._scan_worker is not None:
-            self._scan_worker.request_stop()
-        if hasattr(self, '_scan_thread') and self._scan_thread is not None:
-            try:
-                if self._scan_thread.isRunning():
-                    self._scan_thread.quit()
-                    self._scan_thread.wait(2000)
-            except RuntimeError:
-                pass
 
     def closeEvent(self, event):
         print(f'Closing Python.app. Runtime: {time.time()-t:.3f} s')
         self.settings.setValue("window_geometry", self.saveGeometry())
         self.settings.setValue("splitter_sizes", self.layout.saveState())
-        self._stop_all_threads()
         QApplication.closeAllWindows()
         super().closeEvent(event)
         os.kill(os.getpid(), signal.SIGINT)
@@ -138,9 +116,9 @@ class MainWindow(QMainWindow):
             self.sidebar.setCurrentIndex(1) 
             
         # ----- Spectrometer 
-        if self.graph_spectrometer is None:
-            self.graph_spectrometer = SpectrometerGraph(self)
-            self.graph_spectrometer.show()
+        # if self.graph_spectrometer is None:
+        #     self.graph_spectrometer = SpectrometerGraph(self)
+        #     self.graph_spectrometer.show()
             
         if self.device_spectrometer == None:
             self.device_spectrometer = Fake_spectrometer()
@@ -156,6 +134,10 @@ class MainWindow(QMainWindow):
         # ----- Fake_NanoPositionner
         if self.device_nanopositionner == None:
             self.device_nanopositionner = Fake_NanoPositionner()
+            
+        # ----- Fake_ESP300
+        if self.device_ESP300 == None:
+            self.device_ESP300 = Fake_ESP300()
 
 
 

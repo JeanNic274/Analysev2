@@ -44,6 +44,17 @@ make label text in grpah/plot_area instead of dataset (possible??)
 - [ ] Add auto connect at measurement start, and add disconnect button
 - [ ] Check spectro scan function -> maybe rework scan func overall with np.sum()
 - [ ] Add goto button for scan detection (move filter wheel and mirrors)
+- [ ] Add connection adress menu (gpib etc)
+- [ ] Add safety checks (eg laser on while no filter)
+
+TODO at uni
+
+check labview white light button
+get filterwheel's filters
+
+TODO at implementation
+
+- [ ] Check filterwheel.py Blocked -> slot = 0.5 works
 
 Measurement mode:
 - mpd_mh_trpl.ini (detection.py)
