@@ -923,7 +923,7 @@ class UI_FilterWheel(QFrame):
         layer1 = QHBoxLayout()
         
         self.btn_toggle_apd = QPushButton('APD')        
-        self.btn_toggle_apd.setStyleSheet("QPushButton:checked {background-color : red}")      
+        self.btn_toggle_apd.setStyleSheet("QPushButton:checked {background-color : red; color: black}")      
         self.btn_toggle_apd.setCheckable(True)
         self.btn_toggle_apd.clicked.connect(self._on_change__set_filterwheel)
         layer1.addWidget(self.btn_toggle_apd)
@@ -932,16 +932,9 @@ class UI_FilterWheel(QFrame):
         
         self.btn_toggle_wlight = QPushButton('Light')        
         self.btn_toggle_wlight.setCheckable(True)
-        self.btn_toggle_wlight.setStyleSheet("QPushButton:checked {background-color : red}")      
+        self.btn_toggle_wlight.setStyleSheet("QPushButton:checked {background-color : red; color: black}")      
         self.btn_toggle_wlight.clicked.connect(self._on_change__set_filterwheel)
         layer1.addWidget(self.btn_toggle_wlight)
-        
-        
-        self.button_group = QButtonGroup(self)
-        self.button_group.addButton(self.btn_toggle_wlight)
-        self.button_group.addButton(self.btn_toggle_apd)
-        self.button_group.setExclusive(True)
-        
         
         
         layer2 = QHBoxLayout()
@@ -980,6 +973,11 @@ class UI_FilterWheel(QFrame):
         self.layout.addLayout(layer3)
         
     def _on_change__set_filterwheel(self):
+        
+        if self.btn_toggle_apd.isChecked() and self.btn_toggle_wlight.isChecked():
+            self.btn_toggle_apd.setChecked(False)
+            self.btn_toggle_wlight.setChecked(False)
+        
         self._thread = QThread()
         self._worker = CommWorker(self.main.main.device_ESP300,self._set_filterwheel)
         self._worker.moveToThread(self._thread)
