@@ -50,11 +50,11 @@ class Toolbar(QWidget):
         btn_newtab.setFixedWidth(150)
         btn_newtab.clicked.connect(self._addTab)
         
-        btn_meastxt = QPushButton("Meas.txt")
+        btn_meastxt = QPushButton("Generate meas.txt")
         btn_meastxt.setFixedWidth(150)
         btn_meastxt.clicked.connect(self._meastxt)
 
-        btn_reset = QPushButton("Reset")
+        btn_reset = QPushButton("Close")
         btn_reset.setFixedWidth(150)
         btn_reset.clicked.connect(self._reset)
 
