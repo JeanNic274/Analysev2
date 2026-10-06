@@ -471,7 +471,7 @@ class SpectrumPlot(BasePlot):
         self.x_lab = "Wavelength (nm)"
         self.y_lab = "Counts/s"
 
-        self.fit_params = {'model':'Gaussian', 'P_init':False,'Single':False,'p0s':[[420.0,450.0,1.0,430.0,1.0]],'fit_results':{},'Print':True}
+        self.fit_params = {'model':'Cauchy', 'P_init':False,'Single':False,'p0s':[[420.0,450.0,1.0,430.0,1.0]],'fit_results':{},'Print':True}
         self.labels = labels
         self.groups = {str(i): [] for i in range(5)}
         self.toggles = {'normalize':0,'annotations':[],'yoffset':0,'legend':1,'xoffsets':{}}

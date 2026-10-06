@@ -39,8 +39,11 @@
 make label text in grpah/plot_area instead of dataset (possible??)
 
 
-Do detection class like Scanner
-
+- [ ] Add real device names (check w/ labview) to UI label
+- [ ] Do detection class like Scanner
+- [ ] Add auto connect at measurement start, and add disconnect button
+- [ ] Check spectro scan function -> maybe rework scan func overall with np.sum()
+- [ ] Add goto button for scan detection (move filter wheel and mirrors)
 
 Measurement mode:
 - mpd_mh_trpl.ini (detection.py)
@@ -62,4 +65,4 @@ python -m pip install -e .
 
 
 Added library:
- - qtconsole ipykernel
+ - 

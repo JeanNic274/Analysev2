@@ -2,7 +2,8 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QLineEdit, QTreeView, QSizePolicy, QFileSystemModel, QInputDialog
 )
-from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QCloseEvent
 from Python.app.ui.DialogWindow import SpectrumFileManager, TRPLFileManager, Experiment_Picker, SaveManager
 from Python.app.Processing.misc import meastxt
 from Python.app.Processing.io import save_exp, load_exp
@@ -71,16 +72,14 @@ class Toolbar(QWidget):
         self.btn_live_mode = QPushButton("Lab Scan")
         self.btn_live_mode.setFixedWidth(150)
         
-        self.btn_live_mode.setStyleSheet("QPushButton { background-color: red }"
-                      "QPushButton:pressed { background-color: green }"
-        )
+        self.btn_live_mode.setStyleSheet("QPushButton { background-color: red }")
         
         self.btn_live_mode.clicked.connect(self._start_measurement_mode)
         
         layout.addWidget(self.btn_live_mode)
         
     def _start_measurement_mode(self):
-        self.btn_live_mode.setDown(True)
+        self.btn_live_mode.setStyleSheet("QPushButton { background-color: green }")
         self.main.start_measurement_mode()        
         
     def _open_save_mng(self):

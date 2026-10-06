@@ -18,4 +18,3 @@ if __name__ == "__main__":
     shell.enable_gui('qt')  
     shell(local_ns={"app": app, "main": window})
     
-    # sys.exit(app.exec())

@@ -1,11 +1,17 @@
 import time
-from pathlib import Path
-
 t=time.time()
-from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton, QApplication, QSplitter, QVBoxLayout, QDockWidget
+
+import numpy
+import lmfit
+import matplotlib
+
+from pathlib import Path
+import os, signal
+
+from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton, QApplication, QSplitter, QVBoxLayout
 from PySide6.QtGui import QGuiApplication, Qt
 from PySide6.QtCore import QSettings, QObject, Signal
-print(f'---------------- imported Pyside6:  {time.time()-t:.8f} --------------------')
+print(f'---------------- imported libraries:  {time.time()-t:.8f} --------------------')
 t=time.time()
 from Python.app.ui.sidebar import SidebarView, SidebarMeasure
 print(f'---------------- imported sidebar:  {time.time()-t:.8f} --------------------')
@@ -15,6 +21,8 @@ print(f'---------------- imported toolbar:  {time.time()-t:.8f} ----------------
 from Python.app.ui.plot_area import PlotAreas
 print(f'---------------- imported PlotArea: {time.time()-t:.8f} --------------------')
 from Python.app.Measurements.Fake_instruments import *
+from Python.app.ui.graphs import SpectrometerGraph
+
 t=time.time()
 
 class MainWindow(QMainWindow):
@@ -39,6 +47,8 @@ class MainWindow(QMainWindow):
         #Devices
         self.device_spectrometer = None
         self.device_MH150 = None
+        self.device_laser = None
+        self.device_nanopositionner = None
         self.graph_windows = {}
 
         central = QWidget()
@@ -114,13 +124,10 @@ class MainWindow(QMainWindow):
         self._stop_all_threads()
         QApplication.closeAllWindows()
         super().closeEvent(event)
-        import os
-        os._exit(0)
+        os.kill(os.getpid(), signal.SIGINT)
         
     def start_measurement_mode(self):
-        print("_MMode WIP")
         # ------------ imports for measurement mode ------------
-        from Python.app.ui.graphs import SpectrometerGraph
         
         if not self.measurement_mode_on:
             btn_meas = QPushButton("Lab Scan")
@@ -138,9 +145,18 @@ class MainWindow(QMainWindow):
         if self.device_spectrometer == None:
             self.device_spectrometer = Fake_spectrometer()
             
-        # ----- 
+        # ----- MultiHarp
         if self.device_MH150 == None:
             self.device_MH150 = Fake_MH150()
+            
+        # ----- Laser
+        if self.device_laser == None:
+            self.device_laser = Fake_laser()
+            
+        # ----- Fake_NanoPositionner
+        if self.device_nanopositionner == None:
+            self.device_nanopositionner = Fake_NanoPositionner()
+
 
 
     def swap_sidebars(self):
