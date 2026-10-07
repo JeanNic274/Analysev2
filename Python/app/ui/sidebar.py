@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 # print('imported QTWidget', time.time()-t)
 # t=time.time()
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel, QSettings, QThread, QObject, Signal
-from PySide6.QtGui import QBrush, QPalette, QColor, QColorConstants
+from PySide6.QtGui import QBrush, QPalette, QColor, QColorConstants, QIcon
 # print('imported QtCore', time.time()-t)
 # t=time.time()
 from pathlib import Path
@@ -48,6 +48,14 @@ class SidebarView(QWidget):
         # path input
         self.top_layout = QHBoxLayout()
         
+        self.btn_dock_toggle = QPushButton()
+        icon = QIcon()
+        icon.addFile(str(Path("data","assets","window-dock-undock.svg")))
+        self.btn_dock_toggle.setIcon(icon)
+        self.btn_dock_toggle.setFixedWidth(25)
+        self.btn_dock_toggle.clicked.connect(self.main.dock_sidebar._toggle_dock)
+        
+        self.top_layout.addWidget(self.btn_dock_toggle)
         self.path_input = RevertableLineEdit()
         self.path_input.setStyleSheet('font-size: 10pt;')
         self.path_input.setPlaceholderText("Enter path...")
@@ -213,10 +221,24 @@ class SidebarMeasure(QScrollArea):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(4, 4, 4, 4)
         self.layout.setAlignment(Qt.AlignTop)
-
+        
+        self.top_layout = QHBoxLayout()
+        
+        self.btn_dock_toggle = QPushButton()
+        icon = QIcon()
+        icon.addFile(str(Path("data","assets","window-dock-undock.svg")))
+        self.btn_dock_toggle.setIcon(icon)
+        self.btn_dock_toggle.setFixedWidth(25)
+        self.btn_dock_toggle.clicked.connect(self.main.dock_sidebar._toggle_dock)
+        
+        self.top_layout.addWidget(self.btn_dock_toggle)
+        self.top_layout.addStretch()
+        
         btn_view_sidebar = QPushButton("File Browser")
         btn_view_sidebar.clicked.connect(self.main.swap_sidebars)
-        self.layout.addWidget(btn_view_sidebar)
+        self.top_layout.addWidget(btn_view_sidebar)
+        
+        self.layout.addLayout(self.top_layout)
         
         self.UI_MH150 = UI_MH150(self)
         self.add_device_ui(self.UI_MH150)

@@ -47,6 +47,7 @@ make label text in grpah/plot_area instead of dataset (possible??)
 - [ ] Add connection adress menu (gpib etc)
 - [ ] Add safety checks (eg laser on while no filter)
 
+
 TODO at uni
 
 check labview white light button

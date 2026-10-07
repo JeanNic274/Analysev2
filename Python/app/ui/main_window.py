@@ -8,7 +8,7 @@ import matplotlib
 from pathlib import Path
 import os, signal
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton, QApplication, QSplitter, QVBoxLayout
+from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton, QApplication, QSplitter, QVBoxLayout, QDockWidget
 from PySide6.QtGui import QGuiApplication, Qt
 from PySide6.QtCore import QSettings, QObject, Signal
 print(f'---------------- imported libraries:  {time.time()-t:.8f} --------------------')
@@ -56,20 +56,17 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         self.main_layout = QHBoxLayout(central)
         self.layout = QSplitter(Qt.Horizontal)
-        # self.layout.setContentsMargins(0, 0, 0, 0)
 
+        self.dock_sidebar = DockedSidebar(self)
         self.sidebar = QStackedWidget()
-        # if QGuiApplication.primaryScreen().size().toTuple()[0] >1500:
-        #     self.sidebar.setFixedWidth(300)
-        #     # print("SB size: 300")
-        # else:
-        #     # print("SB size: 225")
-        #     self.sidebar.setFixedWidth(225)
+        
         self.sidebar_view = SidebarView(self)
         self.sidebar_measure = SidebarMeasure(self)
         
         self.sidebar.addWidget(self.sidebar_view)  # index 0
         self.sidebar.addWidget(self.sidebar_measure) 
+        
+        self.dock_sidebar.setWidget(self.sidebar)
         
         self.plot_areas = PlotAreas(self)  
         self.toolbar = Toolbar(self)  
@@ -77,10 +74,10 @@ class MainWindow(QMainWindow):
         self.plot_area = self.plot_areas.currentWidget()
         self.plot_area_index = str(self.plot_areas.currentIndex())
 
-        self.layout.addWidget(self.sidebar)
+        self.addDockWidget(Qt.LeftDockWidgetArea,self.dock_sidebar)
         self.layout.addWidget(self.plot_areas)
         self.layout.addWidget(self.toolbar)
-        self.layout.setSizes([150, 800,100])  # pixel widths, sidebar, plot area, toolbar
+        # self.layout.setSizes([150, 800,100])  # default pixel widths, sidebar, plot area, toolbar
         self.main_layout.addWidget(self.layout)
         self._restore_geometry()
 
@@ -146,3 +143,19 @@ class MainWindow(QMainWindow):
             
     
     
+class DockedSidebar(QDockWidget):
+    def __init__(self,main_window):
+        super().__init__('Sidebar')
+        self.main = main_window
+        self.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+        # self.btn_dock_toggle = QPushButton()
+        # self.btn_dock_toggle.clicked.connect(self._toggle_dock)
+        
+        # self.setTitleBarWidget(self.btn_dock_toggle)
+        
+    def _toggle_dock(self):
+        if self.isFloating():
+            self.setFloating(False)
+        else:
+            self.setFloating(True)
+            
