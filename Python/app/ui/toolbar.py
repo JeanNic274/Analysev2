@@ -37,11 +37,11 @@ class Toolbar(QWidget):
         btn_tfile_mng.setFixedWidth(150)
         btn_tfile_mng.clicked.connect(self._open_tfile_mng)
 
-        btn_save_exp = QPushButton("Save Exp")
+        btn_save_exp = QPushButton("Save Graphs")
         btn_save_exp.setFixedWidth(150)
         btn_save_exp.clicked.connect(self._save_exp)
 
-        btn_load_exp = QPushButton("Load Exp")
+        btn_load_exp = QPushButton("Load Graphs")
         btn_load_exp.setFixedWidth(150)
         btn_load_exp.clicked.connect(self._load_exp)
 

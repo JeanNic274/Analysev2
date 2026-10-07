@@ -6,7 +6,7 @@ from datetime import datetime
 from Python.app.Processing.data_import import Data_Set_Import
 
 def save_exp(plot_area_widget,filename = 'test'):
-    save_path = Path('data','experiments',filename)
+    save_path = Path('data','graphs',filename)
     prevent_overwrite_file(save_path)
     save_dict = {}
     if plot_area_widget.spectrum:
@@ -42,7 +42,7 @@ def load_exp(plot_area_widget,plot_area_index,filename = "test    2026-09-08 14-
     print('Loading experiment: ', filename)
     plot_area_widget.main.sidebar_view._clear_selection()
     
-    with open(Path('data','experiments',filename), 'r') as file:
+    with open(Path('data','graphs',filename), 'r') as file:
         experiment = json.load(file)
     
     for lines in experiment:
