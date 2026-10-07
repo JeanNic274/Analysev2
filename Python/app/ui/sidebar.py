@@ -263,6 +263,8 @@ class SidebarMeasure(QScrollArea):
     def add_device_ui(self,dev_ui):
         self.layout.addWidget(dev_ui)
         
+        
+        
 
 #************************ UI Widgets for instruments/commands ************************#
 
@@ -430,7 +432,7 @@ class UI_SpectroMeter(QFrame):
         self._worker.moveToThread(self._thread)
 
         self._thread.started.connect(self._worker.run)
-        self._worker.finished.connect(self._on_measure_done)
+        self._worker.completed.connect(self._on_measure_done)
         self._worker.error.connect(self._on_measure_error)
 
         # cleanup when done
@@ -630,9 +632,9 @@ class UI_Scan(QFrame):
         self._scan_thread.started.connect(self._scan_worker.run)
         self._scan_worker.point_measured.connect(self._on_point_measured)
         self._scan_worker.progress.connect(self._on_scan_progress)
-        self._scan_worker.finished.connect(self._on_scan_finished)
+        self._scan_worker.completed.connect(self._on_scan_completed)
         self._scan_worker.error.connect(self._on_scan_error)
-
+        
         self._scan_worker.finished.connect(self._scan_thread.quit)
         self._scan_worker.finished.connect(self._scan_worker.deleteLater)
         self._scan_thread.finished.connect(self._scan_thread.deleteLater)
@@ -647,10 +649,12 @@ class UI_Scan(QFrame):
         # self.progress_bar.setValue(int(current / total * 100))
         pass
 
-    def _on_scan_finished(self):
-        # self.status_label.setText("Scan complete")
+    def _on_scan_completed(self):
+        self._on_scan_finished()
         print()
         print("Scan complete")
+        
+    def _on_scan_finished(self):
         self.btn_measure.blockSignals(True)
         self.btn_measure.setChecked(False)
         self.btn_measure.setText('Start')
@@ -658,6 +662,7 @@ class UI_Scan(QFrame):
         self.main.main.scanner = None
 
     def _on_scan_error(self, message):
+        self._on_scan_finished()
         QMessageBox.critical(self, "Scan error", message)
         
     def _clear_scan_refs(self):
@@ -1036,7 +1041,7 @@ class UI_FilterWheel(QFrame):
 #************************ Workers for non main-thread operations ************************#
         
 class CommWorker(QObject):
-    finished = Signal(object)  
+    finished = Signal()  
     error = Signal(str)
     value_error = Signal(list)
     
@@ -1051,14 +1056,17 @@ class CommWorker(QObject):
             val = self.set_fn(device = self.device, **self.kwargs)
             if val:
                 self.value_error.emit(val)
-            self.finished.emit(1)
         except Exception as e:
             self.error.emit(str(e))
+        finally:
+            self.finished.emit()
+            
             
         
         
 class MeasureWorker(QObject):
-    finished = Signal(object)  
+    completed = Signal(object)  
+    finished = Signal()  
     error = Signal(str)
 
     def __init__(self, device):
@@ -1068,9 +1076,12 @@ class MeasureWorker(QObject):
     def run(self):
         try:
             val = cmds.get(self.device)
-            self.finished.emit(val)
+            self.completed.emit(val)
         except Exception as e:
             self.error.emit(str(e))
+        finally:
+            self.finished.emit()
+            
             
             
 class ContinuousReadWorker(QObject):
@@ -1109,6 +1120,7 @@ class ContinuousReadWorker(QObject):
 class ScanWorker(QObject): 
     point_measured = Signal(tuple, dict, object)
     finished = Signal()
+    completed = Signal()
     error = Signal(str)
     progress = Signal(int, int)
 
@@ -1124,20 +1136,27 @@ class ScanWorker(QObject):
         self.move_fns = move_fns
         self.measure_fn = measure_fn
         self._stop_requested = False
+        self._stop_msg = None
 
         self.axis_names = list(reversed(axes.keys()))
         self.axis_values = []
-        for name in self.axis_names:
-            start, stop, step = axes[name]
-            start, stop, step = 1000*int(start), 1000*int(stop), 1000*int(step)
-            values = np.arange(start, stop + step / 2, step, dtype= int)
-            self.axis_values.append(values)
+        try:
+            for name in self.axis_names:
+                start, stop, step = axes[name]
+                start, stop, step = 1000*int(start), 1000*int(stop), 1000*int(step)
+                values = np.arange(start, stop + step / 2, step, dtype= int)
+                self.axis_values.append(values)
+        except Exception as e:
+            self._stop_requested = True
+            self._stop_msg = str(e)
+            return None
 
         self.shape = tuple(len(v) for v in self.axis_values)
         self.data = np.full(self.shape, np.nan)
 
     def request_stop(self):
         self._stop_requested = True
+        self._stop_msg = "Manual stop requested"
 
     def run(self):
         try:
@@ -1150,7 +1169,7 @@ class ScanWorker(QObject):
             for i, idx in enumerate(combos):
             # for i, rev_idx in enumerate(combos):
                 if self._stop_requested:
-                    break
+                    raise Exception(self._stop_msg)
 
                 # idx = rev_idx[::-1]
                 coords = {
@@ -1170,9 +1189,12 @@ class ScanWorker(QObject):
                 self.point_measured.emit(idx, coords, values)
                 self.progress.emit(i + 1, total)
 
-            self.finished.emit()
+            self.completed.emit()
         except Exception as e:
             self.error.emit(str(e))
+        finally:
+            self.finished.emit()
+            
 
 
 
@@ -1212,3 +1234,4 @@ class RevertableLineEdit(QLineEdit):
 
     def _store_previous_text(self):
         self._previous_text = self.text()
+        
