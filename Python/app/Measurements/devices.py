@@ -79,8 +79,5 @@ class Scanner():
         elif self.name_detection == 'Spec':
             return lambda: cmds.get(self.dev_detection.readval)
         else:
-            raise ConnectionError(f'Could not find detection for {self.name_detection}')
+            raise Exception(f'Could not find detection for {self.name_detection}')
         
-class ConnectionError(Exception):
-    def __init__(self, message):
-        super().__init__(message)

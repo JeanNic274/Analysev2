@@ -3,14 +3,15 @@ import configparser
 
 import numpy as np
 
+        
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
-    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView, QScrollArea, QTextEdit, QButtonGroup
+    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView, QScrollArea, QTextEdit, QButtonGroup, QApplication
 )
 # print('imported QTWidget', time.time()-t)
 # t=time.time()
-from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel, QSettings, QThread, QObject, Signal
-from PySide6.QtGui import QBrush, QPalette, QColor, QColorConstants, QIcon
+from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel, QSettings, QThread, QObject, Signal, QMimeData, QPoint
+from PySide6.QtGui import QBrush, QPalette, QColor, QColorConstants, QIcon, QDrag, QPixmap
 # print('imported QtCore', time.time()-t)
 # t=time.time()
 from pathlib import Path
@@ -31,6 +32,127 @@ from Python.app.Measurements.devices import Scanner
 from pyHegel.pyHegel import commands as cmds
 from Python.config import DEFAULT_FOLDER
 
+
+
+class DraggableFrame(QFrame):
+    def __init__(self, key, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._drag_start_pos = None
+        self.key = key
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_start_pos = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_start_pos is None:
+            return super().mouseMoveEvent(event)
+
+        if (event.position().toPoint() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
+            return super().mouseMoveEvent(event)
+
+        drag = QDrag(self)
+        mime_data = QMimeData()
+        mime_data.setData("application/x-frame-id", str(id(self)).encode())
+        drag.setMimeData(mime_data)
+
+        # visual feedback: drag a snapshot of the frame itself
+        pixmap = self.grab()
+        drag.setPixmap(pixmap)
+        drag.setHotSpot(event.position().toPoint())
+
+        drag.exec(Qt.MoveAction)
+        self._drag_start_pos = None
+
+
+class ReorderableContainer(QWidget):
+    def __init__(self, settings_key="frame_order"):
+        super().__init__()
+        self.setAcceptDrops(True)
+        self.layout_ = QVBoxLayout(self)
+        self.layout_.setSpacing(10)
+        self.settings_key = settings_key
+        self.settings = QSettings("JN", "AnalyseV2-Sidebar")
+        
+    def add_frame(self, frame: DraggableFrame):
+        self.layout_.addWidget(frame)
+
+    def current_order(self):
+        order = []
+        for i in range(self.layout_.count()):
+            w = self.layout_.itemAt(i).widget()
+            if w is not None:
+                order.append(w.key)
+        return order
+
+    def save_order(self):
+        self.settings.setValue(self.settings_key, self.current_order())
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-frame-id"):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        frame_id = int(bytes(event.mimeData().data("application/x-frame-id")).decode())
+        dragged_widget = self._find_widget_by_id(frame_id)
+        if dragged_widget is None:
+            return
+
+        drop_y = event.position().toPoint().y()
+        target_index = self._index_for_y(drop_y, exclude=dragged_widget)
+
+        current_index = self.layout_.indexOf(dragged_widget)
+        self.layout_.removeWidget(dragged_widget)
+
+        # adjust target index if removing shifted things
+        if current_index < target_index:
+            target_index -= 1
+
+        self.layout_.insertWidget(target_index, dragged_widget)
+        event.acceptProposedAction()
+        self.save_order()
+
+    def _find_widget_by_id(self, widget_id):
+        for i in range(self.layout_.count()):
+            w = self.layout_.itemAt(i).widget()
+            if w is not None and id(w) == widget_id:
+                return w
+        return None
+
+    def _index_for_y(self, y, exclude=None):
+        for i in range(self.layout_.count()):
+            w = self.layout_.itemAt(i).widget()
+            if w is exclude or w is None:
+                continue
+            if y < w.geometry().center().y():
+                return i
+        return self.layout_.count()
+
+    def restore_order(self):
+        saved_order = self.settings.value(self.settings_key)
+        if not saved_order:
+            return  
+
+        widgets_by_key = {}
+        for i in range(self.layout_.count()):
+            w = self.layout_.itemAt(i).widget()
+            if w is not None:
+                widgets_by_key[w.key] = w
+
+        for w in widgets_by_key.values():
+            self.layout_.removeWidget(w)
+
+        for key in saved_order:
+            if key in widgets_by_key:
+                self.layout_.addWidget(widgets_by_key.pop(key))
+
+        # if not in saved order
+        for w in widgets_by_key.values():
+            self.layout_.addWidget(w)
 
 class SidebarView(QWidget):
     def __init__(self, main_window):
@@ -218,7 +340,8 @@ class SidebarMeasure(QScrollArea):
             """
         )
         
-        self.layout = QVBoxLayout(self)
+        self.container = ReorderableContainer()
+        self.layout = QVBoxLayout()
         self.layout.setContentsMargins(4, 4, 4, 4)
         self.layout.setAlignment(Qt.AlignTop)
         
@@ -240,28 +363,30 @@ class SidebarMeasure(QScrollArea):
         
         self.layout.addLayout(self.top_layout)
         
-        self.UI_MH150 = UI_MH150(self)
+        self.UI_MH150 = UI_MH150(self,"MH150")
         self.add_device_ui(self.UI_MH150)
         
-        self.UI_Scan = UI_Scan(self)
+        self.UI_Scan = UI_Scan(self,"Scan")
         self.add_device_ui(self.UI_Scan)
         
-        self.UI_spectrometer = UI_SpectroMeter(self)
-        self.add_device_ui(self.UI_spectrometer)
-        
-        self.UI_NanoPos = UI_NanoPos(self)
+        self.UI_NanoPos = UI_NanoPos(self,'NanoPos')
         self.add_device_ui(self.UI_NanoPos)
         
-        self.UI_Laser = UI_Laser(self)
+        self.UI_Laser = UI_Laser(self,'Laser')
         self.add_device_ui(self.UI_Laser)
         
-        self.UI_FilterWheel = UI_FilterWheel(self)
+        self.UI_FilterWheel = UI_FilterWheel(self,'FilterWheel')
         self.add_device_ui(self.UI_FilterWheel)
         
+        self.UI_spectrometer = UI_SpectroMeter(self,'Spectrometer')
+        self.add_device_ui(self.UI_spectrometer)
+        
         self.layout.addStretch()
+        self.setWidget(self.container)
+        self.container.restore_order()
         
     def add_device_ui(self,dev_ui):
-        self.layout.addWidget(dev_ui)
+        self.container.add_frame(dev_ui)
         
         
         
@@ -269,9 +394,9 @@ class SidebarMeasure(QScrollArea):
 #************************ UI Widgets for instruments/commands ************************#
 
 
-class UI_MH150(QFrame):    
-    def __init__(self,main_window):
-        super().__init__()
+class UI_MH150(DraggableFrame):    
+    def __init__(self,main_window,key):
+        super().__init__(key=key)
         self.main = main_window
         # self.setFrameShape(QFrame.Box)       # or StyledPanel, Panel, etc.
         # self.setFrameShadow(QFrame.Raised)
@@ -385,9 +510,9 @@ class UI_MH150(QFrame):
         self._cont_worker = None
 
         
-class UI_SpectroMeter(QFrame):
-    def __init__(self,main_window):
-        super().__init__()
+class UI_SpectroMeter(DraggableFrame):
+    def __init__(self,main_window,key):
+        super().__init__(key=key)
         self.main = main_window
         # self.setFrameShape(QFrame.Box)       # or StyledPanel, Panel, etc.
         # self.setFrameShadow(QFrame.Raised)
@@ -450,9 +575,9 @@ class UI_SpectroMeter(QFrame):
         QMessageBox.critical(self, "Measurement error", message)
         
         
-class UI_Scan(QFrame):
-    def __init__(self,main_window):
-        super().__init__()
+class UI_Scan(DraggableFrame):
+    def __init__(self,main_window,key):
+        super().__init__(key=key)
         self.main = main_window
         
         self.params_enabled = {}
@@ -674,9 +799,9 @@ class UI_Scan(QFrame):
             self._scan_worker.request_stop()
                 
         
-class UI_Laser(QFrame):
-    def __init__(self,main_window):
-        super().__init__()
+class UI_Laser(DraggableFrame):
+    def __init__(self,main_window,key):
+        super().__init__(key=key)
         self.main = main_window
         
         self.setFrameShape(QFrame.StyledPanel)
@@ -794,9 +919,9 @@ class UI_Laser(QFrame):
         return invalid_parameters
       
         
-class UI_NanoPos(QFrame):
-    def __init__(self,main_window):
-        super().__init__()
+class UI_NanoPos(DraggableFrame):
+    def __init__(self,main_window,key):
+        super().__init__(key=key)
         self.main = main_window
         
         self.setFrameShape(QFrame.StyledPanel)
@@ -931,9 +1056,9 @@ class UI_NanoPos(QFrame):
         self._cont_worker[ax] = None
 
 
-class UI_FilterWheel(QFrame):
-    def __init__(self,main_window):
-        super().__init__()
+class UI_FilterWheel(DraggableFrame):
+    def __init__(self,main_window,key):
+        super().__init__(key=key)
         self.main = main_window
         
         self.setFrameShape(QFrame.StyledPanel)
@@ -1235,3 +1360,5 @@ class RevertableLineEdit(QLineEdit):
     def _store_previous_text(self):
         self._previous_text = self.text()
         
+        
+
