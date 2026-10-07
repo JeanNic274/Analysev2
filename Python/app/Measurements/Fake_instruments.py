@@ -62,7 +62,11 @@ class Fake_ESP300():
 class Fake_NanoPositionner():
     def __init__(self):
         self.move = move_nano()    
-        
+        self.status = status_nano()
+        # if self.NanoPos.status.getStatusMoving(axis) == 0 and self.NanoPos.status.getStatusTargetRange(axis):
+        #     break
+        # self.NanoPos.control.setControlOutput(axis, True)
+        # self.NanoPos.control.setControlMove(axis, True)
 class move_nano():
     def __init__(self):
         pass
@@ -75,6 +79,13 @@ class move_nano():
     def getPosition(self,axis):
         return np.random.randint(1000,100000)/10
     
+class status_nano():
+    def __init__(self):
+        pass
+    def getStatusMoving(self,axis):
+        return 0
+    def getStatusTargetRange(self,axis):
+        return 1
 
 
 class FakeParameter:

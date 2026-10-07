@@ -165,13 +165,13 @@ def header_extract(file_path,map=False):
                         
         nb_data= sum(1 for _ in f)+check_line
     info={}
-    if nb_data<2:
-        info['file_type'],info['measure_type']= 'Empty file','Empty file'
-        return info
+    # if nb_data<2:
+    #     info['file_type'],info['measure_type']= 'Empty file','Empty file'
+    #     # return info
     info['file_type'],info['measure_type']=fetchtype(header)
-    if len(header)<10:
-        info['int_time']=1
-        return info
+    # if len(header)<10:
+    #     info['int_time']=1
+    #     # return info
     
         
     
@@ -215,6 +215,7 @@ def header_extract(file_path,map=False):
             info['power'] = f"{1e6 * power:.4}" + r' μW'
         if power < 1e-6:
             info['power'] = f"{1e9 * power:.4}" + r' nW'
+            
     info['filter'] = fetchfilter(header)
     info['x_offset'] = 0
     info['y_offset'] = 0
@@ -277,7 +278,7 @@ def fetchinttime(header,file_type):
                 int_time=int(int_search.group(3))
     
     
-    if int_time>9999:
+    if int(int_time)>9999:
         int_time='{:,}'.format(int_time).replace(',', ' ') 
     else:
         int_time=str(int_time)
@@ -311,7 +312,7 @@ def fetchfilter(header):
 def fetchtype(header):
     file_type="Unknown"
     measure_type="Unknown"
-    if len(header)<10:
+    if header[0][:12]=='# PL Mapping':
         return 'plmap', 'maps'
     column=header[-2]
     if header[0][:10]=='#Acq. time':

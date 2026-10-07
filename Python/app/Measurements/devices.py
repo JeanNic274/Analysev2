@@ -52,23 +52,41 @@ class Scanner():
     def move_fns(self):
         fns = {}
         for axe in self.axes:
-            if axe =='x':
+            if axe =='AttoX':
                 if self.NanoPos is None:
                     self.NanoPos = Fake_NanoPositionner()
-                fns[axe] = lambda v: self.NanoPos.move.setControlTargetPosition(0,v)
-            if axe =='y':
+                fns[axe] = lambda v: piezoMove(0,v)
+            if axe =='AttoY':
                 if self.NanoPos is None:
                     self.NanoPos = Fake_NanoPositionner()
-                fns[axe] = lambda v: self.NanoPos.move.setControlTargetPosition(1,v)
-            if axe =='z':
+                fns[axe] = lambda v: piezoMove(1,v)
+            if axe =='AttoZ':
                 if self.NanoPos is None:
                     self.NanoPos = Fake_NanoPositionner()
-                fns[axe] = lambda v: self.NanoPos.move.setControlTargetPosition(2,v)
+                fns[axe] = lambda v: piezoMove(2,v)
+            
+            def piezoMove(axe,coord):
+                self.NanoPos.move.setControlTargetPosition(axe,coord)
+                self.wait_until_stable(axe)
+                return self.NanoPos.move.getPosition(axe)
+                # amc.move.setControlTargetPosition(2, int(y * 1000)); wait_until_stable(amc, 2)       
             
         return fns
 
-    def WIP(self):
-        return 0
+    
+    
+    def wait_until_stable(self, axis):
+        timeout = 10
+        start = time.time()
+        while True:
+            if self.NanoPos.status.getStatusMoving(axis) == 0 and self.NanoPos.status.getStatusTargetRange(axis):
+                break
+            self.NanoPos.control.setControlOutput(axis, True)
+            self.NanoPos.control.setControlMove(axis, True)
+            if time.time() - start > timeout:
+                print(f"Timeout waiting for stage axis {axis}")
+                break
+            time.sleep(0.01)
     
     def meas_fns(self):
         if self.name_detection == 'MH150':

@@ -413,7 +413,8 @@ class BaseMap(QWidget):
   
     def update_data(self, data,new_value,coords = None):
         new_value = new_value[-1]
-        self.image.set_data(data)
+        pre = tuple((data.ndim-2)*[0])
+        self.image.set_data(data[pre])
         if self.data_min == np.inf:
             self.data_min = new_value
             self.data_max = new_value+1

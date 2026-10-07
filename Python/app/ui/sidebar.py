@@ -24,7 +24,8 @@ import subprocess
 from Python.app.Processing.data_import import Data_Set_Import
 # print('imported Data_Set_Import', time.time()-t)
 # t=time.time()
-from Python.app.Processing.misc import  browse
+from Python.app.Processing.misc import browse
+from Python.app.Processing.io import create_file_header
 # print('imported time.time()-t)
 from Python.app.ui.graphs import *
 from Python.app.Measurements.devices import Scanner
@@ -363,6 +364,8 @@ class SidebarMeasure(QScrollArea):
         
         self.layout.addLayout(self.top_layout)
         
+        self.container.layout_.addLayout(self.layout)
+        
         self.UI_MH150 = UI_MH150(self,"MH150")
         self.add_device_ui(self.UI_MH150)
         
@@ -637,15 +640,20 @@ class UI_Scan(DraggableFrame):
         self.scan_parameters.setHorizontalHeaderLabels(('Start','Stop','Step',''))
         
         self.scan_parameters.setRowCount(3)
-        scan_params = ('x','y','z')
-        self.scan_parameters.setVerticalHeaderLabels(scan_params)
+        scan_params = ('AttoX','AttoY','AttoZ')
+        scan_params_shorthand = ('x','y','z')
+        # self.scan_parameters.setVerticalHeaderLabels(scan_params_shorthand)
         for i in range(self.scan_parameters.columnCount()-1):
             self.scan_parameters.horizontalHeader().setSectionResizeMode(i,QHeaderView.Stretch)
             
         self.scan_parameters.setColumnWidth(3,10)
         self.scan_parameters.horizontalHeader().setSectionResizeMode(3,QHeaderView.Fixed)
         
-        for i, param in enumerate(scan_params):
+        for i, (param,param_sh) in enumerate(zip(scan_params,scan_params_shorthand)):
+            row_header_item = QTableWidgetItem(param_sh)
+            row_header_item.setToolTip(param)
+            self.scan_parameters.setVerticalHeaderItem(i,row_header_item)
+            
             self.params_enabled[param] = QTableWidgetItem()
             self.params_enabled[param].setTextAlignment(4)
             self.params_enabled[param].setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
@@ -680,7 +688,7 @@ class UI_Scan(DraggableFrame):
 
         for row in range(self.scan_parameters.rowCount()):
             header_item = self.scan_parameters.verticalHeaderItem(row)
-            key = header_item.text() if header_item else str(row)
+            key = header_item.toolTip() if header_item else str(row)
 
             checkbox_item = self.scan_parameters.item(row, last_col)
             is_checked = checkbox_item.checkState() == Qt.Checked if checkbox_item else False
@@ -740,18 +748,17 @@ class UI_Scan(DraggableFrame):
         if missing:
             raise ValueError(f"Missing move function for axes: {missing}")
 
-        # def measure_fn():
-        #     return device.getCountRates()
+        file_path = create_file_header(devices = [], meas_type = "Map Scan", sess_nb=self.main.main.session_number, meas_nb = self.main.main.meas_nb())
         
         if len(axes) == 1:
             graph = ScanPlot1D(self,axes)
         else:
-            graph = ScanPlot2D(self,axes)
+            graph = ScanPlot2D(self,dict(list(axes.items())[:2]))
         graph.show()
         self.main.main.graphs_scan.append(graph)
         
         self._scan_thread = QThread()
-        self._scan_worker = ScanWorker(axes, move_fns, measure_fn)
+        self._scan_worker = ScanWorker(axes, move_fns, measure_fn, file_path)
         self._scan_worker.moveToThread(self._scan_thread)
 
         self._scan_thread.started.connect(self._scan_worker.run)
@@ -1249,7 +1256,7 @@ class ScanWorker(QObject):
     error = Signal(str)
     progress = Signal(int, int)
 
-    def __init__(self, axes, move_fns, measure_fn):
+    def __init__(self, axes, move_fns, measure_fn, file_path = 'ScanError.txt'):
         """
         axes: dict like {'x': [-10, 10, 1], 'y': [0, 5, 1]}
         move_fns: dict like {'x': move_x_fn, 'y': move_y_fn}
@@ -1260,7 +1267,10 @@ class ScanWorker(QObject):
         self.axes = axes
         self.move_fns = move_fns
         self.measure_fn = measure_fn
+        self.meas_names = ['MH150.Counts Ch1(ph)','	MH150.Counts Ch2(ph)','	MH150.Counts total(ph)']
         self._stop_requested = False
+        self._file_path = file_path
+        
         self._stop_msg = None
 
         self.axis_names = list(reversed(axes.keys()))
@@ -1268,6 +1278,8 @@ class ScanWorker(QObject):
         try:
             for name in self.axis_names:
                 start, stop, step = axes[name]
+                if (start>stop and step >0) or (start<stop and step <0):
+                    start, stop = stop, start
                 start, stop, step = 1000*int(start), 1000*int(stop), 1000*int(step)
                 values = np.arange(start, stop + step / 2, step, dtype= int)
                 self.axis_values.append(values)
@@ -1278,43 +1290,77 @@ class ScanWorker(QObject):
 
         self.shape = tuple(len(v) for v in self.axis_values)
         self.data = np.full(self.shape, np.nan)
+        
+    def _boustrophedon_scan(self, index_ranges): # snake like order
+        n = len(index_ranges)
 
+        def recurse(level, parity):
+            seq = list(index_ranges[level])
+            if parity % 2 == 1:
+                seq.reverse()
+
+            if level == n - 1:
+                for i in seq:
+                    yield (i,)
+            else:
+                for k, i in enumerate(seq):
+                    # every outer step flips the inner axes
+                    for rest in recurse(level + 1, parity + k):
+                        yield (i,) + rest
+
+        yield from recurse(0, 0)
+        
     def request_stop(self):
         self._stop_requested = True
         self._stop_msg = "Manual stop requested"
 
     def run(self):
         try:
-            index_ranges = [range(len(v)) for v in self.axis_values]
-            combos = list(itertools.product(*index_ranges))
-            total = len(combos)
+            with open(self._file_path,'a') as file:
+                index_ranges = [range(len(v)) for v in self.axis_values]
+                
+                combos = list(self._boustrophedon_scan(index_ranges))
+                total = len(combos)
+                file.write('#')
+                for name in self.axis_names[::-1]:
+                    file.write(name+'_req'+'\t')
+                    file.write(name+'_det'+'\t')
+                for name in self.meas_names:
+                    file.write(name+'\t')
+                file.write('\n')
+                
+                last_coords = {name: None for name in self.axis_names}
+                det_coords = {name: None for name in self.axis_names}
 
-            last_coords = {name: None for name in self.axis_names}
+                for i, idx in enumerate(combos):
+                    save_data = []
+                    
+                    if self._stop_requested:
+                        raise Exception(self._stop_msg)
 
-            for i, idx in enumerate(combos):
-            # for i, rev_idx in enumerate(combos):
-                if self._stop_requested:
-                    raise Exception(self._stop_msg)
+                    coords = {
+                        name: self.axis_values[a][idx[a]]
+                        for a, name in enumerate(self.axis_names)
+                    }
+                    
+                    # only move relevant axes
+                    for name in self.axis_names[::-1]:
+                        if coords[name] != last_coords[name]:
+                            det_coords[name] = self.move_fns[name](coords[name])
+                            last_coords[name] = coords[name]
+                        save_data.append(str(coords[name]/1000))
+                        save_data.append(str(det_coords[name]))
 
-                # idx = rev_idx[::-1]
-                coords = {
-                    name: self.axis_values[a][idx[a]]
-                    for a, name in enumerate(self.axis_names)
-                }
+                    value = self.measure_fn()
+                    values = tuple(value) + (np.sum(value),)
+                    self.data[idx] = values[-1]
+                    values_str = [str(value) for value in values]
+                    save_data += values_str
+                    file.write('\t'.join(save_data) + '\n')
+                    self.point_measured.emit(idx, coords, values)
+                    self.progress.emit(i + 1, total)
 
-                # only move relevant axes
-                for name in self.axis_names:
-                    if coords[name] != last_coords[name]:
-                        self.move_fns[name](coords[name])
-                        last_coords[name] = coords[name]
-
-                value = self.measure_fn()
-                values = (value) + (np.sum(value),)
-                self.data[idx] = values[-1]
-                self.point_measured.emit(idx, coords, values)
-                self.progress.emit(i + 1, total)
-
-            self.completed.emit()
+                self.completed.emit()
         except Exception as e:
             self.error.emit(str(e))
         finally:

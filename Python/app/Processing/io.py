@@ -1,7 +1,7 @@
 import json
 import re
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date
 
 from Python.app.Processing.data_import import Data_Set_Import
 
@@ -73,7 +73,7 @@ def load_exp(plot_area_widget,plot_area_index,filename = "test    2026-09-08 14-
             
             
 
-def prevent_overwrite_file(filepath):
+def prevent_overwrite_file(filepath, char =  (r" \((\d+)\)"," (",")")):
     """Prevents new file from overwriting existing file with same name. New file will keep its name and older file will have (n) at the end of their name.
 
     Args:
@@ -94,7 +94,7 @@ def prevent_overwrite_file(filepath):
     for f in parent.iterdir(): # Search for all files with same name and (n)
         if f.is_file():
             match = re.match(
-                rf"^{re.escape(stem)} \((\d+)\){re.escape(suffix)}$",
+                rf"^{re.escape(stem)}{char[0]}{re.escape(suffix)}$",
                 f.name
             )
             if match:
@@ -103,13 +103,13 @@ def prevent_overwrite_file(filepath):
     next_number = max(existing_versions, default=0) + 1 # New max n
 
     for number in range(next_number, 0, -1): # Rename every file to filename (n+1)
-        old = parent / f"{stem} ({number}){suffix}"
-        new = parent / f"{stem} ({number + 1}){suffix}"
+        old = parent / f"{stem}{char[1]}{number}{char[2]}{suffix}"
+        new = parent / f"{stem}{char[1]}{number + 1}{char[2]}{suffix}"
 
         if old.exists():
             old.rename(new)
 
-    filepath.rename(parent / f"{stem} (1){suffix}")
+    filepath.rename(parent / f"{stem}{char[1]}1{char[2]}{suffix}")
     
     
 def save_figure_export(
@@ -211,7 +211,27 @@ def save_fit(graph,filename=""):
            
         
         
-        
+def create_file_header(devices = [], name_prefix = "", meas_type = "", sess_nb = "E",meas_nb = 'E',comments = ""):
+    char =  (r" _(\d+)","_","")
+    
+    filepath = Path('data','PL',f"Data_{re.sub('-',"",date.today().isoformat()[2:])}_{sess_nb}_{meas_nb}.txt")
+    
+    prevent_overwrite_file(filepath, char = char)
+    
+    with open(filepath,'a') as file:
+        file.write(f"# {date.today().isoformat()}\n")
+        file.write(f"# {datetime.today().time()}\n")
+        file.write(f"# Comment: {comments}\n")
+            
+        for device in devices:
+            try:
+                info_dump = device.get_info_dump() #TODO 
+            except:continue
+            file.write(f"# Instrument: {device.name}; {info_dump}\n")
+            
+    return filepath
+            
+            
         
         
         

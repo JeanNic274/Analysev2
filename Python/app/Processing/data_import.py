@@ -122,6 +122,7 @@ class Data_Set_Import:
             self.name=self.name[34:]
         if self.name.startswith('plmap_data_'):
             self.name=self.name[10:20]
+            
         if file_path:
             self.attrs=header_extract(file_path)
         elif attrs:
@@ -129,6 +130,7 @@ class Data_Set_Import:
             self.data=dataset
         else:
             print('Missing either filepath or attrs')
+            
         for k, v in self.attrs.items():
             setattr(self, k, v)
         if file_path:

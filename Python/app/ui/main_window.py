@@ -1,5 +1,6 @@
 import time
 t=time.time()
+from datetime import date
 
 import numpy
 import lmfit
@@ -33,7 +34,10 @@ class MainWindow(QMainWindow):
         
         self.settings = QSettings("JN","AnalyseV2-MainWindow")
         self.save_folder=Path(self.settings.value("save_folder",r"C:"))
-
+        self.session_number = self._get_session_number()
+        self.measure_number = -1
+        print(f"Session #{self.session_number}")
+        
         self.selected_files = {}
         self.datasets = {}
         self.fit_results = {}
@@ -92,7 +96,24 @@ class MainWindow(QMainWindow):
         if splitter_size is not None:
             self.layout.restoreState(self.settings.value("splitter_sizes"))
 
+    def meas_nb(self):
+        self.measure_number+=1
+        return self.measure_number
 
+    def _get_session_number(self):
+        today_str = date.today().isoformat()
+        last_date = self.settings.value("last_launch_date", "")
+        count = int(self.settings.value("session_count", 0))
+
+        if last_date == today_str:
+            count += 1
+        else:
+            count = 1
+            self.settings.setValue("last_launch_date", today_str)
+
+        self.settings.setValue("session_count", count)
+        return count
+    
     def closeEvent(self, event):
         print(f'Closing Python.app. Runtime: {time.time()-t:.3f} s')
         self.settings.setValue("window_geometry", self.saveGeometry())
