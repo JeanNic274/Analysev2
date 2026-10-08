@@ -416,7 +416,7 @@ class ExperimentPicker(QDialog):
     def _refresh(self):
         self.files.clear()
 
-        for filepath in os.listdir(os.path.join('data','experiments')):
+        for filepath in os.listdir(os.path.join('data','graphs')):
             
             item=QListWidgetItem(os.path.basename(filepath))
             item.setData(Qt.UserRole,filepath)
@@ -464,7 +464,7 @@ class SaveManager(QDialog):
 
         self._build()
         self._refresh()
-        settings_obj = self.main.settings("SaveManager/windowGeometry",None)
+        settings_obj = self.main.settings.value("SaveManager/windowGeometry",None)
         
         if settings_obj is not None:
             self.restoreGeometry(settings_obj)

@@ -154,7 +154,7 @@ class SidebarView(QWidget):
         super().__init__()
         self.main = main_window
         
-        self.path=Path(self.main.settings.value("Filepath/last_folder","C:"))
+        self.path=Path(self.main.settings.value("Filepaths/last_folder","C:"))
         self._build()
 
     def _build(self):
@@ -361,7 +361,7 @@ class SidebarMeasure(QScrollArea):
         
         self.container.layout_.addLayout(self.layout)
         
-        self.UI_MH150 = UI_MH150(self,"MH150")
+        self.UI_MH150 = UI_MH150(self.main,"MH150")
         self.add_device_ui(self.UI_MH150)
         
         self.UI_Scan = UI_Scan(self,"Scan")
@@ -396,20 +396,12 @@ class UI_MH150(DraggableFrame):
     def __init__(self,main_window,key):
         super().__init__(key=key)
         self.main = main_window
-        # self.setFrameShape(QFrame.Box)       # or StyledPanel, Panel, etc.
-        # self.setFrameShadow(QFrame.Raised)
+
         self.setFrameShape(QFrame.StyledPanel)
-        self.update_graph = True
-        
+
         self._build()
         
-        
-        
-        
     def _build(self):
-        
-        # self.setStyleSheet("border: 1px solid red; margin: 1px; padding: 1px;")
-        
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(5)
         self.layout.setContentsMargins(5, 1, 5, 1)
@@ -422,7 +414,6 @@ class UI_MH150(DraggableFrame):
         self.btn_read_cont.toggled.connect(self.on_continuous_toggled)
         self.btn_rate_graph = QCheckBox('Rate Graph')        
         self.btn_rate_graph.toggled.connect(self.rate_graph_toggle)
-        
         
         layer1.addWidget(self.btn_read_cont)
         layer1.addWidget(self.btn_rate_graph)
@@ -443,24 +434,24 @@ class UI_MH150(DraggableFrame):
     def on_continuous_toggled(self, checked):
         if checked:
             self._start_continuous_read()
-            if self.main.main.graph_rate_graph:
-                self.main.main.graph_rate_graph.graph.resume()
+            if self.main.graph_rate_graph:
+                self.main.graph_rate_graph.graph.resume()
         else:
             self._stop_continuous_read()
-            if self.main.main.graph_rate_graph:
-                self.main.main.graph_rate_graph.graph.pause()
+            if self.main.graph_rate_graph:
+                self.main.graph_rate_graph.graph.pause()
                 
     def rate_graph_toggle(self,checked):
         if checked:
-            self.main.main.graph_rate_graph = RateGraph(self.main)
-            self.main.main.graph_rate_graph.show()
+            self.main.graph_rate_graph = RateGraph(self.main)
+            self.main.graph_rate_graph.show()
         else:
-            if self.main.main.graph_rate_graph:
-                self.main.main.graph_rate_graph.close()
-                self.main.main.graph_rate_graph = None
+            if self.main.graph_rate_graph:
+                self.main.graph_rate_graph.close()
+                self.main.graph_rate_graph = None
             
     def _start_continuous_read(self):
-        device = self.main.main.device_MH150
+        device = self.main.device_MH150
         
         if hasattr(self, '_cont_thread') and self._cont_thread is not None and self._cont_thread.isRunning():
             return
@@ -494,11 +485,8 @@ class UI_MH150(DraggableFrame):
         self.label_counts1.setText(f"Ch1: {self.val[0]}")
         self.label_counts2.setText(f"Ch2: {self.val[1]}")
         if self.btn_rate_graph.isChecked():
-            # if self.update_graph: # if 500 ms is too fast can update every 2 points
-            self.main.main.graph_rate_graph.add_data(self.val)
-            #     self.update_graph = False
-            # else:
-            #     self.update_graph = True
+            if self.main.graph_rate_graph is not None:
+                self.main.graph_rate_graph.add_data(self.val)
 
     def _on_continuous_error(self, message):
         QMessageBox.critical(self, "Measurement error", message)
@@ -516,6 +504,8 @@ class UI_SpectroMeter(DraggableFrame):
         # self.setFrameShadow(QFrame.Raised)
         self.setFrameShape(QFrame.StyledPanel)
         
+        self._thread = None
+        self._worker = None
         
         self.val = None
         self._build()
@@ -531,19 +521,31 @@ class UI_SpectroMeter(DraggableFrame):
         
         self.layout.addWidget(QLabel('Spectrometer'))
         
-        btn_measure = QPushButton('Measure')        
-        if self.main.FAKE:
-            btn_measure.clicked.connect(self.start_measure)
+        self.btn_measure = QPushButton('Measure') 
+        self.btn_measure.setCheckable(True)
+        self.btn_measure.setStyleSheet("QPushButton:checked { background-color: red }"
+                                       "QPushButton {background-color: darkGreen}")       
+        self.btn_measure.toggled.connect(self.start_measure)
         
         layer1 = QHBoxLayout()
         
-        layer1.addWidget(btn_measure)
+        layer1.addWidget(self.btn_measure)
         
         self.layout.addLayout(layer1)
         
 
 
-    def start_measure(self):
+    def start_measure(self, checked = False):
+        if not checked:
+            self._abort_measure()
+            return
+        
+        if hasattr(self,"_thread") is not None:
+            self._on_measure_finished()
+            return
+
+        self.btn_measure.setText('Abort')
+        
         if self.main.main.graph_spectrometer is None:
             self.main.main.graph_spectrometer = SpectrometerGraph(self.main.main)
             self.main.main.graph_spectrometer.show()
@@ -562,14 +564,39 @@ class UI_SpectroMeter(DraggableFrame):
         self._worker.finished.connect(self._thread.quit)
         self._worker.finished.connect(self._worker.deleteLater)
         self._thread.finished.connect(self._thread.deleteLater)
-
+        self._thread.finished.connect(self._clear_refs) 
         self._thread.start()
 
     def _on_measure_done(self, val):
         self.val = val
         self.main.main.graph_spectrometer.update_val(self.val)
+        self._on_measure_finished()
 
-    def _on_measure_error(self, message):
+    def _on_measure_finished(self):
+        self.btn_measure.blockSignals(True)
+        self.btn_measure.setChecked(False)
+        self.btn_measure.setText('Measure')
+        self.btn_measure.blockSignals(False)
+        
+    def _clear_refs(self):
+        self._thread = None
+        self._worker = None
+        
+
+    def _abort_measure(self):
+        if self._worker is not None:
+            for sig, slot in ((self._worker.completed, self._on_measure_done),
+                            (self._worker.error, self._on_measure_error)):
+                try:
+                    sig.disconnect(slot)
+                except (RuntimeError, TypeError):
+                    pass
+                
+        self._on_measure_error('Manual Abort')
+        
+        
+    def _on_measure_error(self, message='Unspecified Error'):
+        self._on_measure_finished()
         QMessageBox.critical(self, "Measurement error", message)
         
         
@@ -593,7 +620,8 @@ class UI_Scan(DraggableFrame):
         
         self.btn_measure = QPushButton('Start')        
         self.btn_measure.setCheckable(True)
-        self.btn_measure.setStyleSheet("QPushButton:checked { background-color: red }")
+        self.btn_measure.setStyleSheet("QPushButton:checked { background-color: red }"
+                                       "QPushButton {background-color: darkGreen}")
         
         self.btn_measure.toggled.connect(self.start_scan)
         
@@ -1231,8 +1259,7 @@ class ContinuousReadWorker(QObject):
                 value = self.measure_fn()
                 self.reading.emit(value)
 
-                # sleep in small chunks so stop() is noticed quickly
-                # rather than blocking a full interval after stop() is called
+                # sleep in small chunks so it feels less laggy
                 slept = 0
                 chunk = 100  # ms
                 while slept < self.interval_ms and self._running:
@@ -1361,10 +1388,6 @@ class ScanWorker(QObject):
         finally:
             self.finished.emit()
             
-
-
-
-
 
 
 def resize_table_to_contents(table):

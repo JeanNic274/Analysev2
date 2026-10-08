@@ -476,7 +476,7 @@ class SpectrometerGraph(QWidget):
         self.main = main_window
         self.setWindowTitle('Spectrometer')
         
-        settings_obj = self.main.setting("SpectrometerGraph/windowGeometry",None)
+        settings_obj = self.main.settings.value("SpectrometerGraph/windowGeometry",None)
         
         if settings_obj is not None:
             self.restoreGeometry(settings_obj)
@@ -589,8 +589,8 @@ class RateGraph(QWidget):
         
     def closeEvent(self, event):
         self.main.settings.setValue("RateGraph/windowGeometry", self.saveGeometry())
-        self.main.graph_rate_graph = None
-        self.main.UI_MH150.btn_rate_graph.setChecked(False)
+        self.main.sidebar_measure.graph_rate_graph = None
+        self.main.sidebar_measure.UI_MH150.btn_rate_graph.setChecked(False)
         event.accept()
 
 

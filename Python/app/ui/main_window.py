@@ -94,15 +94,15 @@ class MainWindow(QMainWindow):
         self._restore_geometry()
 
     def _restore_geometry(self):
-        geometry = self.settings.value("main_window/window_geometry")
+        geometry = self.settings.value("main_window/windowGeometry",None)
         if geometry is not None:
             self.restoreGeometry(geometry)
         else:
             self.resize(1200, 800)
             
-        splitter_size = self.settings.value("main_window/splitter_sizes")
+        splitter_size = self.settings.value("main_window/splitterSizes",None)
         if splitter_size is not None:
-            self.layout.restoreState(self.settings.value("main_window/splitter_sizes"))
+            self.layout.restoreState(splitter_size)
 
     def meas_nb(self):
         self.measure_number+=1
@@ -124,8 +124,8 @@ class MainWindow(QMainWindow):
     
     def closeEvent(self, event):
         print(f'Closing Python.app. Runtime: {time.time()-t:.3f} s')
-        self.settings.setValue("main_window/window_geometry", self.saveGeometry())
-        self.settings.setValue("main_window/splitter_sizes", self.layout.saveState())
+        self.settings.setValue("main_window/windowGeometry", self.saveGeometry())
+        self.settings.setValue("main_window/splitterSizes", self.layout.saveState())
         self.settings.sync()
         QApplication.closeAllWindows()
         super().closeEvent(event)
