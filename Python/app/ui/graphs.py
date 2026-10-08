@@ -476,11 +476,10 @@ class SpectrometerGraph(QWidget):
         self.main = main_window
         self.setWindowTitle('Spectrometer')
         
-        self.settings_path = os.path.join('data','settings', "settingsFileSpectrometerGraph.ini")
+        settings_obj = self.main.setting("SpectrometerGraph/windowGeometry",None)
         
-        if os.path.exists(self.settings_path):
-            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-            self.restoreGeometry(settings_obj.value("windowGeometry"))
+        if settings_obj is not None:
+            self.restoreGeometry(settings_obj)
             
         self.launch()
 
@@ -502,8 +501,7 @@ class SpectrometerGraph(QWidget):
         self.graph.update_data(xdatas=[val[0]],ydatas=[val[1]])
         
     def closeEvent(self, event):
-        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-        settings_obj.setValue("windowGeometry", self.saveGeometry())
+        self.main.settings.setValue("SpectrometerGraph/windowGeometry", self.saveGeometry())
         self.main.graph_spectrometer = None
         event.accept()
         
@@ -520,10 +518,10 @@ class RateGraph(QWidget):
         self.values = {'Ch1. Count: ':0,'Ch1. Max: ':0,'Ch2. Count: ':0,'Ch2. Max: ':0,'Delta: ':0}
         self.added_widgets = {}
         
+        settings_obj = self.main.settings.value('RateGraph/windowGeometry',None)
         
-        if os.path.exists(self.settings_path):
-            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-            self.restoreGeometry(settings_obj.value("windowGeometry"))
+        if settings_obj is not None:
+            self.restoreGeometry(settings_obj)
             
         self.launch()
 
@@ -590,8 +588,7 @@ class RateGraph(QWidget):
         self._update()
         
     def closeEvent(self, event):
-        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-        settings_obj.setValue("windowGeometry", self.saveGeometry())
+        self.main.settings.setValue("RateGraph/windowGeometry", self.saveGeometry())
         self.main.graph_rate_graph = None
         self.main.UI_MH150.btn_rate_graph.setChecked(False)
         event.accept()

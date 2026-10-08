@@ -16,11 +16,6 @@ from PySide6.QtGui import QBrush, QPalette, QColor, QColorConstants, QIcon, QDra
 # t=time.time()
 from pathlib import Path
 import subprocess
-# print('imported re', time.time()-t)
-# t=time.time()
-# from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
-# print('imported config', time.time()-t)
-# t=time.time()
 from Python.app.Processing.data_import import Data_Set_Import
 # print('imported Data_Set_Import', time.time()-t)
 # t=time.time()
@@ -31,7 +26,6 @@ from Python.app.ui.graphs import *
 from Python.app.Measurements.devices import Scanner
 
 from pyHegel.pyHegel import commands as cmds
-from Python.config import DEFAULT_FOLDER
 
 
 
@@ -159,8 +153,8 @@ class SidebarView(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main = main_window
-        self.settings = QSettings("JN","AnalyseV2-Sidebar")
-        self.path=Path(self.settings.value("last_folder",DEFAULT_FOLDER))
+        
+        self.path=Path(self.main.settings.value("Filepath/last_folder","C:"))
         self._build()
 
     def _build(self):
@@ -182,7 +176,8 @@ class SidebarView(QWidget):
         self.path_input = RevertableLineEdit()
         self.path_input.setStyleSheet('font-size: 10pt;')
         self.path_input.setPlaceholderText("Enter path...")
-        self.path_input.returnPressed.connect(self._set_path)
+        # self.path_input.returnPressed.connect(self._set_path)
+        self.path_input.editingFinished.connect(self._set_path)
         self.top_layout.addWidget(QLabel("Browse Files"))
         
         
@@ -273,7 +268,7 @@ class SidebarView(QWidget):
         is_dir = item.data(0, Qt.UserRole + 1)
         if is_dir:
             self.populate_tree(path)
-            self.settings.setValue("last_folder", str(path))
+            self.main.settings.setValue("Filepaths/last_folder", rf"{path}")
         else:
             if path in self.main.selected_files[self.main.plot_area_index]:
                 self.main.selected_files[self.main.plot_area_index].remove(path)

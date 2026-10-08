@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent
-from Python.app.ui.DialogWindow import SpectrumFileManager, TRPLFileManager, Experiment_Picker, SaveManager
+from Python.app.ui.DialogWindow import SpectrumFileManager, TRPLFileManager, ExperimentPicker, SaveManager
 from Python.app.Processing.misc import meastxt
 from Python.app.Processing.io import save_exp, load_exp
 
@@ -109,7 +109,7 @@ class Toolbar(QWidget):
         
         
     def _load_exp(self):
-        dialog = Experiment_Picker(self.main)
+        dialog = ExperimentPicker(self.main)
         dialog.exec()
         filepath = dialog.path
         if filepath:

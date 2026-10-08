@@ -31,14 +31,13 @@ class SpectrumFileManager(QDialog):
         self.setWindowTitle("Spectrum File Manager")
         self.resize(700, 500)
 
-        self.settings_path = os.path.join('data','settings', "settingsFileSFM.ini")
 
         self._build()
         self._refresh()
         
-        if os.path.exists(self.settings_path):
-            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-            self.restoreGeometry(settings_obj.value("windowGeometry"))
+        settings_obj = self.main.settings.value('SpectrumFileManager/windowGeometry',None)
+        if settings_obj is not None:
+            self.restoreGeometry(settings_obj)
 
 
     def _build(self):
@@ -231,8 +230,7 @@ class SpectrumFileManager(QDialog):
             self.force_refresh = 0
         self.main.plot_area.spectrum.refresh_labels()
         
-        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-        settings_obj.setValue("windowGeometry", self.saveGeometry())
+        self.main.settings.setValue("SpectrumFileManager/windowGeometry", self.saveGeometry())
         event.accept()
 
 
@@ -247,15 +245,16 @@ class TRPLFileManager(QDialog):
         self.setWindowTitle("TRPL File Manager")
         self.resize(700, 500)
 
-        self.settings_path = os.path.join('data','settings', "settingsFileTFM.ini")
+        
 
 
         self._build()
         self._refresh()
         
-        if os.path.exists(self.settings_path):
-            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-            self.restoreGeometry(settings_obj.value("windowGeometry"))
+        settings_obj = self.main.settings.value('TRPLFileManager/windowGeometry',None)
+        
+        if settings_obj is not None:
+            self.restoreGeometry(settings_obj)
 
 
     def _build(self):
@@ -371,12 +370,11 @@ class TRPLFileManager(QDialog):
             # self.force_refresh = 0
             print('refresh curve WIP')
         self.main.plot_area.trpl.refresh_labels()
-        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-        settings_obj.setValue("windowGeometry", self.saveGeometry())
+        self.main.settings.setValue('TRPLFileManager/windowGeometry', self.saveGeometry())
         event.accept()
 
 
-class Experiment_Picker(QDialog):
+class ExperimentPicker(QDialog):
     
     def __init__(self, main_window):
         self.path=""
@@ -393,9 +391,10 @@ class Experiment_Picker(QDialog):
         self._build()
         self._refresh()
         
-        if os.path.exists(self.settings_path):
-            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-            self.restoreGeometry(settings_obj.value("windowGeometry"))
+        settings_obj = self.main.settings.value('ExperimentPicker/windowGeometry',None)
+        
+        if settings_obj is not None:
+            self.restoreGeometry(settings_obj)
 
 
     def _build(self):
@@ -445,8 +444,7 @@ class Experiment_Picker(QDialog):
         self.accept()   
             
     def closeEvent(self, event):
-        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-        settings_obj.setValue("windowGeometry", self.saveGeometry())
+        self.main.settings.setValue("ExperimentPicker/windowGeometry", self.saveGeometry())
         event.accept()
 
 
@@ -466,10 +464,10 @@ class SaveManager(QDialog):
 
         self._build()
         self._refresh()
+        settings_obj = self.main.settings("SaveManager/windowGeometry",None)
         
-        if os.path.exists(self.settings_path):
-            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-            self.restoreGeometry(settings_obj.value("windowGeometry"))
+        if settings_obj is not None:
+            self.restoreGeometry(settings_obj)
 
 
     def _build(self):
@@ -591,7 +589,7 @@ class SaveManager(QDialog):
         if edit != "":
             main_window.save_folder = edit.text()
             os.makedirs(edit.text(),exist_ok=True)
-            self.main.settings.setValue("save_folder", str(edit.text()))
+            self.main.settings.setValue("Filepaths/save_folder", rf"{edit.text()}")
             
             
     def _custom_text_changed(self, graph, edit):
@@ -618,8 +616,7 @@ class SaveManager(QDialog):
         
             
     def closeEvent(self, event):
-        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-        settings_obj.setValue("windowGeometry", self.saveGeometry())
+        self.main.settings.setValue("SaveManager/windowGeometry", self.saveGeometry())
         event.accept()
 
 
@@ -651,9 +648,10 @@ class FitManager(QDialog):
         self._build()
         self._refresh()
         
-        if os.path.exists(self.settings_path):
-            settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-            self.restoreGeometry(settings_obj.value("windowGeometry"))
+        settings_obj = self.main.settings.value('FitManager/windowGeometry',None)
+        
+        if settings_obj is not None:
+            self.restoreGeometry(settings_obj)
 
 
     def _build(self):
@@ -799,8 +797,7 @@ class FitManager(QDialog):
         
         
     def closeEvent(self, event):
-        settings_obj = QSettings(self.settings_path, QSettings.IniFormat)
-        settings_obj.setValue("windowGeometry", self.saveGeometry())
+        self.main.settings.setValue("FitManager/windowGeometry", self.saveGeometry())
         event.accept()
             
             

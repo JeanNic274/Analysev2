@@ -1,6 +1,8 @@
 import time
 t=time.time()
 from datetime import date
+import configparser
+print(f'------------------ loading 3rd party libs:  ----------------------',end = '\r')
 
 import numpy
 import lmfit
@@ -12,15 +14,20 @@ import os, signal
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton, QApplication, QSplitter, QVBoxLayout, QDockWidget
 from PySide6.QtGui import QGuiApplication, Qt
 from PySide6.QtCore import QSettings, QObject, Signal
-print(f'---------------- imported libraries:  {time.time()-t:.8f} --------------------')
+
+print(f'------------------ loaded libraries: {time.time()-t:.8f} ------------------')
+
 t=time.time()
+print(f'------------------ loading sidebar:   ----------------------------',end = '\r')
 from Python.app.ui.sidebar import SidebarView, SidebarMeasure
-print(f'---------------- imported sidebar:  {time.time()-t:.8f} --------------------')
+print(f'------------------ loaded sidebar:   {time.time()-t:.8f} ------------------')
 t=time.time()
+print(f'------------------ loading toolbar:   ----------------------------',end = '\r')
 from Python.app.ui.toolbar import Toolbar
-print(f'---------------- imported toolbar:  {time.time()-t:.8f} --------------------')
+print(f'------------------ loaded toolbar:   {time.time()-t:.8f} ------------------')
+print(f'------------------ loading PlotArea:  ----------------------------',end = '\r')
 from Python.app.ui.plot_area import PlotAreas
-print(f'---------------- imported PlotArea: {time.time()-t:.8f} --------------------')
+print(f'------------------ loaded PlotArea:  {time.time()-t:.8f} ------------------')
 from Python.app.Measurements.Fake_instruments import *
 from Python.app.ui.graphs import SpectrometerGraph
 
@@ -32,8 +39,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("PL ViewerV2")
         # self.resize(1200, 800)
         
-        self.settings = QSettings("JN","AnalyseV2-MainWindow")
-        self.save_folder=Path(self.settings.value("save_folder",r"C:"))
+        self.settings = QSettings(str(Path('data','settings','AppConfig.ini')),QSettings.IniFormat)
+        
+        self.save_folder=Path(self.settings.value("Filepaths/save_folder",r"C:"))
         self.session_number = self._get_session_number()
         self.measure_number = -1
         print(f"Session #{self.session_number}")
@@ -86,15 +94,15 @@ class MainWindow(QMainWindow):
         self._restore_geometry()
 
     def _restore_geometry(self):
-        geometry = self.settings.value("window_geometry")
+        geometry = self.settings.value("main_window/window_geometry")
         if geometry is not None:
             self.restoreGeometry(geometry)
         else:
             self.resize(1200, 800)
             
-        splitter_size = self.settings.value("splitter_sizes")
+        splitter_size = self.settings.value("main_window/splitter_sizes")
         if splitter_size is not None:
-            self.layout.restoreState(self.settings.value("splitter_sizes"))
+            self.layout.restoreState(self.settings.value("main_window/splitter_sizes"))
 
     def meas_nb(self):
         self.measure_number+=1
@@ -116,8 +124,9 @@ class MainWindow(QMainWindow):
     
     def closeEvent(self, event):
         print(f'Closing Python.app. Runtime: {time.time()-t:.3f} s')
-        self.settings.setValue("window_geometry", self.saveGeometry())
-        self.settings.setValue("splitter_sizes", self.layout.saveState())
+        self.settings.setValue("main_window/window_geometry", self.saveGeometry())
+        self.settings.setValue("main_window/splitter_sizes", self.layout.saveState())
+        self.settings.sync()
         QApplication.closeAllWindows()
         super().closeEvent(event)
         os.kill(os.getpid(), signal.SIGINT)
@@ -169,10 +178,6 @@ class DockedSidebar(QDockWidget):
         super().__init__('Sidebar')
         self.main = main_window
         self.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetFloatable)
-        # self.btn_dock_toggle = QPushButton()
-        # self.btn_dock_toggle.clicked.connect(self._toggle_dock)
-        
-        # self.setTitleBarWidget(self.btn_dock_toggle)
         
     def _toggle_dock(self):
         if self.isFloating():
