@@ -6,7 +6,7 @@ import numpy as np
         
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
-    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView, QScrollArea, QTextEdit, QButtonGroup, QApplication
+    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView, QScrollArea, QTextEdit, QButtonGroup, QApplication, QSpinBox
 )
 # print('imported QTWidget', time.time()-t)
 # t=time.time()
@@ -376,8 +376,11 @@ class SidebarMeasure(QScrollArea):
         self.UI_FilterWheel = UI_FilterWheel(self,'FilterWheel')
         self.add_device_ui(self.UI_FilterWheel)
         
-        self.UI_spectrometer = UI_SpectroMeter(self,'Spectrometer')
-        self.add_device_ui(self.UI_spectrometer)
+        self.UI_AndorCamera = UI_AndorCamera(self,'Andor Camera')
+        self.add_device_ui(self.UI_AndorCamera)
+        
+        self.UI_AndorSpectro = UI_AndorSpectro(self,'Andor Spectro')
+        self.add_device_ui(self.UI_AndorSpectro)
         
         self.layout.addStretch()
         self.setWidget(self.container)
@@ -496,7 +499,7 @@ class UI_MH150(DraggableFrame):
         self._cont_worker = None
 
         
-class UI_SpectroMeter(DraggableFrame):
+class UI_AndorCamera(DraggableFrame):
     def __init__(self,main_window,key):
         super().__init__(key=key)
         self.main = main_window
@@ -521,7 +524,7 @@ class UI_SpectroMeter(DraggableFrame):
         
         self.layout.addWidget(QLabel('Spectrometer'))
         
-        self.btn_measure = QPushButton('Measure') 
+        self.btn_measure = QPushButton('Acquire') 
         self.btn_measure.setCheckable(True)
         self.btn_measure.setStyleSheet("QPushButton:checked { background-color: red }"
                                        "QPushButton {background-color: darkGreen}")       
@@ -529,7 +532,14 @@ class UI_SpectroMeter(DraggableFrame):
         
         layer1 = QHBoxLayout()
         
+        self.acc = NoScrollSpinBox()
+        self.acc.setToolTip('Number of accumulations')
+        
         layer1.addWidget(self.btn_measure)
+        layer1.addWidget(QLabel('Acc.'))
+        layer1.addWidget(self.acc)
+        
+        
         
         self.layout.addLayout(layer1)
         
@@ -547,6 +557,9 @@ class UI_SpectroMeter(DraggableFrame):
 
         self.btn_measure.setText('Abort')
         
+        file_path = create_file_header(devices = [], meas_type = "Spectrum", sess_nb=self.main.main.session_number, meas_nb = self.main.main.meas_nb())
+        
+        
         if self.main.main.graph_spectrometer is None:
             self.main.main.graph_spectrometer = SpectrometerGraph(self.main.main)
             self.main.main.graph_spectrometer.show()
@@ -554,7 +567,7 @@ class UI_SpectroMeter(DraggableFrame):
             self.main.main.graph_spectrometer.raise_()
             
         self._thread = QThread()
-        self._worker = MeasureWorker(self.main.main.device_spectrometer.readval)
+        self._worker = MeasureWorker(self.main.main.device_spectrometer.readval,file_path)
         self._worker.moveToThread(self._thread)
 
         self._thread.started.connect(self._worker.run)
@@ -599,6 +612,90 @@ class UI_SpectroMeter(DraggableFrame):
     def _on_measure_error(self, message='Unspecified Error'):
         self._on_measure_finished()
         QMessageBox.critical(self, "Measurement error", message)
+        
+        
+
+class UI_AndorSpectro(DraggableFrame):
+    def __init__(self,main_window,key):
+        super().__init__(key=key)
+        self.main = main_window
+        self.setFrameShape(QFrame.StyledPanel)
+        
+        self._thread = None
+        self._worker = None
+        
+        self.val = None
+        self._build()
+        
+        
+    def _build(self):
+        self.layout = QVBoxLayout(self)
+        self.layout.setSpacing(5)
+        self.layout.setContentsMargins(5, 1, 5, 1)
+        
+        self.layout.addWidget(QLabel('Andor Spectro'))
+        
+        layer1 = QHBoxLayout()
+        
+        self.center_wl = LabeledLineEdit("Center Wl. (nm)") 
+        self.center_wl.setFixedWidth(80)
+        self.center_wl.line_edit.editingFinished.connect(lambda value='move_grating': self.move_grating(value))
+        
+        self.top_wl = LabeledLineEdit("Bot Wl. (nm)") 
+        self.top_wl.line_edit.setReadOnly(True)
+        self.top_wl.setFixedWidth(60)
+        self.top_wl.setStyleSheet("QWidget {background: transparent}")
+        self.bot_wl = LabeledLineEdit("Top Wl. (nm)") 
+        self.bot_wl.setFixedWidth(60)
+        self.bot_wl.setStyleSheet("QWidget {background: transparent}")
+        self.bot_wl.line_edit.setReadOnly(True)
+        
+        
+        layer1.addStretch()
+        layer1.addWidget(self.center_wl)
+        layer1.addSpacing(20)
+        layer1.addWidget(self.top_wl)
+        layer1.addWidget(self.bot_wl)
+        
+        self.layout.addLayout(layer1)
+        
+
+
+    def comm_spectro(self, value = None):
+        if value == 'move_grating':
+            try:
+                int(self.center_wl.text())
+            except:
+                QMessageBox.critical(self,f"Invalid numeric value", f"Invalid numeric value for {self.center_wl.text()}")
+                return
+            kwargs = {'spectro_center_wl' : int(self.center_wl.text())}
+        else:
+            print(f'Command {value} not implemented')
+            return
+        
+        kwargs['command'] = value
+        
+        self._thread = QThread()
+        self._worker = CommWorker(self.main.device_AndorSpectro,self.device_AndorSpectro.send_command)
+        self._worker.moveToThread(self._thread)
+
+        self._worker.kwargs = kwargs
+
+        self._thread.started.connect(self._worker.run)
+        self._worker.error.connect(self._on_measure_error)
+
+        # cleanup when done
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+
+        self._thread.start()
+
+    def _on_measure_error(self, message):
+        QMessageBox.critical(self, "Comm. error", message)
+        
+        
+        
         
         
 class UI_Scan(DraggableFrame):
@@ -1225,13 +1322,17 @@ class MeasureWorker(QObject):
     finished = Signal()  
     error = Signal(str)
 
-    def __init__(self, device):
+    def __init__(self, device, file_path = 'ScanError.txt'):
         super().__init__()
         self.device = device
+        self._file_path = file_path
+        self.kwargs = {}
 
     def run(self):
         try:
-            val = cmds.get(self.device)
+            val = cmds.get(self.device,**self.kwargs)
+            # with open(self._file_path,'a') as file:
+            #     file.write(val)
             self.completed.emit(val)
         except Exception as e:
             self.error.emit(str(e))
@@ -1427,3 +1528,26 @@ class RevertableLineEdit(QLineEdit):
         
         
 
+
+class LabeledLineEdit(QWidget):
+    def __init__(self, title="", parent=None):
+        super().__init__(parent)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        self.label = QLabel(title)
+        self.label.setStyleSheet("font: 8pt;")
+        self.line_edit = RevertableLineEdit()
+
+        layout.addWidget(self.label)
+        layout.addWidget(self.line_edit)
+        self.text = self.line_edit.text
+        
+class NoScrollSpinBox(QSpinBox):
+    def __init__(self):
+        super().__init__()
+        self.setKeyboardTracking(False)
+    def wheelEvent(self, event):
+        event.ignore()
