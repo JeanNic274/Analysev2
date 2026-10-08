@@ -540,8 +540,9 @@ class UI_SpectroMeter(DraggableFrame):
             self._abort_measure()
             return
         
-        if hasattr(self,"_thread") is not None:
+        if self._thread is not None:
             self._on_measure_finished()
+            print('Waiting for spectrometer')
             return
 
         self.btn_measure.setText('Abort')
