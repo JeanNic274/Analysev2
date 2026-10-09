@@ -76,7 +76,7 @@ class move_nano():
     def setControlTargetPosition(self,axis,pos):
         sys.stdout.write("\r"+f"Going: {axis}, {pos}")
         sys.stdout.flush()
-        time.sleep(0.11)
+        time.sleep(0.01)
     
     def getPosition(self,axis):
         return np.random.randint(1000,100000)/10
