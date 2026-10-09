@@ -26,9 +26,10 @@ from Python.app.Processing.misc import browse
 load('loading app processing funcs 2/6')
 from Python.app.Processing.io import create_file_header
 load('loading app processing funcs 3/6')
-from Python.app.Plotting.utils import MyQComboBox
+from Python.app.ui.tools import resize_table_to_contents, RevertableLineEdit, LabeledLineEdit, NoScrollSpinBox, MyQComboBox
 load('loading app processing funcs 5/6')
 from Python.app.ui.graphs import SpectrometerGraph, RateGraph, ScanPlot1D, ScanPlot2D
+from Python.app.ui.DialogWindow import MovePanel
 load('loading app processing funcs 4/6')
 from Python.app.Measurements.devices import Scanner
 
@@ -373,7 +374,7 @@ class SidebarMeasure(QScrollArea):
         self.UI_Scan = UI_Scan(self,"Scan")
         self.add_device_ui(self.UI_Scan)
         
-        self.UI_NanoPos = UI_NanoPos(self,'NanoPos')
+        self.UI_NanoPos = UI_NanoPos(self.main,'NanoPos')
         self.add_device_ui(self.UI_NanoPos)
         
         self.UI_Laser = UI_Laser(self,'Laser')
@@ -619,7 +620,6 @@ class UI_AndorCamera(DraggableFrame):
         self._on_measure_finished()
         QMessageBox.critical(self, "Measurement error", message)
         
-        
 
 class UI_AndorSpectro(DraggableFrame):
     def __init__(self,main_window,key):
@@ -699,9 +699,6 @@ class UI_AndorSpectro(DraggableFrame):
 
     def _on_measure_error(self, message):
         QMessageBox.critical(self, "Comm. error", message)
-        
-        
-        
         
         
 class UI_Scan(DraggableFrame):
@@ -1077,7 +1074,15 @@ class UI_NanoPos(DraggableFrame):
         self.layout.setSpacing(5)
         self.layout.setContentsMargins(5, 1, 5, 1)
         
-        self.layout.addWidget(QLabel('Position'))
+        layer0 = QHBoxLayout()
+        layer0.addWidget(QLabel('Position'))
+        
+        btn_move_pan = QPushButton('MovePan')
+        btn_move_pan.clicked.connect(self._open_move_panel)
+        layer0.addStretch()
+        layer0.addWidget(btn_move_pan)
+        
+        self.layout.addLayout(layer0)
         
         axis = {'0':'x','1':'y','2':'z'}
         
@@ -1152,9 +1157,15 @@ class UI_NanoPos(DraggableFrame):
             self._start_continuous_read(ax)
         else:
             self._stop_continuous_read(ax)
-                
+            
+    def _open_move_panel(self):
+        if self.main.move_panel_is_open == False:
+            dialog = MovePanel(self.main)
+            dialog.show()
+            self.main.move_panel_is_open = True
+            
     def _start_continuous_read(self,ax):
-        device = self.main.main.device_nanopositionner
+        device = self.main.device_nanopositionner
         
         if ax in self._cont_thread and self._cont_thread[ax] is not None and self._cont_thread[ax].isRunning():
             return
@@ -1503,63 +1514,3 @@ class ScanWorker(QObject):
             self.finished.emit()
             
 
-
-def resize_table_to_contents(table):
-    header_height = table.horizontalHeader().height()
-    rows_height = sum(table.rowHeight(r) for r in range(table.rowCount()))
-    frame = table.frameWidth() * 2
-    total_height = header_height + rows_height + frame
-    table.setFixedHeight(total_height)
-    
-    
-    
-class RevertableLineEdit(QLineEdit):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._previous_text = self.text()
-        self.editingFinished.connect(self._store_previous_text)
-
-    def focusInEvent(self, event):
-        self._previous_text = self.text()
-        super().focusInEvent(event)
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Escape:
-            self.blockSignals(True)
-            self.setText(self._previous_text)
-            self.clearFocus() 
-            self.blockSignals(False)
-            return
-        if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
-            self.clearFocus() 
-            return
-        super().keyPressEvent(event)
-
-    def _store_previous_text(self):
-        self._previous_text = self.text()
-        
-        
-
-
-class LabeledLineEdit(QWidget):
-    def __init__(self, title="", parent=None):
-        super().__init__(parent)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
-
-        self.label = QLabel(title)
-        self.label.setStyleSheet("font: 8pt;")
-        self.line_edit = RevertableLineEdit()
-
-        layout.addWidget(self.label)
-        layout.addWidget(self.line_edit)
-        self.text = self.line_edit.text
-        
-class NoScrollSpinBox(QSpinBox):
-    def __init__(self):
-        super().__init__()
-        self.setKeyboardTracking(False)
-    def wheelEvent(self, event):
-        event.ignore()
