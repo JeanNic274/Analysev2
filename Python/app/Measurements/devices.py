@@ -1,8 +1,12 @@
 import time
-
+import sys
+def load(msg):
+    sys.stdout.write(f'\r\033[K{msg}')
+    sys.stdout.flush()
 import Python.app.Measurements.Fake_instruments as FAKE
 # from Python.app.Measurements.detection import start_apds, start_apds_trpl, start_spectro
 from Python.app.Measurements.Fake_instruments import *
+load('starting pyHegel')
 from pyHegel.pyHegel import commands as cmds
 
 def close_device_all(sn=None, amc=None,showcmd=True, daq=None, t_ch1=None, t_ch2=None, spectro=None, camera=None,laser=None):

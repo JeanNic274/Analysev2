@@ -25,7 +25,7 @@ from Python.app.Processing.misc import browse
 load('loading app processing funcs 2/5')
 from Python.app.Processing.io import create_file_header
 load('loading app processing funcs 3/5')
-from Python.app.ui.graphs import *
+from Python.app.ui.graphs import SpectrometerGraph, RateGraph, ScanPlot1D, ScanPlot2D
 load('loading app processing funcs 4/5')
 from Python.app.Measurements.devices import Scanner
 
