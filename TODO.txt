@@ -46,14 +46,13 @@ make label text in grpah/plot_area instead of dataset (possible??)
 - [ ] Add goto button for scan detection (move filter wheel and mirrors)
 - [ ] Add connection adress menu (gpib etc)
 - [ ] Add safety checks (eg laser on while no filter)
-- [ ] Find every folder made and add tyhe mto .ini file and createwith exist_ok during launch
 
 
 IMPLEMENT NANOPOS SET POS !!
 
 TODO at uni
 
-check labview white light button
+check labview white light button name
 get filterwheel's filters
 get universal (if possible) function for header generation
 

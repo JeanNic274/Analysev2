@@ -227,3 +227,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 /data/PL
+data/settings/AppConfig.ini
+/Gauram-Code

@@ -6,7 +6,7 @@ import numpy as np
         
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
-    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView, QScrollArea, QTextEdit, QButtonGroup, QApplication
+    QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView, QScrollArea, QTextEdit, QButtonGroup, QApplication, QSpinBox
 )
 # print('imported QTWidget', time.time()-t)
 # t=time.time()
@@ -16,11 +16,6 @@ from PySide6.QtGui import QBrush, QPalette, QColor, QColorConstants, QIcon, QDra
 # t=time.time()
 from pathlib import Path
 import subprocess
-# print('imported re', time.time()-t)
-# t=time.time()
-# from config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
-# print('imported config', time.time()-t)
-# t=time.time()
 from Python.app.Processing.data_import import Data_Set_Import
 # print('imported Data_Set_Import', time.time()-t)
 # t=time.time()
@@ -31,7 +26,6 @@ from Python.app.ui.graphs import *
 from Python.app.Measurements.devices import Scanner
 
 from pyHegel.pyHegel import commands as cmds
-from Python.config import DEFAULT_FOLDER
 
 
 
@@ -159,8 +153,8 @@ class SidebarView(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main = main_window
-        self.settings = QSettings("JN","AnalyseV2-Sidebar")
-        self.path=Path(self.settings.value("last_folder",DEFAULT_FOLDER))
+        
+        self.path=Path(self.main.settings.value("Filepaths/last_folder","C:"))
         self._build()
 
     def _build(self):
@@ -182,7 +176,8 @@ class SidebarView(QWidget):
         self.path_input = RevertableLineEdit()
         self.path_input.setStyleSheet('font-size: 10pt;')
         self.path_input.setPlaceholderText("Enter path...")
-        self.path_input.returnPressed.connect(self._set_path)
+        # self.path_input.returnPressed.connect(self._set_path)
+        self.path_input.editingFinished.connect(self._set_path)
         self.top_layout.addWidget(QLabel("Browse Files"))
         
         
@@ -273,7 +268,7 @@ class SidebarView(QWidget):
         is_dir = item.data(0, Qt.UserRole + 1)
         if is_dir:
             self.populate_tree(path)
-            self.settings.setValue("last_folder", str(path))
+            self.main.settings.setValue("Filepaths/last_folder", rf"{path}")
         else:
             if path in self.main.selected_files[self.main.plot_area_index]:
                 self.main.selected_files[self.main.plot_area_index].remove(path)
@@ -366,7 +361,7 @@ class SidebarMeasure(QScrollArea):
         
         self.container.layout_.addLayout(self.layout)
         
-        self.UI_MH150 = UI_MH150(self,"MH150")
+        self.UI_MH150 = UI_MH150(self.main,"MH150")
         self.add_device_ui(self.UI_MH150)
         
         self.UI_Scan = UI_Scan(self,"Scan")
@@ -381,8 +376,11 @@ class SidebarMeasure(QScrollArea):
         self.UI_FilterWheel = UI_FilterWheel(self,'FilterWheel')
         self.add_device_ui(self.UI_FilterWheel)
         
-        self.UI_spectrometer = UI_SpectroMeter(self,'Spectrometer')
-        self.add_device_ui(self.UI_spectrometer)
+        self.UI_AndorCamera = UI_AndorCamera(self,'Andor Camera')
+        self.add_device_ui(self.UI_AndorCamera)
+        
+        self.UI_AndorSpectro = UI_AndorSpectro(self,'Andor Spectro')
+        self.add_device_ui(self.UI_AndorSpectro)
         
         self.layout.addStretch()
         self.setWidget(self.container)
@@ -401,20 +399,12 @@ class UI_MH150(DraggableFrame):
     def __init__(self,main_window,key):
         super().__init__(key=key)
         self.main = main_window
-        # self.setFrameShape(QFrame.Box)       # or StyledPanel, Panel, etc.
-        # self.setFrameShadow(QFrame.Raised)
+
         self.setFrameShape(QFrame.StyledPanel)
-        self.update_graph = True
-        
+
         self._build()
         
-        
-        
-        
     def _build(self):
-        
-        # self.setStyleSheet("border: 1px solid red; margin: 1px; padding: 1px;")
-        
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(5)
         self.layout.setContentsMargins(5, 1, 5, 1)
@@ -427,7 +417,6 @@ class UI_MH150(DraggableFrame):
         self.btn_read_cont.toggled.connect(self.on_continuous_toggled)
         self.btn_rate_graph = QCheckBox('Rate Graph')        
         self.btn_rate_graph.toggled.connect(self.rate_graph_toggle)
-        
         
         layer1.addWidget(self.btn_read_cont)
         layer1.addWidget(self.btn_rate_graph)
@@ -448,24 +437,24 @@ class UI_MH150(DraggableFrame):
     def on_continuous_toggled(self, checked):
         if checked:
             self._start_continuous_read()
-            if self.main.main.graph_rate_graph:
-                self.main.main.graph_rate_graph.graph.resume()
+            if self.main.graph_rate_graph:
+                self.main.graph_rate_graph.graph.resume()
         else:
             self._stop_continuous_read()
-            if self.main.main.graph_rate_graph:
-                self.main.main.graph_rate_graph.graph.pause()
+            if self.main.graph_rate_graph:
+                self.main.graph_rate_graph.graph.pause()
                 
     def rate_graph_toggle(self,checked):
         if checked:
-            self.main.main.graph_rate_graph = RateGraph(self.main)
-            self.main.main.graph_rate_graph.show()
+            self.main.graph_rate_graph = RateGraph(self.main)
+            self.main.graph_rate_graph.show()
         else:
-            if self.main.main.graph_rate_graph:
-                self.main.main.graph_rate_graph.close()
-                self.main.main.graph_rate_graph = None
+            if self.main.graph_rate_graph:
+                self.main.graph_rate_graph.close()
+                self.main.graph_rate_graph = None
             
     def _start_continuous_read(self):
-        device = self.main.main.device_MH150
+        device = self.main.device_MH150
         
         if hasattr(self, '_cont_thread') and self._cont_thread is not None and self._cont_thread.isRunning():
             return
@@ -499,11 +488,8 @@ class UI_MH150(DraggableFrame):
         self.label_counts1.setText(f"Ch1: {self.val[0]}")
         self.label_counts2.setText(f"Ch2: {self.val[1]}")
         if self.btn_rate_graph.isChecked():
-            # if self.update_graph: # if 500 ms is too fast can update every 2 points
-            self.main.main.graph_rate_graph.add_data(self.val)
-            #     self.update_graph = False
-            # else:
-            #     self.update_graph = True
+            if self.main.graph_rate_graph is not None:
+                self.main.graph_rate_graph.add_data(self.val)
 
     def _on_continuous_error(self, message):
         QMessageBox.critical(self, "Measurement error", message)
@@ -513,7 +499,7 @@ class UI_MH150(DraggableFrame):
         self._cont_worker = None
 
         
-class UI_SpectroMeter(DraggableFrame):
+class UI_AndorCamera(DraggableFrame):
     def __init__(self,main_window,key):
         super().__init__(key=key)
         self.main = main_window
@@ -521,6 +507,8 @@ class UI_SpectroMeter(DraggableFrame):
         # self.setFrameShadow(QFrame.Raised)
         self.setFrameShape(QFrame.StyledPanel)
         
+        self._thread = None
+        self._worker = None
         
         self.val = None
         self._build()
@@ -536,19 +524,42 @@ class UI_SpectroMeter(DraggableFrame):
         
         self.layout.addWidget(QLabel('Spectrometer'))
         
-        btn_measure = QPushButton('Measure')        
-        if self.main.FAKE:
-            btn_measure.clicked.connect(self.start_measure)
+        self.btn_measure = QPushButton('Acquire') 
+        self.btn_measure.setCheckable(True)
+        self.btn_measure.setStyleSheet("QPushButton:checked { background-color: red }"
+                                       "QPushButton {background-color: darkGreen}")       
+        self.btn_measure.toggled.connect(self.start_measure)
         
         layer1 = QHBoxLayout()
         
-        layer1.addWidget(btn_measure)
+        self.acc = NoScrollSpinBox()
+        self.acc.setToolTip('Number of accumulations')
+        
+        layer1.addWidget(self.btn_measure)
+        layer1.addWidget(QLabel('Acc.'))
+        layer1.addWidget(self.acc)
+        
+        
         
         self.layout.addLayout(layer1)
         
 
 
-    def start_measure(self):
+    def start_measure(self, checked = False):
+        if not checked:
+            self._abort_measure()
+            return
+        
+        if self._thread is not None:
+            self._on_measure_finished()
+            print('Waiting for spectrometer')
+            return
+
+        self.btn_measure.setText('Abort')
+        
+        file_path = create_file_header(devices = [], meas_type = "Spectrum", sess_nb=self.main.main.session_number, meas_nb = self.main.main.meas_nb())
+        
+        
         if self.main.main.graph_spectrometer is None:
             self.main.main.graph_spectrometer = SpectrometerGraph(self.main.main)
             self.main.main.graph_spectrometer.show()
@@ -556,7 +567,7 @@ class UI_SpectroMeter(DraggableFrame):
             self.main.main.graph_spectrometer.raise_()
             
         self._thread = QThread()
-        self._worker = MeasureWorker(self.main.main.device_spectrometer.readval)
+        self._worker = MeasureWorker(self.main.main.device_spectrometer.readval,file_path)
         self._worker.moveToThread(self._thread)
 
         self._thread.started.connect(self._worker.run)
@@ -567,15 +578,124 @@ class UI_SpectroMeter(DraggableFrame):
         self._worker.finished.connect(self._thread.quit)
         self._worker.finished.connect(self._worker.deleteLater)
         self._thread.finished.connect(self._thread.deleteLater)
-
+        self._thread.finished.connect(self._clear_refs) 
         self._thread.start()
 
     def _on_measure_done(self, val):
         self.val = val
         self.main.main.graph_spectrometer.update_val(self.val)
+        self._on_measure_finished()
+
+    def _on_measure_finished(self):
+        self.btn_measure.blockSignals(True)
+        self.btn_measure.setChecked(False)
+        self.btn_measure.setText('Measure')
+        self.btn_measure.blockSignals(False)
+        
+    def _clear_refs(self):
+        self._thread = None
+        self._worker = None
+        
+
+    def _abort_measure(self):
+        if self._worker is not None:
+            for sig, slot in ((self._worker.completed, self._on_measure_done),
+                            (self._worker.error, self._on_measure_error)):
+                try:
+                    sig.disconnect(slot)
+                except (RuntimeError, TypeError):
+                    pass
+                
+        self._on_measure_error('Manual Abort')
+        
+        
+    def _on_measure_error(self, message='Unspecified Error'):
+        self._on_measure_finished()
+        QMessageBox.critical(self, "Measurement error", message)
+        
+        
+
+class UI_AndorSpectro(DraggableFrame):
+    def __init__(self,main_window,key):
+        super().__init__(key=key)
+        self.main = main_window
+        self.setFrameShape(QFrame.StyledPanel)
+        
+        self._thread = None
+        self._worker = None
+        
+        self.val = None
+        self._build()
+        
+        
+    def _build(self):
+        self.layout = QVBoxLayout(self)
+        self.layout.setSpacing(5)
+        self.layout.setContentsMargins(5, 1, 5, 1)
+        
+        self.layout.addWidget(QLabel('Andor Spectro'))
+        
+        layer1 = QHBoxLayout()
+        
+        self.center_wl = LabeledLineEdit("Center Wl. (nm)") 
+        self.center_wl.setFixedWidth(80)
+        self.center_wl.line_edit.editingFinished.connect(lambda value='move_grating': self.move_grating(value))
+        
+        self.top_wl = LabeledLineEdit("Bot Wl. (nm)") 
+        self.top_wl.line_edit.setReadOnly(True)
+        self.top_wl.setFixedWidth(60)
+        self.top_wl.setStyleSheet("QWidget {background: transparent}")
+        self.bot_wl = LabeledLineEdit("Top Wl. (nm)") 
+        self.bot_wl.setFixedWidth(60)
+        self.bot_wl.setStyleSheet("QWidget {background: transparent}")
+        self.bot_wl.line_edit.setReadOnly(True)
+        
+        
+        layer1.addStretch()
+        layer1.addWidget(self.center_wl)
+        layer1.addSpacing(20)
+        layer1.addWidget(self.top_wl)
+        layer1.addWidget(self.bot_wl)
+        
+        self.layout.addLayout(layer1)
+        
+
+
+    def comm_spectro(self, value = None):
+        if value == 'move_grating':
+            try:
+                int(self.center_wl.text())
+            except:
+                QMessageBox.critical(self,f"Invalid numeric value", f"Invalid numeric value for {self.center_wl.text()}")
+                return
+            kwargs = {'spectro_center_wl' : int(self.center_wl.text())}
+        else:
+            print(f'Command {value} not implemented')
+            return
+        
+        kwargs['command'] = value
+        
+        self._thread = QThread()
+        self._worker = CommWorker(self.main.device_AndorSpectro,self.device_AndorSpectro.send_command)
+        self._worker.moveToThread(self._thread)
+
+        self._worker.kwargs = kwargs
+
+        self._thread.started.connect(self._worker.run)
+        self._worker.error.connect(self._on_measure_error)
+
+        # cleanup when done
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+
+        self._thread.start()
 
     def _on_measure_error(self, message):
-        QMessageBox.critical(self, "Measurement error", message)
+        QMessageBox.critical(self, "Comm. error", message)
+        
+        
+        
         
         
 class UI_Scan(DraggableFrame):
@@ -598,7 +718,8 @@ class UI_Scan(DraggableFrame):
         
         self.btn_measure = QPushButton('Start')        
         self.btn_measure.setCheckable(True)
-        self.btn_measure.setStyleSheet("QPushButton:checked { background-color: red }")
+        self.btn_measure.setStyleSheet("QPushButton:checked { background-color: red }"
+                                       "QPushButton {background-color: darkGreen}")
         
         self.btn_measure.toggled.connect(self.start_scan)
         
@@ -1201,13 +1322,17 @@ class MeasureWorker(QObject):
     finished = Signal()  
     error = Signal(str)
 
-    def __init__(self, device):
+    def __init__(self, device, file_path = 'ScanError.txt'):
         super().__init__()
         self.device = device
+        self._file_path = file_path
+        self.kwargs = {}
 
     def run(self):
         try:
-            val = cmds.get(self.device)
+            val = cmds.get(self.device,**self.kwargs)
+            # with open(self._file_path,'a') as file:
+            #     file.write(val)
             self.completed.emit(val)
         except Exception as e:
             self.error.emit(str(e))
@@ -1236,8 +1361,7 @@ class ContinuousReadWorker(QObject):
                 value = self.measure_fn()
                 self.reading.emit(value)
 
-                # sleep in small chunks so stop() is noticed quickly
-                # rather than blocking a full interval after stop() is called
+                # sleep in small chunks so it feels less laggy
                 slept = 0
                 chunk = 100  # ms
                 while slept < self.interval_ms and self._running:
@@ -1368,10 +1492,6 @@ class ScanWorker(QObject):
             
 
 
-
-
-
-
 def resize_table_to_contents(table):
     header_height = table.horizontalHeader().height()
     rows_height = sum(table.rowHeight(r) for r in range(table.rowCount()))
@@ -1408,3 +1528,26 @@ class RevertableLineEdit(QLineEdit):
         
         
 
+
+class LabeledLineEdit(QWidget):
+    def __init__(self, title="", parent=None):
+        super().__init__(parent)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        self.label = QLabel(title)
+        self.label.setStyleSheet("font: 8pt;")
+        self.line_edit = RevertableLineEdit()
+
+        layout.addWidget(self.label)
+        layout.addWidget(self.line_edit)
+        self.text = self.line_edit.text
+        
+class NoScrollSpinBox(QSpinBox):
+    def __init__(self):
+        super().__init__()
+        self.setKeyboardTracking(False)
+    def wheelEvent(self, event):
+        event.ignore()

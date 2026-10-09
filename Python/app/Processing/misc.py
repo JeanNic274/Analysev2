@@ -4,7 +4,7 @@ import re
 import csv
 import sys
 
-from Python.config import DEFAULT_FOLDER, WHITELIST_EXTENSIONS
+from Python.config import WHITELIST_EXTENSIONS
 
 
 class curve_number():
@@ -361,7 +361,7 @@ def fetchtype(header):
 
 
     
-def browse(directory=DEFAULT_FOLDER):
+def browse(directory="C:"):
     directory = Path(directory)
     
     meas_file={}
