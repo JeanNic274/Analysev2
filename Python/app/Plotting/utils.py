@@ -26,7 +26,6 @@ def normalize_lines(lines,lines_fit,original_d,xlim=None,xaxis='nm',yaxis='count
                 for line_fit in lines_f:
                     line_fit.set_ydata(line_fit.get_ydata() * y_cut.max())
             
-            
 def offset_lines(GraphClass,yoffset=0,xaxis='nm',yaxis='count',filepath=False):
     if filepath:
             xoffset = GraphClass.toggles['xoffsets'].get(filepath,0)
@@ -59,7 +58,6 @@ def offset_lines(GraphClass,yoffset=0,xaxis='nm',yaxis='count',filepath=False):
                     x_fit = GraphClass.datasets[filepath].data_fit['xfit']
                     line_fit.set_ydata(y_fit+(float(GraphClass.main.datasets[filepath].number)-1)*np.float64(yoffset))
                     line_fit.set_xdata(x_fit+np.float64(xoffset))
-                
             
 def evnm_swap(lines):
     for filepath, line in lines.items():
@@ -86,9 +84,6 @@ def fetch_label(data,labels='',toggles={}):
         label+=str(getattr(data,lab,lab))+", "
     return label[:-2]
 
-            
-            
-            
 def set_fig_title(fig,title,df):
     if "," in title:
         titlec=title.split(', ')
@@ -180,6 +175,7 @@ def merge_spectra(dfs,axis=('count', 'count_cor'),x_axis='nm',step=0.05):
         result[axis[0]] = merged
 
     return result
+
 
 class MyQComboBox(QComboBox):
     def wheelEvent(self, event):

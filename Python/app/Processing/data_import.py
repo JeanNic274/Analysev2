@@ -1,17 +1,9 @@
-# import time
-# t=time.time()
+import os
+
 import numpy as np
 from numpy.lib import recfunctions as rfn
-# print('imported np', time.time()-t)
-# t=time.time()
-import os
-# print('imported os', time.time()-t)
-# t=time.time()
-# from lmfit import Model, Parameters, models
-# print('imported lmfit', time.time()-t)
-# t=time.time()
+
 from Python.app.Processing.misc import header_extract
-# print('imported header_extract', time.time()-t)
 
 col_names = {
     # 'Unknown' :                 [str(i) for i in range(20)],

@@ -2,6 +2,7 @@ import configparser
 import subprocess
 from pathlib import Path
 import sys
+import time
 
 def load(msg):
     sys.stdout.write(f'\r\033[K{msg}')
@@ -18,18 +19,19 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel, QSettings, QThread, QObject, Signal, QMimeData, QPoint
 from PySide6.QtGui import QBrush, QPalette, QColor, QColorConstants, QIcon, QDrag, QPixmap
 
-load('loading app processing funcs 0/5')
+load('loading app processing funcs 0/6')
 from Python.app.Processing.data_import import Data_Set_Import
-load('loading app processing funcs 1/5')
+load('loading app processing funcs 1/6')
 from Python.app.Processing.misc import browse
-load('loading app processing funcs 2/5')
+load('loading app processing funcs 2/6')
 from Python.app.Processing.io import create_file_header
-load('loading app processing funcs 3/5')
+load('loading app processing funcs 3/6')
+from Python.app.Plotting.utils import MyQComboBox
+load('loading app processing funcs 5/6')
 from Python.app.ui.graphs import SpectrometerGraph, RateGraph, ScanPlot1D, ScanPlot2D
-load('loading app processing funcs 4/5')
+load('loading app processing funcs 4/6')
 from Python.app.Measurements.devices import Scanner
 
-load('starting pyHegel')
 from pyHegel.pyHegel import commands as cmds
 
 
@@ -57,7 +59,6 @@ class DraggableFrame(QFrame):
         mime_data.setData("application/x-frame-id", str(id(self)).encode())
         drag.setMimeData(mime_data)
 
-        # visual feedback: drag a snapshot of the frame itself
         pixmap = self.grab()
         drag.setPixmap(pixmap)
         drag.setHotSpot(event.position().toPoint())

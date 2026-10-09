@@ -1,22 +1,18 @@
-# import numpy as np
 from sys import float_info
 import os
 import time
 
+import numpy as np
+
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QInputDialog, QLabel, QFrame
-from PySide6.QtCore import QSize, QSettings
+from PySide6 import QtGui
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
-from matplotlib import ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from Python.app.Plotting.utils import *
-from Python.app.Processing.data_import import Data_Set_Import
-from Python.app.Processing.io import prevent_overwrite_file, save_figure_export, save_fit
-from Python.app.ui.DialogWindow import FitManager
 from Python.app.Plotting.map import MultiSlider, build_colormap_from_handles
 
 plt.rcParams.update({
