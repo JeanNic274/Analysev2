@@ -1,4 +1,5 @@
 import os
+import sys
 
 from PySide6.QtWidgets import (
     QDialog,
@@ -732,6 +733,8 @@ class FitManager(QDialog):
         
     def _do_fit(self):
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        if 'lmfit' not in sys.modules:
+            self.main.statusBar().showMessage("Loading lmfit, this may take a while", 5000)
         self.graph.remove_all(fits=True,refresh=False)
         for idx, filepath in enumerate(self.graph.datasets):
             self.graph.datasets[filepath].fit(self.graph,idx)

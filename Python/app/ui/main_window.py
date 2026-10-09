@@ -41,6 +41,7 @@ from Python.app.ui.graphs import SpectrometerGraph
 
 t=time.time()
 
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()

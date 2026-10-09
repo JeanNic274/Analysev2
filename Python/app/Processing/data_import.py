@@ -1,7 +1,13 @@
 import os
+import sys
 
+def load(msg):
+    sys.stdout.write(f'\r\033[K{msg}')
+    sys.stdout.flush()
 import numpy as np
 from numpy.lib import recfunctions as rfn
+# Lazy imports
+# from lmfit import Model, Parameters, models
 
 from Python.app.Processing.misc import header_extract
 
@@ -147,8 +153,12 @@ class Data_Set_Import:
 
 
 def fit_data(df,graph,fit_idx):
-    
+    lmfit_imported = sys.modules.get('lmfit',False)
+    if not lmfit_imported:
+        print('Getting lmfit, this may take several seconds',end='\r')
     from lmfit import Model, Parameters, models
+    if not lmfit_imported:
+        print("                                                                   ")
     
     parameters = graph.fit_params
     xaxis=graph.xaxis
