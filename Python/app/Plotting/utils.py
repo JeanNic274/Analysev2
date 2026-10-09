@@ -1,8 +1,7 @@
 import numpy as np
 import re
 from scipy.interpolate import interp1d
-from PySide6.QtWidgets import QComboBox
-from PySide6 import QtCore, QtGui
+
 
 def normalize_lines(lines,lines_fit,original_d,xlim=None,xaxis='nm',yaxis='count',toggle=1):
     if xlim is None:
@@ -176,10 +175,6 @@ def merge_spectra(dfs,axis=('count', 'count_cor'),x_axis='nm',step=0.05):
 
     return result
 
-
-class MyQComboBox(QComboBox):
-    def wheelEvent(self, event):
-        event.ignore()
 
 
 

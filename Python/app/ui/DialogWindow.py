@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QApplication,
 )
 from PySide6.QtCore import Qt, QSettings
-
+from Python.app.ui.tools import RevertableLineEdit
 
 class SpectrumFileManager(QDialog):
 
@@ -806,6 +806,76 @@ class FitManager(QDialog):
             
 
 
+class MovePanel(QDialog):
+
+    def __init__(self, main_window):
+        super().__init__()
+
+
+        self.main = main_window
+        self.wgsetting = 'MovePan/windowGeometry'
+        
+        self.setWindowTitle("Move Panel")
+        self.resize(400, 250)
+
+        
+        self._build()
+        
+        settings_obj = self.main.settings.value(self.wgsetting,None)
+        
+        if settings_obj is not None:
+            pass
+            # self.restoreGeometry(settings_obj)
+
+
+    def _build(self):
+
+        layout = QVBoxLayout(self)
+
+        # Layouts
+        
+        layout = QVBoxLayout()
+        layer0 = QHBoxLayout()
+        layer1 = QHBoxLayout()
+        layer2 = QHBoxLayout()
+        layer3 = QHBoxLayout()
+        layer4 = QHBoxLayout()
+        
+        axis = {'0':'x','1':'y','2':'z'}
+        self.read_labels = {}
+        
+        
+        
+        for ax,v in axis.items():
+            label_read = QLabel("-")
+            label_read.setFixedWidth(50)
+            layer4.addWidget(QLabel(f'{v}'))
+            layer4.addWidget(label_read)
+            self.read_labels[ax] = label_read
+            
+            layer0.addWidget(QLabel('goto: '))
+            goto = RevertableLineEdit()       
+            goto.editingFinished.connect(
+                lambda ax=ax,pos_btn=goto:
+                    self._set_pos(ax,pos_btn)
+            )
+            goto.validator()
+            goto.setFixedWidth(50)
+            layer0.addWidget(goto)
+            layer0.addStretch()
+        
+        layout.addLayout(layer0)
+        layout.addLayout(layer1)
+        layout.addLayout(layer2)
+        layout.addLayout(layer3)
+        layout.addLayout(layer4)
+        
+        
+    def closeEvent(self, event):
+        self.main.settings.setValue(self.wgsetting, self.saveGeometry())
+        self.main.move_pane_is_open = False
+        event.accept()
+            
 
 
 

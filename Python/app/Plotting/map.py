@@ -16,6 +16,7 @@ from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QLinearGradient
 
 
 from Python.app.Plotting.utils import *
+from Python.app.ui.tools import MyQComboBox
 from Python.app.Processing.data_import import Data_Set_Import
 from Python.app.Processing.io import prevent_overwrite_file, save_figure_export
 import Python.app.Plotting.cmaps

@@ -64,7 +64,7 @@ class MainWindow(QMainWindow):
         self.graph_spectrometer = None
         self.graph_rate_graph = None
         self.graphs_scan=[]
-        
+        self.move_panel_is_open = False
         #Devices
         self.device_spectrometer = None
         self.device_MH150 = None

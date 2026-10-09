@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib import ticker
 
 from Python.app.Plotting.utils import *
+from Python.app.ui.tools import MyQComboBox
 from Python.app.Processing.data_import import Data_Set_Import
 from Python.app.Processing.io import prevent_overwrite_file, save_figure_export, save_fit
 from Python.app.ui.DialogWindow import FitManager
