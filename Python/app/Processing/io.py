@@ -178,7 +178,7 @@ def save_figure_export(
         
 def save_fit(graph,filename=""): 
 
-    save_path = Path('data','fit results')
+    save_path = Path(graph.main.settings.value("Filepaths/save_folder_fit",r"data\fit results"))
     save_path.mkdir(parents=True, exist_ok=True)
     
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -187,8 +187,10 @@ def save_fit(graph,filename=""):
     else:
         filename+=".txt"
     save_file = Path(save_path,filename)
-    prevent_overwrite_file(save_file)
-    
+    try:
+        prevent_overwrite_file(save_file)
+    except:
+        print('Error preventing file overwrite')
     
   
     combined = {
