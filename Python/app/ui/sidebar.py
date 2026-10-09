@@ -1,30 +1,31 @@
-import itertools
 import configparser
+import subprocess
+from pathlib import Path
+import sys
 
+def load(msg):
+    sys.stdout.write(f'\r\033[K{msg}')
+    sys.stdout.flush()
+
+load('importing numpy')
 import numpy as np
 
-        
+load('importing PySide6')
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
     QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView, QScrollArea, QTextEdit, QButtonGroup, QApplication, QSpinBox
 )
-# print('imported QTWidget', time.time()-t)
-# t=time.time()
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel, QSettings, QThread, QObject, Signal, QMimeData, QPoint
 from PySide6.QtGui import QBrush, QPalette, QColor, QColorConstants, QIcon, QDrag, QPixmap
-# print('imported QtCore', time.time()-t)
-# t=time.time()
-from pathlib import Path
-import subprocess
+
+load('loading app processing funcs')
 from Python.app.Processing.data_import import Data_Set_Import
-# print('imported Data_Set_Import', time.time()-t)
-# t=time.time()
 from Python.app.Processing.misc import browse
 from Python.app.Processing.io import create_file_header
-# print('imported time.time()-t)
 from Python.app.ui.graphs import *
 from Python.app.Measurements.devices import Scanner
 
+load('starting pyHegel')
 from pyHegel.pyHegel import commands as cmds
 
 
@@ -713,8 +714,12 @@ class UI_Scan(DraggableFrame):
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(5)
         self.layout.setContentsMargins(5, 1, 5, 1)
+        layer0 = QHBoxLayout()
         
-        self.layout.addWidget(QLabel('Scan'))
+        layer0.addWidget(QLabel('Scan'))
+        layer0.addStretch()
+        self.eta = QLabel('ETA: --:--:--')
+        layer0.addWidget(self.eta)
         
         self.btn_measure = QPushButton('Start')        
         self.btn_measure.setCheckable(True)
@@ -797,6 +802,7 @@ class UI_Scan(DraggableFrame):
         
         resize_table_to_contents(self.scan_parameters)
         
+        self.layout.addLayout(layer0)
         self.layout.addLayout(layer1)
         self.layout.addLayout(layer2)
         self.layout.addLayout(layer3)
@@ -898,9 +904,8 @@ class UI_Scan(DraggableFrame):
     def _on_point_measured(self, idx, coords, value):
         self.main.main.graphs_scan[-1].update_data(self._scan_worker.data, new_value = value,coords=coords)
 
-    def _on_scan_progress(self, current, total):
-        # self.progress_bar.setValue(int(current / total * 100))
-        pass
+    def _on_scan_progress(self, eta):
+        self.eta.setText('ETA: '+eta)
 
     def _on_scan_completed(self):
         self._on_scan_finished()
@@ -1378,7 +1383,7 @@ class ScanWorker(QObject):
     finished = Signal()
     completed = Signal()
     error = Signal(str)
-    progress = Signal(int, int)
+    progress = Signal(str)
 
     def __init__(self, axes, move_fns, measure_fn, file_path = 'ScanError.txt'):
         """
@@ -1455,8 +1460,9 @@ class ScanWorker(QObject):
                 
                 last_coords = {name: None for name in self.axis_names}
                 det_coords = {name: None for name in self.axis_names}
-
+                t_start = time.time()
                 for i, idx in enumerate(combos):
+                    t_point = time.time()
                     save_data = []
                     
                     if self._stop_requested:
@@ -1482,7 +1488,8 @@ class ScanWorker(QObject):
                     save_data += values_str
                     file.write('\t'.join(save_data) + '\n')
                     self.point_measured.emit(idx, coords, values)
-                    self.progress.emit(i + 1, total)
+                    if i%4==0:
+                        self.progress.emit(time.strftime('%H:%M:%S', time.gmtime((total-i)*( time.time()-t_start)/(i+1))))
 
                 self.completed.emit()
         except Exception as e:

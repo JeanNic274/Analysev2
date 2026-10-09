@@ -1,33 +1,41 @@
 import time
 t=time.time()
 from datetime import date
-import configparser
-print(f'------------------ loading 3rd party libs:  ----------------------',end = '\r')
+from pathlib import Path
+import os, signal, sys
 
+def load(msg):
+    sys.stdout.write(f'\r\033[K{msg}')
+    sys.stdout.flush()
+load('importing numpy')
 import numpy
-import lmfit
+load('importing matplotlib')
 import matplotlib
 
-from pathlib import Path
-import os, signal
 
+load('importing PySide6')
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton, QApplication, QSplitter, QVBoxLayout, QDockWidget
 from PySide6.QtGui import QGuiApplication, Qt
 from PySide6.QtCore import QSettings, QObject, Signal
-
+sys.stdout.write('\r\033[K\033[F\033[K')
 print(f'------------------ loaded libraries: {time.time()-t:.8f} ------------------')
 
 t=time.time()
-print(f'------------------ loading sidebar:   ----------------------------',end = '\r')
+print(f'------------------ loading sidebar:   ----------------------------')
+print('', end='')
 from Python.app.ui.sidebar import SidebarView, SidebarMeasure
+sys.stdout.write('\r\033[K\033[F\033[K')
 print(f'------------------ loaded sidebar:   {time.time()-t:.8f} ------------------')
+
 t=time.time()
 print(f'------------------ loading toolbar:   ----------------------------',end = '\r')
 from Python.app.ui.toolbar import Toolbar
 print(f'------------------ loaded toolbar:   {time.time()-t:.8f} ------------------')
+
 print(f'------------------ loading PlotArea:  ----------------------------',end = '\r')
 from Python.app.ui.plot_area import PlotAreas
 print(f'------------------ loaded PlotArea:  {time.time()-t:.8f} ------------------')
+
 from Python.app.Measurements.Fake_instruments import *
 from Python.app.ui.graphs import SpectrometerGraph
 
