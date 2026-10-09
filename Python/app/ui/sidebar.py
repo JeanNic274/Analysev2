@@ -18,11 +18,15 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel, QSettings, QThread, QObject, Signal, QMimeData, QPoint
 from PySide6.QtGui import QBrush, QPalette, QColor, QColorConstants, QIcon, QDrag, QPixmap
 
-load('loading app processing funcs')
+load('loading app processing funcs 0/5')
 from Python.app.Processing.data_import import Data_Set_Import
+load('loading app processing funcs 1/5')
 from Python.app.Processing.misc import browse
+load('loading app processing funcs 2/5')
 from Python.app.Processing.io import create_file_header
+load('loading app processing funcs 3/5')
 from Python.app.ui.graphs import *
+load('loading app processing funcs 4/5')
 from Python.app.Measurements.devices import Scanner
 
 load('starting pyHegel')

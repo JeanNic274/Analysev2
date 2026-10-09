@@ -2,6 +2,7 @@ import time
 import sys
 
 t=time.time()
+print()
 print('Starting...')
 PYDEVD_DISABLE_FILE_VALIDATION=1
 def load(msg):
