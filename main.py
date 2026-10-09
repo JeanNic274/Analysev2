@@ -1,11 +1,14 @@
 import time
 t=time.time()
-print('Starting...')
+print('Starting...',time.time()-t)
 import sys
 PYDEVD_DISABLE_FILE_VALIDATION=1
 from IPython.terminal.embed import InteractiveShellEmbed
+print('InteractiveShellEmbed...',time.time()-t)
 from PySide6.QtWidgets import QApplication
+print('QApplication...',time.time()-t)
 from Python.app.ui.main_window import MainWindow
+print('MainWindow...',time.time()-t)
 
 
 if __name__ == "__main__":
