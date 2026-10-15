@@ -798,13 +798,16 @@ class UI_Scan(DraggableFrame):
         if self.qbox_scan_det.currentText() == "MH150":
             device = self.main.device_MH150
             value_idx, slice_idx = -1, slice(3)
+            meas_names = ['MH150.Counts Ch1(ph)','	MH150.Counts Ch2(ph)','	MH150.Counts Sum(ph)']
         elif self.qbox_scan_det.currentText() == "DAQ":
             device = self.main.device_DAQ
             value_idx, slice_idx = -1, slice(3)
+            meas_names = ['DAQ6363.Counts Ch1(Cnt)','DAQ6363.Counts Ch2(Cnt)','DAQ6363.Counts Sum(Cnt)']
         elif self.qbox_scan_det.currentText() == "Spec":
             device = self.main.device_spectrometer
             value_idx, slice_idx = 0, slice(-1)
             save_points = self.main.sidebar_measure.UI_AndorCamera.btn_save.isChecked()
+            meas_names = ['IdusCam.Max Val(Cnt)','IdusCam.Max Wl(nm)','IdusCam.Integral(Cnt)']
         
         self.main.scanner = Scanner(axes,[self.qbox_scan_det.currentText(),device], device = self.main.device_nanopositionner)
         
@@ -832,7 +835,7 @@ class UI_Scan(DraggableFrame):
         self.main.graphs_scan[self.graph_name] = graph
         
         self._scan_thread = QThread()
-        self._scan_worker = ScanWorker(axes, move_fns, measure_fn, sess_nb=sess_nb, meas_nb = meas_nb, file_path = file_path, value_idx = value_idx, slice_idx = slice_idx,save_points = save_points)
+        self._scan_worker = ScanWorker(axes, move_fns, measure_fn, sess_nb=sess_nb, meas_nb = meas_nb, file_path = file_path, value_idx = value_idx, slice_idx = slice_idx,save_points = save_points,meas_names = meas_names)
         self._scan_worker.moveToThread(self._scan_thread)
 
         self._scan_thread.started.connect(self._scan_worker.run)
@@ -858,6 +861,7 @@ class UI_Scan(DraggableFrame):
 
     def _on_scan_completed(self,completed = 0):
         self._on_scan_finished()
+        self.eta.setText('ETA: Done')
         self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Scan complete.")
         print()
         print(f"Scan complete. {completed:.3f} s")

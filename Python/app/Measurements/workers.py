@@ -99,13 +99,7 @@ class ScanWorker(QObject):
     error = Signal(str)
     progress = Signal(str)
 
-    def __init__(self, axes, move_fns, measure_fn, sess_nb="" ,meas_nb = "", file_path = 'ScanError.txt', save_points = False, value_idx = -1, slice_idx = slice(100)):
-        """
-        axes: dict like {'x': [-10, 10, 1], 'y': [0, 5, 1]}
-        move_fns: dict like {'x': move_x_fn, 'y': move_y_fn}
-                  each move_fns[name](value) moves just that axis
-        measure_fn: callable() -> value
-        """
+    def __init__(self, axes, move_fns, measure_fn, sess_nb="" ,meas_nb = "", file_path = 'ScanError.txt', save_points = False, value_idx = -1, slice_idx = slice(100), meas_names = range(10)):
         super().__init__()
         self.axes = axes
         self.meas_nb = meas_nb
@@ -113,7 +107,7 @@ class ScanWorker(QObject):
         self.save_points = save_points
         self.move_fns = move_fns
         self.measure_fn = measure_fn
-        self.meas_names = ['MH150.Counts Ch1(ph)','	MH150.Counts Ch2(ph)','	MH150.Counts total(ph)']
+        self.meas_names = meas_names
         self._stop_requested = False
         self.value_idx = value_idx
         self.slice_idx = slice_idx
@@ -172,8 +166,8 @@ class ScanWorker(QObject):
                 total = len(combos)
                 file.write('#')
                 for name in self.axis_names[::-1]:
-                    file.write(name+'_req'+'\t')
-                    file.write(name+'_det'+'\t')
+                    file.write(name+'.ReqPosition(um)'+'\t')
+                    file.write(name+'.DetPos(um)'+'\t')
                 for name in self.meas_names:
                     file.write(name+'\t')
                 file.write('\n')

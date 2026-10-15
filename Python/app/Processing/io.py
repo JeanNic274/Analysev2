@@ -86,7 +86,7 @@ def prevent_overwrite_file(filepath, char =  (r" \((\d+)\)"," (",")")):
         return 0
 
     parent = filepath.parent # File parent directory
-    stem = filepath.stem     # File name
+    stem   = filepath.stem   # File name
     suffix = filepath.suffix # File suffix
 
     existing_versions = [] # Initialization of list of existing files with same name

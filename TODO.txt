@@ -36,9 +36,9 @@
 - [ ] fit model for each curve
 - [x] fit allow none to not ocunt as parameter (different number of peak per curve)
 - [ ] bug fit keeping in memory removed dataset and saving it (cannot reproduce)
+- [ ] allow open file in browser (maybe right click)
 make label text in grpah/plot_area instead of dataset (possible??)
 
-REDO FETCH TYPE with col names?
 
 - [ ] Add real device names (check w/ labview) to UI label
 - [ ] Do detection class like Scanner
@@ -61,17 +61,18 @@ TODO at implementation
 
 - [ ] Check filterwheel.py Blocked -> slot = 0.5 works
 
-Measurement mode:
+======= Measurement mode =======
 - mpd_mh_trpl.ini (detection.py)
 - find unload
 - find thorlabs tsi sdk (detection.py)
+================================
 
-!! remove number with groups is bricked up (they are not assigned a number)(fixed?) !!
 
-PyHegel changes:
+======= PyHegel changes ========
 Pyside -> Pyside6
 mpl backends -> qt5agg
 commented _sweep instruments and _Clock in commands.py
+================================
 
 ====== Installing pyHegel ======
 activate venv

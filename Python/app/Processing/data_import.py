@@ -21,7 +21,8 @@ col_names = {
     'focus scan MH' :           ["f","detf","count_1","count_2","count_raw"], #todo
     'focus scan DAQ' :          ["f","detf","count_1","count_2","count_raw"],
     'trpl APD MH' :             ["ns","count1","count2"],
-    'polarisation spectre' :    ["deg","detdeg","pixel","max_count_raw","max_wl","count"], #todo?
+    'map spectre' :             ["x","detx","y","dety","max_count_raw","max_wl","count"],
+    'polarisation spectre' :    ["deg","detdeg","idx","max_count_raw","max_wl","count"], #todo?
     'polarisation APD' :        ["deg","detdeg","count1","count2","count_raw"],
     'spectre c2n' :             ["ev","count_cor"],
 }

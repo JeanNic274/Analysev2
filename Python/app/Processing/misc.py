@@ -33,6 +33,16 @@ class curve_number():
         self.idx={}
 
 
+measure_type_index = {
+    "#IdusCam.Pixel(Num)"       : "spectrum",
+    "#AttoX.ReqPosition(um)"    : "maps",
+    "#AttoY.ReqPosition(um)"    : "maps",
+    "#AttoFocus.ReqPosition(um)": "focus",
+    "#AttoZ.ReqPosition(um)"    : "focus",
+    "#MH150.Time(ns)"           : "trpl",
+    "#ThorKDC101.ReqPos(deg)"   : "polars",
+}
+
 def meastxt(directory_path):
     print('Generating measurements.txt file:')
     print("")
@@ -53,9 +63,9 @@ def meastxt(directory_path):
         with_bg=" bg?"
         file_type="Undefined"
         filter= 'Not Found'
+        int_time= '1'
         pos, power="\t","\t"
         filename = os.fsdecode(file)
-        int_time="1"
         # if filename.endswith(".txt") and filename.startswith("Data_") and "Req" not in filename:
         if filename.endswith(".txt") and filename.startswith(filestart) and "Req" not in filename:
             file_path=os.path.join(directory_path,filename)
@@ -83,47 +93,51 @@ def meastxt(directory_path):
                     power=fetchpower(header)
                     filter=fetchfilter(header)
                     pos=fetchpos(header)   
-                    # print(filename, nb_data, column[1:5], column[125:129])
-                    if column[1:5]=="Idus":
+                    
+                    col_names = header[-2].split("\t")
+                    col_names = [s.strip() for s in col_names]
+                    
+                    measure_type = measure_type_index.get(col_names[0],"Unknown")
+                    
+                    n_col=len(col_names)
+                    
+                    if measure_type == "spectrum":
                         file_type="spectre"
-                        header_len=len(column)
-                        int_time=fetchinttime(header,file_type)
                         with_bg = ""
-                        if header_len==157:
+                        if n_col==5:
                             with_bg=" w/ bg"
-                        elif header_len==94:
+                        elif n_col==3:
                             with_bg=" w/o bg"
                                 
                         file_type+=with_bg
-                    elif column[1:6]=="AttoX":
-                        # print(header)
-                        if column[125:129]=="Idus":
-                            file_type="map spectre"
-                            int_time=fetchinttime(header,file_type)
-                        elif column[125:129]=='MH15':
-                            file_type="map APD MH"
-                            int_time=fetchinttime(header,file_type)
-                            
-                        elif column[125:129]=='DAQ6':
-                            file_type="map APD DAQ"
-                            int_time=fetchinttime(header,file_type)
-                    elif column[1:6]=="AttoF":
-                        if column[63:67]=='MH15' and column[5:10]=='Focus':
-                            file_type="focus scan MH"
-                            int_time=fetchinttime(header,file_type)
-                            
-                        elif column[63:67]=='DAQ6'and column[5:10]=='Focus':
-                            file_type="focus scan DAQ"
-                            int_time=fetchinttime(header,file_type)
                         
-                    elif column[1:5]=="Thor":
-                        file_type="polarisation"
-                        int_time=fetchinttime(header,file_type+"MH")
-                    elif column[1:5]=="MH15":
+                    elif measure_type == "maps":
+                        if "Idus" in col_names[4]:
+                            file_type="map spectre"
+                        elif 'MH15' in col_names[4]:
+                            file_type="map APD MH"
+                            
+                        elif 'DAQ' in col_names[4]:
+                            file_type="map APD DAQ"
+                            
+                    elif measure_type == "focus":
+                        if 'MH15' in col_names[2]:
+                            file_type="focus scan MH"
+                            
+                        elif 'DAQ' in col_names[2]:
+                            file_type="focus scan DAQ"
+                        
+                    elif measure_type=="polars":
+                        if 'MH15' in col_names[2]:
+                            file_type="polarisation MH"
+                        elif 'DAQ' in col_names[2]:
+                            file_type="polarisation DAQ"
+                            
+                    elif measure_type=="trpl":
                         file_type="trpl APD MH"
-                        int_time=fetchinttime(header,file_type)
                     elif column[1:5]==" x_r":
                         continue #???
+                    int_time=fetchinttime(header,file_type)
                 else:
                     file_type='Empty file'
                     sys.stdout.write("\r")
@@ -305,56 +319,59 @@ def fetchfilter(header):
     return filter
 
 
+
 def fetchtype(header):
+    col_names = header[-2].split("\t")
+    col_names = [s.strip() for s in col_names]
+    
     file_type="Unknown"
-    measure_type="Unknown"
+    measure_type = measure_type_index.get(col_names[0],"Unknown")
     if header[0][:12]=='# PL Mapping':
-        return 'plmap', 'maps'
-    column=header[-2]
+        file_type='plmap'
+        measure_type='maps'
     if header[0][:10]=='#Acq. time':
         file_type='spectre c2n'
         measure_type='spectrum'
-    if column[1:5]=="Idus":
-        measure_type="spectrum"
+        
+    
+    n_col=len(col_names)
+    
+    if measure_type == "spectrum":
         file_type="spectre"
-        header_len=len(column)
         with_bg = ""
-        if header_len==157:
+        if n_col==5:
             with_bg=" w/ bg"
-        elif header_len==94:
+        elif n_col==3:
             with_bg=" w/o bg"
                 
         file_type+=with_bg
-    elif column[1:6]=="AttoX":
-        measure_type="maps"
-        if "Idus" in column:
+        
+    elif measure_type == "maps":
+        if "Idus" in col_names[4]:
             file_type="map spectre"
-        elif 'MH15' in column:
+        elif 'MH15' in col_names[4]:
             file_type="map APD MH"
             
-        elif 'DAQ' in column:
+        elif 'DAQ' in col_names[4]:
             file_type="map APD DAQ"
-    elif column[1:6]=="AttoF":
-        measure_type="focus"
-        if column[63:67]=='MH15' and column[5:10]=='Focus':
+            
+    elif measure_type == "focus":
+        if 'MH15' in col_names[2]:
             file_type="focus scan MH"
             
-        elif column[63:67]=='DAQ6'and column[5:10]=='Focus':
+        elif 'DAQ' in col_names[2]:
             file_type="focus scan DAQ"
         
-    elif column[1:5]=="Thor":
-        measure_type="polars"
-        if 'MH150' in column:
-            file_type="polarisation APD"
-        elif 'Idus' in column:
-            file_type="polarisation spectre"
-    elif column[1:5]=="MH15":
-        measure_type="trpl"
+    elif measure_type=="polars":
+        if 'MH15' in col_names[2]:
+            file_type="polarisation MH"
+        elif 'DAQ' in col_names[2]:
+            file_type="polarisation DAQ"
+            
+    elif measure_type=="trpl":
         file_type="trpl APD MH"
+        
     return file_type,measure_type
-
-
-
 
 
     

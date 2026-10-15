@@ -37,7 +37,7 @@ class Det_Andor():
     
     def getSpectrum(self):
         spectrum =  np.array(cmds.get(self.device.readval))
-        max_arg = np.argmax(spectrum)
+        max_arg = np.argmax(spectrum[2])
         max_count = spectrum[2][max_arg]
         max_wl = spectrum[1][max_arg]
         total_count = np.sum(spectrum[2])

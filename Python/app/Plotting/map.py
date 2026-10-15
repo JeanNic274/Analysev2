@@ -565,7 +565,8 @@ class MultiSlider(QWidget):
     
     def setRange(self, minimum, maximum):
         if maximum <= minimum:
-            raise ValueError("maximum must be greater than minimum")
+            print("maximum must be greater than minimum: ",maximum,minimum)
+            return
 
         self._minimum = minimum # 0.267004, 0.004874, 0.329415 
         self._maximum = maximum # 0.993248, 0.906157, 0.143936
