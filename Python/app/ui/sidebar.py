@@ -792,16 +792,19 @@ class UI_Scan(DraggableFrame):
         if axes == None:
             return
         
-        # axes={'x':[0,10,1],'y':[10,15,1]}
         device = None
         save_points = False
         if self.qbox_scan_det.currentText() == "MH150":
             device = self.main.device_MH150
             value_idx, slice_idx = -1, slice(3)
+            if len(axes)==1:
+                value_idx, slice_idx = slice(-3,None), slice(3)
             meas_names = ['MH150.Counts Ch1(ph)','	MH150.Counts Ch2(ph)','	MH150.Counts Sum(ph)']
         elif self.qbox_scan_det.currentText() == "DAQ":
             device = self.main.device_DAQ
             value_idx, slice_idx = -1, slice(3)
+            if len(axes)==1:
+                value_idx, slice_idx = slice(-3,None), slice(3)
             meas_names = ['DAQ6363.Counts Ch1(Cnt)','DAQ6363.Counts Ch2(Cnt)','DAQ6363.Counts Sum(Cnt)']
         elif self.qbox_scan_det.currentText() == "Spec":
             device = self.main.device_spectrometer

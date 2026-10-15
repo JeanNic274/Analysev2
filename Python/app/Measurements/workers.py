@@ -132,7 +132,10 @@ class ScanWorker(QObject):
             return None
 
         self.shape = tuple(len(v) for v in self.axis_values)
-        self.data = np.full(self.shape, np.nan)
+        if len(axes) == 1:
+            self.data = np.full(self.shape, np.nan, dtype = object)
+        else:
+            self.data = np.full(self.shape, np.nan)
         
     def _boustrophedon_scan(self, index_ranges): # snake like order
         n = len(index_ranges)
