@@ -406,7 +406,9 @@ class BasePlot(QWidget):
             self._refresh()
             
     def remove_all(self,fits=0,refresh=True,all_lines=False):
-        self.ax.get_legend().remove()
+        leg = self.ax.get_legend()
+        if leg is not None:
+            leg.remove()
         if not fits or all_lines:
             for filepath in self.lines.copy():
                 self.main.plot_area.remove(filepath,self.datasets[filepath],refresh=False)

@@ -37,6 +37,7 @@
 - [x] fit allow none to not ocunt as parameter (different number of peak per curve)
 - [ ] bug fit keeping in memory removed dataset and saving it (cannot reproduce)
 - [ ] allow open file in browser (maybe right click)
+- [ ] wait until stable -> check all status
 make label text in grpah/plot_area instead of dataset (possible??)
 
 
@@ -55,11 +56,12 @@ TODO at uni
 
 check labview white light button name
 get filterwheel's filters
-get universal (if possible) function for header generation
+get universal (dump) (if possible) function for header generation -> need to manually create func for each.
 
 TODO at implementation
 
 - [ ] Check filterwheel.py Blocked -> slot = 0.5 works
+- [ ] Check pyhegel header func
 
 ======= Measurement mode =======
 - mpd_mh_trpl.ini (detection.py)

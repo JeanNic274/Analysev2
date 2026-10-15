@@ -112,7 +112,9 @@ def meastxt(directory_path):
                         file_type+=with_bg
                         
                     elif measure_type == "maps":
-                        if "Idus" in col_names[4]:
+                        if "Atto" not in col_names[2]:
+                            measure_type = 'focus'
+                        elif "Idus" in col_names[4]:
                             file_type="map spectre"
                         elif 'MH15' in col_names[4]:
                             file_type="map APD MH"
@@ -120,7 +122,7 @@ def meastxt(directory_path):
                         elif 'DAQ' in col_names[4]:
                             file_type="map APD DAQ"
                             
-                    elif measure_type == "focus":
+                    if measure_type == "focus":
                         if 'MH15' in col_names[2]:
                             file_type="focus scan MH"
                             
@@ -347,7 +349,9 @@ def fetchtype(header):
         file_type+=with_bg
         
     elif measure_type == "maps":
-        if "Idus" in col_names[4]:
+        if "Atto" not in col_names[2]:
+            measure_type = 'focus'
+        elif "Idus" in col_names[4]:
             file_type="map spectre"
         elif 'MH15' in col_names[4]:
             file_type="map APD MH"
@@ -355,7 +359,7 @@ def fetchtype(header):
         elif 'DAQ' in col_names[4]:
             file_type="map APD DAQ"
             
-    elif measure_type == "focus":
+    if measure_type == "focus":
         if 'MH15' in col_names[2]:
             file_type="focus scan MH"
             
