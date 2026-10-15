@@ -265,8 +265,8 @@ class TRPLFileManager(QDialog):
         layout = QVBoxLayout(self)
 
         # Files
-        self.files = QListWidget()
-
+        self.files = QListWidget()    
+    
         # Layouts
         file_layout = QVBoxLayout()
         file_layout.addWidget(self.files)
@@ -664,6 +664,10 @@ class FitManager(QDialog):
         self.files = QTableWidget()
 
         self.files.cellChanged.connect(self._on_cell_change)
+        
+        self.files.setDragEnabled(1)
+        self.files.setAcceptDrops(1)
+        self.files.setDefaultDropAction(Qt.DropAction.CopyAction)
         
         # Layouts
         file_layout = QVBoxLayout()

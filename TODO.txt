@@ -38,7 +38,6 @@
 - [ ] bug fit keeping in memory removed dataset and saving it (cannot reproduce)
 - [ ] allow open file in browser (maybe right click)
 - [ ] wait until stable -> check all status
-make label text in grpah/plot_area instead of dataset (possible??)
 
 
 - [ ] Add real device names (check w/ labview) to UI label
