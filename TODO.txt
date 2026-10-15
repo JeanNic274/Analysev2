@@ -38,6 +38,7 @@
 - [ ] bug fit keeping in memory removed dataset and saving it (cannot reproduce)
 make label text in grpah/plot_area instead of dataset (possible??)
 
+REDO FETCH TYPE with col names?
 
 - [ ] Add real device names (check w/ labview) to UI label
 - [ ] Do detection class like Scanner
@@ -46,9 +47,9 @@ make label text in grpah/plot_area instead of dataset (possible??)
 - [ ] Add goto button for scan detection (move filter wheel and mirrors)
 - [ ] Add connection adress menu (gpib etc)
 - [ ] Add safety checks (eg laser on while no filter)
+- [ ] Connect apd counts to continuous worker during scan
 
-
-IMPLEMENT NANOPOS SET POS !!
+Status.getStatusFlagsAllAxis
 
 TODO at uni
 

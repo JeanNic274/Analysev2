@@ -1,7 +1,7 @@
 import os
 import sys
 
-def load(msg):
+def temp_msg(msg):
     sys.stdout.write(f'\r\033[K{msg}')
     sys.stdout.flush()
 import numpy as np
@@ -30,12 +30,45 @@ col_merged = {
     'spectre w/ bg' :          ['count_cor_raw','count_raw'],
 }
 
-class Data_Set_Import:
-
+class Data_Set_Import:        
+    def __init__(self,file_path=0,attrs=None,dataset=None,name=None):
+        self.number = ""
+        if file_path:
+            self.name=os.path.basename(file_path)[:-4]
+        else:
+            self.name=name
+            
+        if self.name.startswith('Data_'):
+            self.name=self.name#[5:]
+            
+        if self.name.startswith('300gr-325nm_0-1pourcent_x74_10sx1_'):
+            self.name=self.name[34:]
+            
+        if self.name.startswith('plmap_data_'):
+            self.name=self.name[10:20]
+            
+        if file_path:
+            self.attrs=header_extract(file_path)
+        elif attrs:
+            self.attrs=attrs
+            self.data=dataset
+        else:
+            print('Missing either filepath or attrs')
+            raise Exception('Missing either filepath or attrs')
+        
+        for k, v in self.attrs.items():
+            setattr(self, k, v)
+        if file_path:
+            self.import_data(file_path)
+        if self.file_type=='Unknown':
+                print("Unknown Data File Type for "+self.name)
+        self.init_data()
+        
     def import_data(self,file_path):
+    
         if self.file_type == "Empty file":
             self.data = np.zeros(10)
-            return
+            raise Exception(f'{self.file_type} dataset')
         names = col_names.get(self.file_type)
         col_error = False
         if names is not None:
@@ -67,6 +100,7 @@ class Data_Set_Import:
                 self.data = np.genfromtxt(data, names=header, comments="#",encoding="latin-1")
             # self.data=np.genfromtxt(file_path,comments="#",delimiter="\t",encoding="latin-1",names=True)
         self.data = np.nan_to_num(self.data, nan=0)
+        
     def init_data(self):
         if self.file_type == "Empty file":
             return
@@ -98,46 +132,12 @@ class Data_Set_Import:
                 new_values,
                 usemask=False
             ) 
-
-    
+            
     def fit(self,graph,fit_idx):
         self.data_fit={'xfit':0,'yfit':0,'yfit_init':0}
         self.fit_result=fit_data(self,graph,fit_idx)
         self.fitted = True
-
-    
-    def __init__(self,file_path=0,attrs=None,dataset=None,name=None):
-        # if type(file_paths)==str:
-        #     file_paths=[file_paths]
-        self.number = ""
-        if file_path:
-            self.name=os.path.basename(file_path)[:-4]
-        else:
-            self.name=name
-        if self.name.startswith('Data_'):
-            self.name=self.name#[5:]
-        if self.name.startswith('300gr-325nm_0-1pourcent_x74_10sx1_'):
-            self.name=self.name[34:]
-        if self.name.startswith('plmap_data_'):
-            self.name=self.name[10:20]
-            
-        if file_path:
-            self.attrs=header_extract(file_path)
-        elif attrs:
-            self.attrs=attrs
-            self.data=dataset
-        else:
-            print('Missing either filepath or attrs')
-            
-        for k, v in self.attrs.items():
-            setattr(self, k, v)
-        if file_path:
-            self.import_data(file_path)
-        if self.file_type=='Unknown':
-                print("Unknown Data File Type for "+self.name)
-        self.init_data()
-        
-                
+ 
     def __str__(self):
         return self.name
     def __repr__(self):

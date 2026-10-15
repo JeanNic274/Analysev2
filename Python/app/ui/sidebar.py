@@ -3,15 +3,16 @@ import subprocess
 from pathlib import Path
 import sys
 import time
-
-def load(msg):
+import re
+from datetime import datetime
+def temp_msg(msg):
     sys.stdout.write(f'\r\033[K{msg}')
     sys.stdout.flush()
 
-load('importing numpy')
+temp_msg('importing numpy')
 import numpy as np
 
-load('importing PySide6')
+temp_msg('importing PySide6')
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QAbstractItemView,
     QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem, QSizePolicy, QFileSystemModel, QFrame, QMessageBox, QCheckBox, QTableWidgetItem, QTableWidget, QAbstractScrollArea, QHeaderView, QScrollArea, QTextEdit, QButtonGroup, QApplication, QSpinBox
@@ -19,142 +20,31 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QDir, QSortFilterProxyModel, QSettings, QThread, QObject, Signal, QMimeData, QPoint
 from PySide6.QtGui import QBrush, QPalette, QColor, QColorConstants, QIcon, QDrag, QPixmap
 
-load('loading app processing funcs 0/6')
+temp_msg('loading app processing funcs 0/8')
 from Python.app.Processing.data_import import Data_Set_Import
-load('loading app processing funcs 1/6')
+temp_msg('loading app processing funcs 1/8')
 from Python.app.Processing.misc import browse
-load('loading app processing funcs 2/6')
+temp_msg('loading app processing funcs 2/8')
 from Python.app.Processing.io import create_file_header
-load('loading app processing funcs 3/6')
-from Python.app.ui.tools import resize_table_to_contents, RevertableLineEdit, LabeledLineEdit, NoScrollSpinBox, MyQComboBox
-load('loading app processing funcs 5/6')
+temp_msg('loading app processing funcs 3/8')
+from Python.app.ui.tools import resize_table_to_contents, RevertableLineEdit, LabeledLineEdit, NoScrollSpinBox, MyQComboBox, DraggableFrame, ReorderableContainer
+temp_msg('loading app processing funcs 4/8')
 from Python.app.ui.graphs import SpectrometerGraph, RateGraph, ScanPlot1D, ScanPlot2D
+temp_msg('loading app processing funcs 5/8')
 from Python.app.ui.DialogWindow import MovePanel
-load('loading app processing funcs 4/6')
+temp_msg('loading app processing funcs 6/8')
+from Python.app.Measurements.detection import Det_Andor, Det_MH150
 from Python.app.Measurements.devices import Scanner
+temp_msg('loading app processing funcs 6/8')
+from Python.app.Measurements.workers import CommWorker, MeasureWorker, ContinuousReadWorker, ScanWorker, MoveWorker
 
-from pyHegel.pyHegel import commands as cmds
-
-
-
-class DraggableFrame(QFrame):
-    def __init__(self, key, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._drag_start_pos = None
-        self.key = key
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self._drag_start_pos = event.position().toPoint()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if self._drag_start_pos is None:
-            return super().mouseMoveEvent(event)
-
-        if (event.position().toPoint() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
-            return super().mouseMoveEvent(event)
-
-        drag = QDrag(self)
-        mime_data = QMimeData()
-        mime_data.setData("application/x-frame-id", str(id(self)).encode())
-        drag.setMimeData(mime_data)
-
-        pixmap = self.grab()
-        drag.setPixmap(pixmap)
-        drag.setHotSpot(event.position().toPoint())
-
-        drag.exec(Qt.MoveAction)
-        self._drag_start_pos = None
+from pyHegel.pyHegel import commands as cmds # pyright: ignore[reportMissingImports]
 
 
-class ReorderableContainer(QWidget):
-    def __init__(self, settings_key="frame_order"):
-        super().__init__()
-        self.setAcceptDrops(True)
-        self.layout_ = QVBoxLayout(self)
-        self.layout_.setSpacing(10)
-        self.settings_key = settings_key
-        self.settings = QSettings("JN", "AnalyseV2-Sidebar")
-        
-    def add_frame(self, frame: DraggableFrame):
-        self.layout_.addWidget(frame)
 
-    def current_order(self):
-        order = []
-        for i in range(self.layout_.count()):
-            w = self.layout_.itemAt(i).widget()
-            if w is not None:
-                order.append(w.key)
-        return order
 
-    def save_order(self):
-        self.settings.setValue(self.settings_key, self.current_order())
 
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat("application/x-frame-id"):
-            event.acceptProposedAction()
 
-    def dragMoveEvent(self, event):
-        event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        frame_id = int(bytes(event.mimeData().data("application/x-frame-id")).decode())
-        dragged_widget = self._find_widget_by_id(frame_id)
-        if dragged_widget is None:
-            return
-
-        drop_y = event.position().toPoint().y()
-        target_index = self._index_for_y(drop_y, exclude=dragged_widget)
-
-        current_index = self.layout_.indexOf(dragged_widget)
-        self.layout_.removeWidget(dragged_widget)
-
-        # adjust target index if removing shifted things
-        if current_index < target_index:
-            target_index -= 1
-
-        self.layout_.insertWidget(target_index, dragged_widget)
-        event.acceptProposedAction()
-        self.save_order()
-
-    def _find_widget_by_id(self, widget_id):
-        for i in range(self.layout_.count()):
-            w = self.layout_.itemAt(i).widget()
-            if w is not None and id(w) == widget_id:
-                return w
-        return None
-
-    def _index_for_y(self, y, exclude=None):
-        for i in range(self.layout_.count()):
-            w = self.layout_.itemAt(i).widget()
-            if w is exclude or w is None:
-                continue
-            if y < w.geometry().center().y():
-                return i
-        return self.layout_.count()
-
-    def restore_order(self):
-        saved_order = self.settings.value(self.settings_key)
-        if not saved_order:
-            return  
-
-        widgets_by_key = {}
-        for i in range(self.layout_.count()):
-            w = self.layout_.itemAt(i).widget()
-            if w is not None:
-                widgets_by_key[w.key] = w
-
-        for w in widgets_by_key.values():
-            self.layout_.removeWidget(w)
-
-        for key in saved_order:
-            if key in widgets_by_key:
-                self.layout_.addWidget(widgets_by_key.pop(key))
-
-        # if not in saved order
-        for w in widgets_by_key.values():
-            self.layout_.addWidget(w)
 
 class SidebarView(QWidget):
     def __init__(self, main_window):
@@ -284,7 +174,12 @@ class SidebarView(QWidget):
                 item.setData(0, Qt.UserRole + 2, False)
                 item.setBackground(0, QBrush())
             else:
-                dataset = Data_Set_Import(path)
+                try:
+                    dataset = Data_Set_Import(path)
+                except Exception as e:
+                    print(f'Error importing dataset: {path}.\nError: {e}')
+                    return
+            
                 self.main.selected_files[self.main.plot_area_index].append(path)
                 self.main.datasets[path] = dataset
                 self.main.plot_area.manager.add(dataset)
@@ -371,7 +266,7 @@ class SidebarMeasure(QScrollArea):
         self.UI_MH150 = UI_MH150(self.main,"MH150")
         self.add_device_ui(self.UI_MH150)
         
-        self.UI_Scan = UI_Scan(self,"Scan")
+        self.UI_Scan = UI_Scan(self.main,"Scan")
         self.add_device_ui(self.UI_Scan)
         
         self.UI_NanoPos = UI_NanoPos(self.main,'NanoPos')
@@ -383,7 +278,7 @@ class SidebarMeasure(QScrollArea):
         self.UI_FilterWheel = UI_FilterWheel(self,'FilterWheel')
         self.add_device_ui(self.UI_FilterWheel)
         
-        self.UI_AndorCamera = UI_AndorCamera(self,'Andor Camera')
+        self.UI_AndorCamera = UI_AndorCamera(self.main,'Andor Camera')
         self.add_device_ui(self.UI_AndorCamera)
         
         self.UI_AndorSpectro = UI_AndorSpectro(self,'Andor Spectro')
@@ -466,11 +361,10 @@ class UI_MH150(DraggableFrame):
         if hasattr(self, '_cont_thread') and self._cont_thread is not None and self._cont_thread.isRunning():
             return
         
-        def measure_fn(): 
-            return device.getCountRates()
+        device_handler = Det_MH150(device)
 
         self._cont_thread = QThread()
-        self._cont_worker = ContinuousReadWorker(measure_fn, interval_ms=500)
+        self._cont_worker = ContinuousReadWorker(device_handler.countRates, interval_ms=500)
         self._cont_worker.moveToThread(self._cont_thread)
 
         self._cont_thread.started.connect(self._cont_worker.run)
@@ -490,8 +384,8 @@ class UI_MH150(DraggableFrame):
         
 
     def _on_continuous_reading(self, value):
-        self.val = value+ (value[0]+value[1],)
-        self.label_countst.setText(f"Total: {self.val[2]}")
+        self.val = value
+        self.label_countst.setText(f"Total: {self.val[-1]}")
         self.label_counts1.setText(f"Ch1: {self.val[0]}")
         self.label_counts2.setText(f"Ch2: {self.val[1]}")
         if self.btn_rate_graph.isChecked():
@@ -516,15 +410,13 @@ class UI_AndorCamera(DraggableFrame):
         
         self._thread = None
         self._worker = None
+        self.file_path = None
         
         self.val = None
         self._build()
         
         
     def _build(self):
-        
-        # self.setStyleSheet("border: 1px solid red; margin: 1px; padding: 1px;")
-        
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(5)
         self.layout.setContentsMargins(5, 1, 5, 1)
@@ -539,42 +431,57 @@ class UI_AndorCamera(DraggableFrame):
         
         layer1 = QHBoxLayout()
         
+        self.btn_save = QCheckBox()
+        self.btn_save.setText('save')
+        
         self.acc = NoScrollSpinBox()
         self.acc.setToolTip('Number of accumulations')
+        self.acc.setMaximumWidth(60)
         
         layer1.addWidget(self.btn_measure)
+        layer1.addStretch()
+        layer1.addWidget(self.btn_save)
+        
         layer1.addWidget(QLabel('Acc.'))
         layer1.addWidget(self.acc)
-        
-        
         
         self.layout.addLayout(layer1)
         
 
-
     def start_measure(self, checked = False):
         if not checked:
             self._abort_measure()
+            self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Aborting spectrum acquisition.")
             return
         
         if self._thread is not None:
             self._on_measure_finished()
             print('Waiting for spectrometer')
+            self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Waiting for spectrometer.")
             return
+        
+        self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Starting spectrum acquisition.")
 
         self.btn_measure.setText('Abort')
         
-        file_path = create_file_header(devices = [], meas_type = "Spectrum", sess_nb=self.main.main.session_number, meas_nb = self.main.main.meas_nb())
-        
-        
-        if self.main.main.graph_spectrometer is None:
-            self.main.main.graph_spectrometer = SpectrometerGraph(self.main.main)
-            self.main.main.graph_spectrometer.show()
+        if self.btn_save.isChecked():
+            self.file_path = create_file_header(devices = [], meas_type = "Spectrum", sess_nb=self.main.session_number, meas_nb = self.main.meas_nb())
         else:
-            self.main.main.graph_spectrometer.raise_()
+            self.file_path = None
+        
+        
+        if self.main.graph_spectrometer is None:
+            self.main.graph_spectrometer = SpectrometerGraph(self.main)
+            self.main.graph_spectrometer.show()
+        else:
+            self.main.graph_spectrometer.raise_()
+            
+        device_handler = Det_Andor(self.main.device_spectrometer)
+        meas_fn = device_handler.getSpectrumOnly
+        
             
         self._thread = QThread()
-        self._worker = MeasureWorker(self.main.main.device_spectrometer.readval,file_path)
+        self._worker = MeasureWorker(meas_fn)
         self._worker.moveToThread(self._thread)
 
         self._thread.started.connect(self._worker.run)
@@ -590,8 +497,31 @@ class UI_AndorCamera(DraggableFrame):
 
     def _on_measure_done(self, val):
         self.val = val
-        self.main.main.graph_spectrometer.update_val(self.val)
+        self.main.graph_spectrometer.update_val(self.val)
         self._on_measure_finished()
+        self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Spectrum acquired.")
+        if self.file_path is not None:
+            columns = ["IdusCam.Pixel(Num)","IdusCam.Wavelenght(nm)","IdusCam.Y Pix Track 1(Cnt)"]
+            fmts = ["%d", "%.4f", "%d"]
+            if len(val)>3:
+                columns.append("IdusCam.Bckgnd Y Pix Row 1(Cnt)")
+                columns.append("IdusCam.Corr Y Pix Row 1(Cnt)")
+                fmts.append("%d")
+                fmts.append("%d")
+            if len(val) != len(columns):
+                columns = [str(x) for x in range(len(val))]
+                fmts = len(val) * ["%.4f"]
+                
+            with open(self.file_path, 'a') as f:
+                np.savetxt(
+                        f,
+                        np.column_stack(val),
+                        delimiter="\t",
+                        header="\t".join(columns),
+                        comments="#",          
+                        fmt=fmts,   
+                    )
+            self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Spectrum acquired and saved.")
 
     def _on_measure_finished(self):
         self.btn_measure.blockSignals(True)
@@ -618,6 +548,7 @@ class UI_AndorCamera(DraggableFrame):
         
     def _on_measure_error(self, message='Unspecified Error'):
         self._on_measure_finished()
+        self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Measurement error: {message}")
         QMessageBox.critical(self, "Measurement error", message)
         
 
@@ -851,7 +782,9 @@ class UI_Scan(DraggableFrame):
         if not checked:
             if hasattr(self, '_scan_worker'):
                 self._scan_worker.request_stop()
+                self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Aborting scan.")
             return
+        self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Attemping to start scan.")
         self.btn_measure.setText('Abort')
         
         axes = self.get_scan_parameters()
@@ -861,33 +794,45 @@ class UI_Scan(DraggableFrame):
         
         # axes={'x':[0,10,1],'y':[10,15,1]}
         device = None
+        save_points = False
         if self.qbox_scan_det.currentText() == "MH150":
-            device = self.main.main.device_MH150
+            device = self.main.device_MH150
+            value_idx, slice_idx = -1, slice(3)
         elif self.qbox_scan_det.currentText() == "DAQ":
-            device = self.main.main.device_DAQ
+            device = self.main.device_DAQ
+            value_idx, slice_idx = -1, slice(3)
         elif self.qbox_scan_det.currentText() == "Spec":
-            device = self.main.main.device_spectrometer
+            device = self.main.device_spectrometer
+            value_idx, slice_idx = 0, slice(-1)
+            save_points = self.main.sidebar_measure.UI_AndorCamera.btn_save.isChecked()
         
-        self.main.main.scanner = Scanner(axes,[self.qbox_scan_det.currentText(),device])
+        self.main.scanner = Scanner(axes,[self.qbox_scan_det.currentText(),device], device = self.main.device_nanopositionner)
         
-        move_fns = self.main.main.scanner.move_fns()
-        measure_fn = self.main.main.scanner.meas_fns()
+        move_fns = self.main.scanner.move_fns()
+        measure_fn = self.main.scanner.meas_fns()
         
         missing = set(axes.keys()) - set(move_fns.keys()) # Check all scan axis ok
         if missing:
             raise ValueError(f"Missing move function for axes: {missing}")
-
-        file_path = create_file_header(devices = [], meas_type = "Map Scan", sess_nb=self.main.main.session_number, meas_nb = self.main.main.meas_nb())
         
+        meas_nb = self.main.meas_nb()
+        sess_nb=self.main.session_number
+        
+        file_path = create_file_header(devices = [], meas_type = "Map Scan", sess_nb=sess_nb, meas_nb = meas_nb)
+        
+        self.graph_name =  time.strftime("%m/%d/%Y, %H:%M:%S")
         if len(axes) == 1:
-            graph = ScanPlot1D(self,axes)
+            graph = ScanPlot1D(self.main,axes, name = self.graph_name)
+            self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Starting 1D sweep.")
         else:
-            graph = ScanPlot2D(self,dict(list(axes.items())[:2]))
+            graph = ScanPlot2D(self.main,dict(list(axes.items())[:2]), name = self.graph_name)
+            self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Starting 2D scan.")
         graph.show()
-        self.main.main.graphs_scan.append(graph)
+        
+        self.main.graphs_scan[self.graph_name] = graph
         
         self._scan_thread = QThread()
-        self._scan_worker = ScanWorker(axes, move_fns, measure_fn, file_path)
+        self._scan_worker = ScanWorker(axes, move_fns, measure_fn, sess_nb=sess_nb, meas_nb = meas_nb, file_path = file_path, value_idx = value_idx, slice_idx = slice_idx,save_points = save_points)
         self._scan_worker.moveToThread(self._scan_thread)
 
         self._scan_thread.started.connect(self._scan_worker.run)
@@ -904,25 +849,29 @@ class UI_Scan(DraggableFrame):
         self._scan_thread.start()
 
     def _on_point_measured(self, idx, coords, value):
-        self.main.main.graphs_scan[-1].update_data(self._scan_worker.data, new_value = value,coords=coords)
+        if self.main.graphs_scan.get(self.graph_name) is not None:
+            self.main.graphs_scan[self.graph_name].update_data(self._scan_worker.data, new_value = value,coords=coords)
 
     def _on_scan_progress(self, eta):
+        self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] ETA: {eta}.")
         self.eta.setText('ETA: '+eta)
 
-    def _on_scan_completed(self):
+    def _on_scan_completed(self,completed = 0):
         self._on_scan_finished()
+        self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Scan complete.")
         print()
-        print("Scan complete")
+        print(f"Scan complete. {completed:.3f} s")
         
     def _on_scan_finished(self):
         self.btn_measure.blockSignals(True)
         self.btn_measure.setChecked(False)
         self.btn_measure.setText('Start')
         self.btn_measure.blockSignals(False)
-        self.main.main.scanner = None
+        self.main.scanner = None
 
     def _on_scan_error(self, message):
         self._on_scan_finished()
+        self.main.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Scan error: {message}")
         QMessageBox.critical(self, "Scan error", message)
         
     def _clear_scan_refs(self):
@@ -964,6 +913,7 @@ class UI_Laser(DraggableFrame):
         
         self.btn_softlock = QPushButton('SoftLock')        
         self.btn_softlock.setCheckable(True)
+        self.btn_softlock.setStyleSheet("QPushButton:checked {background-color : red; color: black}")      
         self.btn_softlock.toggled.connect(self._set_laser)
         
         
@@ -1063,7 +1013,7 @@ class UI_NanoPos(DraggableFrame):
         
         self.toggles_btns = {}
         self.cont_labels = {}
-        
+        self.val = 0
         self._cont_thread = {}
         self._cont_worker = {}
         
@@ -1084,15 +1034,15 @@ class UI_NanoPos(DraggableFrame):
         
         self.layout.addLayout(layer0)
         
-        axis = {'0':'x','1':'y','2':'z'}
+        axis = {'x':0,'y':1,'z':2}
         
-        for ax,v in axis.items():
+        for k,ax in axis.items():
         
             layer = QHBoxLayout()
             
             # layer.addWidget(QLabel(v))
             
-            btn_toggle = QPushButton(v)        
+            btn_toggle = QPushButton(k)        
             btn_toggle.setFixedWidth(25)       
             btn_toggle.setCheckable(True)
             btn_toggle.toggled.connect(self._set_pos) #TODO: toggle piezo
@@ -1126,43 +1076,53 @@ class UI_NanoPos(DraggableFrame):
             
             self.layout.addLayout(layer)
         
-    def _set_pos(self,ax,pos_btn):
-        text = pos_btn.text()
+    def _set_pos(self, axe, pos_btn = None, text = None, absolute = True, label_update = None):
+        if pos_btn is not None:
+            text = pos_btn.text()
         try:
             pos = int(float(text) * 1000)
         except ValueError:
             QMessageBox.warning(self, "Invalid input", f"'{text}' is not a valid number.")
             return
-        # if self.qtext_laser_freq.text().isdigit():
-        #     freq = float(self.qtext_laser_freq.text())
-        # else:
-        #     freq = None
+            
+        self._thread = QThread()
+        self._worker = MoveWorker(device = self.main.device_nanopositionner, axe = axe, coords = pos, absolute = absolute)
+        self._worker.moveToThread(self._thread)
+
+        self._thread.started.connect(self._worker.run)
+        self._worker.error.connect(self._on_move_error)
+        self._worker.finished.connect(lambda finished, label_update = label_update: self._update_val(val = finished, label = label_update))
+
+        # cleanup when done
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+
+        self._thread.start()
         
-        # self._thread = QThread()
-        # self._worker = CommWorker()
-        # self._worker.moveToThread(self._thread)
-
-        # self._thread.started.connect(self._worker.run)
-        # self._worker.error.connect(self._on_measure_error)
-
-        # # cleanup when done
-        # self._worker.finished.connect(self._thread.quit)
-        # self._worker.finished.connect(self._worker.deleteLater)
-        # self._thread.finished.connect(self._thread.deleteLater)
-
-        # self._thread.start()
-
-    def on_continuous_toggled(self, checked,ax):
+    def _on_move_error(self, message='Unspecified Error'):
+        QMessageBox.critical(self, "Nano positionner error", message)
+        
+    def _update_val(self, val = 0, label = None):
+        if label is not None:
+            label.setText(str(val/1000))
+        
+    def on_continuous_toggled(self, checked,axe):
         if checked:
-            self._start_continuous_read(ax)
+            self._start_continuous_read(axe)
         else:
-            self._stop_continuous_read(ax)
+            self._stop_continuous_read(axe)
             
     def _open_move_panel(self):
         if self.main.move_panel_is_open == False:
-            dialog = MovePanel(self.main)
-            dialog.show()
+            self.MovePan = MovePanel(self.main)
+            self.MovePan.show()
             self.main.move_panel_is_open = True
+        else:
+            try:
+                self.MovePan.raise_()
+            except:
+                pass
             
     def _start_continuous_read(self,ax):
         device = self.main.device_nanopositionner
@@ -1311,206 +1271,3 @@ class UI_FilterWheel(DraggableFrame):
     def _set_filterwheel(self,**kwargs):
         print(kwargs)
         return []
-
-#************************ Workers for non main-thread operations ************************#
-        
-class CommWorker(QObject):
-    finished = Signal()  
-    error = Signal(str)
-    value_error = Signal(list)
-    
-    def __init__(self, device, set_fn):
-        super().__init__()
-        self.device = device
-        self.set_fn = set_fn
-        self.kwargs = {}
-
-    def run(self):
-        try:
-            val = self.set_fn(device = self.device, **self.kwargs)
-            if val:
-                self.value_error.emit(val)
-        except Exception as e:
-            self.error.emit(str(e))
-        finally:
-            self.finished.emit()
-            
-            
-        
-        
-class MeasureWorker(QObject):
-    completed = Signal(object)  
-    finished = Signal()  
-    error = Signal(str)
-
-    def __init__(self, device, file_path = 'ScanError.txt'):
-        super().__init__()
-        self.device = device
-        self._file_path = file_path
-        self.kwargs = {}
-
-    def run(self):
-        try:
-            val = cmds.get(self.device,**self.kwargs)
-            # with open(self._file_path,'a') as file:
-            #     file.write(val)
-            self.completed.emit(val)
-        except Exception as e:
-            self.error.emit(str(e))
-        finally:
-            self.finished.emit()
-            
-            
-            
-class ContinuousReadWorker(QObject):
-    reading = Signal(object)   
-    error = Signal(str)
-    finished = Signal()
-
-    def __init__(self, measure_fn, interval_ms=500, graph = None):
-        super().__init__()
-        self.measure_fn = measure_fn
-        self.interval_ms = interval_ms
-        self._running = True
-
-    def stop(self):
-        self._running = False
-
-    def run(self):
-        try:
-            while self._running:
-                value = self.measure_fn()
-                self.reading.emit(value)
-
-                # sleep in small chunks so it feels less laggy
-                slept = 0
-                chunk = 100  # ms
-                while slept < self.interval_ms and self._running:
-                    QThread.msleep(chunk)
-                    slept += chunk
-        except Exception as e:
-            self.error.emit(str(e))
-        finally:
-            self.finished.emit()        
-            
-            
-class ScanWorker(QObject): 
-    point_measured = Signal(tuple, dict, object)
-    finished = Signal()
-    completed = Signal()
-    error = Signal(str)
-    progress = Signal(str)
-
-    def __init__(self, axes, move_fns, measure_fn, file_path = 'ScanError.txt'):
-        """
-        axes: dict like {'x': [-10, 10, 1], 'y': [0, 5, 1]}
-        move_fns: dict like {'x': move_x_fn, 'y': move_y_fn}
-                  each move_fns[name](value) moves just that axis
-        measure_fn: callable() -> value
-        """
-        super().__init__()
-        self.axes = axes
-        self.move_fns = move_fns
-        self.measure_fn = measure_fn
-        self.meas_names = ['MH150.Counts Ch1(ph)','	MH150.Counts Ch2(ph)','	MH150.Counts total(ph)']
-        self._stop_requested = False
-        self._file_path = file_path
-        
-        self._stop_msg = None
-
-        self.axis_names = list(reversed(axes.keys()))
-        self.axis_values = []
-        try:
-            for name in self.axis_names:
-                start, stop, step = axes[name]
-                if (start>stop and step >0) or (start<stop and step <0):
-                    start, stop = stop, start
-                start, stop, step = 1000*int(start), 1000*int(stop), 1000*int(step)
-                values = np.arange(start, stop + step / 2, step, dtype= int)
-                self.axis_values.append(values)
-        except Exception as e:
-            self._stop_requested = True
-            self._stop_msg = str(e)
-            return None
-
-        self.shape = tuple(len(v) for v in self.axis_values)
-        self.data = np.full(self.shape, np.nan)
-        
-    def _boustrophedon_scan(self, index_ranges): # snake like order
-        n = len(index_ranges)
-
-        def recurse(level, parity):
-            seq = list(index_ranges[level])
-            if parity % 2 == 1:
-                seq.reverse()
-
-            if level == n - 1:
-                for i in seq:
-                    yield (i,)
-            else:
-                for k, i in enumerate(seq):
-                    # every outer step flips the inner axes
-                    for rest in recurse(level + 1, parity + k):
-                        yield (i,) + rest
-
-        yield from recurse(0, 0)
-        
-    def request_stop(self):
-        self._stop_requested = True
-        self._stop_msg = "Manual stop requested"
-
-    def run(self):
-        try:
-            with open(self._file_path,'a') as file:
-                index_ranges = [range(len(v)) for v in self.axis_values]
-                
-                combos = list(self._boustrophedon_scan(index_ranges))
-                total = len(combos)
-                file.write('#')
-                for name in self.axis_names[::-1]:
-                    file.write(name+'_req'+'\t')
-                    file.write(name+'_det'+'\t')
-                for name in self.meas_names:
-                    file.write(name+'\t')
-                file.write('\n')
-                
-                last_coords = {name: None for name in self.axis_names}
-                det_coords = {name: None for name in self.axis_names}
-                t_start = time.time()
-                for i, idx in enumerate(combos):
-                    t_point = time.time()
-                    save_data = []
-                    
-                    if self._stop_requested:
-                        raise Exception(self._stop_msg)
-
-                    coords = {
-                        name: self.axis_values[a][idx[a]]
-                        for a, name in enumerate(self.axis_names)
-                    }
-                    
-                    # only move relevant axes
-                    for name in self.axis_names[::-1]:
-                        if coords[name] != last_coords[name]:
-                            det_coords[name] = self.move_fns[name](coords[name])
-                            last_coords[name] = coords[name]
-                        save_data.append(str(coords[name]/1000))
-                        save_data.append(str(det_coords[name]))
-
-                    value = self.measure_fn()
-                    values = tuple(value) + (np.sum(value),)
-                    self.data[idx] = values[-1]
-                    values_str = [str(value) for value in values]
-                    save_data += values_str
-                    file.write('\t'.join(save_data) + '\n')
-                    self.point_measured.emit(idx, coords, values)
-                    if i%4==0:
-                        self.progress.emit(time.strftime('%H:%M:%S', time.gmtime((total-i)*( time.time()-t_start)/(i+1))))
-
-                self.completed.emit()
-        except Exception as e:
-            self.error.emit(str(e))
-        finally:
-            self.finished.emit()
-            
-

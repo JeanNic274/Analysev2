@@ -213,10 +213,13 @@ def save_fit(graph,filename=""):
            
         
         
-def create_file_header(devices = [], name_prefix = "", meas_type = "", sess_nb = "E",meas_nb = 'E',comments = ""):
+def create_file_header(devices = [], name_prefix = "", meas_type = "", sess_nb = "E",meas_nb = 'E',comments = "", sub_level = False, idx = None):
     char =  (r" _(\d+)","_","")
-    
-    filepath = Path('data','PL',f'{re.sub('-',"_",date.today().isoformat()[2:])}',f"Data_{re.sub('-',"",date.today().isoformat()[2:])}_{sess_nb}_{meas_nb}.txt")
+    if sub_level:
+        filepath = Path('data','PL',f'{re.sub('-',"_",date.today().isoformat()[2:])}',f"Data_{re.sub('-',"",date.today().isoformat()[2:])}_{sess_nb}_{meas_nb}",f"Data_{re.sub('-',"",date.today().isoformat()[2:])}_{sess_nb}_{meas_nb}_{idx}.txt")
+    else:
+        filepath = Path('data','PL',f'{re.sub('-',"_",date.today().isoformat()[2:])}',f"Data_{re.sub('-',"",date.today().isoformat()[2:])}_{sess_nb}_{meas_nb}.txt")
+
     filepath.parent.mkdir(parents=True, exist_ok=True)
     prevent_overwrite_file(filepath, char = char)
     

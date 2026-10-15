@@ -88,6 +88,7 @@ def meastxt(directory_path):
                         file_type="spectre"
                         header_len=len(column)
                         int_time=fetchinttime(header,file_type)
+                        with_bg = ""
                         if header_len==157:
                             with_bg=" w/ bg"
                         elif header_len==94:
@@ -163,17 +164,12 @@ def header_extract(file_path,map=False):
                     check_line=1
                     break
                         
-        nb_data= sum(1 for _ in f)+check_line
+        nb_data = sum(1 for _ in f)+check_line
     info={}
-    # if nb_data<2:
-    #     info['file_type'],info['measure_type']= 'Empty file','Empty file'
-    #     # return info
-    info['file_type'],info['measure_type']=fetchtype(header)
-    # if len(header)<10:
-    #     info['int_time']=1
-    #     # return info
-    
-        
+    if nb_data<2:
+        info['file_type'],info['measure_type']= 'Empty file','Empty file'
+    else:
+        info['file_type'],info['measure_type']=fetchtype(header)
     
     info['name']=os.path.basename(file_path)[:-4]
     if info['name'].startswith('Data_'):
@@ -322,6 +318,7 @@ def fetchtype(header):
         measure_type="spectrum"
         file_type="spectre"
         header_len=len(column)
+        with_bg = ""
         if header_len==157:
             with_bg=" w/ bg"
         elif header_len==94:

@@ -22,23 +22,19 @@ class Fake_laser():
 
 class Fake_spectrometer():
     def __init__(self):
-        self.X = np.linspace(1,1024,1024)
         self.readval = FakeSpectrumMeasurement()
-        self.val = np.array(100*np.exp( - (self.X - 500+300*(np.random.rand()-0.5))**2 / (2 * 100**2) ) +0.5*self.X+10*np.random.rand(1024))
-    def get(self):
-        time.sleep(2)
-        self.val = np.array(100*np.exp( - (self.X - 500+300*(np.random.rand()-0.5))**2 / (2 * 50**2) ) +0.1*self.X+10*np.random.rand(1024))
-        return self.X, self.val
+    
 
 class FakeSpectrumMeasurement():
     def __init__(self):
         self.X = np.linspace(1,1024,1024)
+        self.wl = np.linspace(420,550,1024)
         self.val = np.random.rand(1024)
         
     def get(self, *args, **kwarg):
         time.sleep(2)
         self.val = np.array(100*np.exp( - (self.X - 500+300*(np.random.rand()-0.5))**2 / (2 * 50**2) ) +0.1*self.X+10*np.random.rand(1024))
-        return self.X, self.val
+        return self.X, self.wl, self.val
 
 
 
@@ -47,10 +43,9 @@ class Fake_MH150():
     def __init__(self):
         pass
     
-    
     def getCountRates(self):
         time.sleep(0.1)
-        return (1000*np.random.randint(1,100), 1000*np.random.randint(1,100))
+        return (0,1000*np.random.randint(1,100), 1000*np.random.randint(1,100),3,4)
     
     
     
@@ -65,21 +60,34 @@ class Fake_NanoPositionner():
     def __init__(self):
         self.move = move_nano()    
         self.status = status_nano()
-        # if self.NanoPos.status.getStatusMoving(axis) == 0 and self.NanoPos.status.getStatusTargetRange(axis):
-        #     break
-        # self.NanoPos.control.setControlOutput(axis, True)
-        # self.NanoPos.control.setControlMove(axis, True)
+
+
+    def wait_until_stable(amc_dev, axis):
+        """Waits for the specified AMC axis to become stable."""
+        timeout = 10
+        start = time.time()
+        while True:
+            if amc_dev.status.getStatusMoving(axis) == 0 and \
+                amc_dev.status.getStatusTargetRange(axis):
+                break
+            amc_dev.control.setControlOutput(axis, True)
+            amc_dev.control.setControlMove(axis, True)
+            if time.time() - start > timeout:
+                print(f"Timeout waiting for stage axis {axis}")
+                break
+            # time.sleep(0.01)
+
+        
 class move_nano():
     def __init__(self):
-        pass
+        self.pos = [0,0,0]
     
     def setControlTargetPosition(self,axis,pos):
-        sys.stdout.write("\r"+f"Going: {axis}, {pos}")
-        sys.stdout.flush()
-        time.sleep(0.01)
+        self.pos[axis] = int(pos)
+        # time.sleep(0.002)
     
     def getPosition(self,axis):
-        return np.random.randint(1000,100000)/10
+        return self.pos[axis] + np.random.randint(-10,10)
     
 class status_nano():
     def __init__(self):

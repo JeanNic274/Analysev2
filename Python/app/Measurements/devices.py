@@ -1,13 +1,14 @@
 import time
 import sys
-def load(msg):
+def temp_msg(msg):
     sys.stdout.write(f'\r\033[K{msg}')
     sys.stdout.flush()
 import Python.app.Measurements.Fake_instruments as FAKE
+from Python.app.Measurements.detection import Det_Andor, Det_MH150
 # from Python.app.Measurements.detection import start_apds, start_apds_trpl, start_spectro
 from Python.app.Measurements.Fake_instruments import *
-load('starting pyHegel')
-from pyHegel.pyHegel import commands as cmds
+temp_msg('starting pyHegel')
+from pyHegel.pyHegel import commands as cmds # pyright: ignore[reportMissingImports]
 
 def close_device_all(sn=None, amc=None,showcmd=True, daq=None, t_ch1=None, t_ch2=None, spectro=None, camera=None,laser=None):
     try:
@@ -47,11 +48,11 @@ def start_default_devices(spectro=True):
 
 
 class Scanner():
-    def __init__(self,axes,detection):
+    def __init__(self, axes, detection, device = None):
         self.axes = axes
         self.name_detection = detection[0]
         self.dev_detection = detection[1]
-        self.NanoPos = None
+        self.NanoPos = device
         
     def move_fns(self):
         fns = {}
@@ -73,12 +74,9 @@ class Scanner():
                 self.NanoPos.move.setControlTargetPosition(axe,coord)
                 self.wait_until_stable(axe)
                 return self.NanoPos.move.getPosition(axe)
-                # amc.move.setControlTargetPosition(2, int(y * 1000)); wait_until_stable(amc, 2)       
             
         return fns
 
-    
-    
     def wait_until_stable(self, axis):
         timeout = 10
         start = time.time()
@@ -90,16 +88,18 @@ class Scanner():
             if time.time() - start > timeout:
                 print(f"Timeout waiting for stage axis {axis}")
                 break
-            time.sleep(0.01)
+            # time.sleep(0.01)
     
     def meas_fns(self):
         if self.name_detection == 'MH150':
-            return self.dev_detection.getCountRates
+            device_handler = Det_MH150(self.dev_detection)
+            return device_handler.countRates
         elif self.name_detection == 'DAQ':
             print('WIP')
-            return self.WIP
+            raise NotImplementedError(f'Detection for {self.name_detection} is not implemented')
         elif self.name_detection == 'Spec':
-            return lambda: cmds.get(self.dev_detection.readval)
+            device_handler = Det_Andor(self.dev_detection)
+            return device_handler.getSpectrum
         else:
             raise Exception(f'Could not find detection for {self.name_detection}')
         

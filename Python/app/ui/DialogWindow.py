@@ -21,6 +21,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QSettings
 from Python.app.ui.tools import RevertableLineEdit
 
+from Python.app.ui.tools import LabeledLineEdit
+
 class SpectrumFileManager(QDialog):
 
     def __init__(self, main_window):
@@ -449,7 +451,6 @@ class ExperimentPicker(QDialog):
         event.accept()
 
 
-
 class SaveManager(QDialog):
 
     def __init__(self, main_window):
@@ -804,65 +805,134 @@ class FitManager(QDialog):
         event.accept()
             
             
+class MovePanel(QWidget):
 
-
-class MovePanel(QDialog):
-
-    def __init__(self, main_window):
+    def __init__(self,main_window):
         super().__init__()
-
-
+        
         self.main = main_window
         self.wgsetting = 'MovePan/windowGeometry'
         
         self.setWindowTitle("Move Panel")
-        self.resize(400, 250)
 
-        
         self._build()
+        self.setFocusPolicy(Qt.ClickFocus)
+        self._label_read_pos.setFocus()
         
         settings_obj = self.main.settings.value(self.wgsetting,None)
         
+        
         if settings_obj is not None:
-            pass
-            # self.restoreGeometry(settings_obj)
+            self.restoreGeometry(settings_obj)
+        else:
+            self.resize(400, 250)
+            
 
 
     def _build(self):
 
         layout = QVBoxLayout(self)
-
-        # Layouts
         
-        layout = QVBoxLayout()
         layer0 = QHBoxLayout()
         layer1 = QHBoxLayout()
         layer2 = QHBoxLayout()
         layer3 = QHBoxLayout()
         layer4 = QHBoxLayout()
         
-        axis = {'0':'x','1':'y','2':'z'}
+        axis = {'x':0,'y':1,'z':2}
         self.read_labels = {}
+        self.goto_dict = {}
+        self.steps = []
         
+        layer0.addWidget(QLabel('go to   '))
+        self._label_read_pos = QLabel('read pos')
+        layer4.addWidget(self._label_read_pos)
         
-        
-        for ax,v in axis.items():
-            label_read = QLabel("-")
-            label_read.setFixedWidth(50)
-            layer4.addWidget(QLabel(f'{v}'))
-            layer4.addWidget(label_read)
-            self.read_labels[ax] = label_read
-            
-            layer0.addWidget(QLabel('goto: '))
-            goto = RevertableLineEdit()       
-            goto.editingFinished.connect(
+        for k, ax in axis.items():
+            goto = LabeledLineEdit(f'{k}:',horizontal=True)
+            goto.line_edit.editingFinished.connect(
                 lambda ax=ax,pos_btn=goto:
-                    self._set_pos(ax,pos_btn)
+                    self._nanopos_goto(ax,pos_btn)
             )
-            goto.validator()
-            goto.setFixedWidth(50)
+            goto.setFixedWidth(70)
             layer0.addWidget(goto)
+            self.goto_dict[ax] = goto.line_edit
+            
+            
+            label_read = LabeledLineEdit(f'{k}:',horizontal=True)
+            label_read.setFixedWidth(70)
+            label_read.line_edit.setReadOnly(True)
+            label_read.line_edit.setFrame(False)
+            label_read.line_edit.setFocusPolicy(Qt.NoFocus)
+            layer4.addWidget(label_read)
+            label_read.line_edit.setText('-')
+            self.read_labels[ax] = label_read.line_edit
             layer0.addStretch()
+            layer4.addStretch()
+            
+            
+        btn_xp = QPushButton('+X')
+        btn_xp.setFixedSize(45,35)
+        btn_xp.pressed.connect(lambda axe = 0: self._nanopos_increment(axe=axe))
+        
+        btn_xm = QPushButton('-X')
+        btn_xm.pressed
+        btn_xm.setFixedSize(45,35)
+        btn_xm.pressed.connect(lambda axe = 0: self._nanopos_increment(axe=axe, direction = -1))
+        
+        btn_yp = QPushButton('+Y')
+        btn_yp.setFixedSize(35,45)
+        btn_yp.pressed.connect(lambda axe = 1: self._nanopos_increment(axe=axe))
+        
+        btn_ym = QPushButton('-Y')
+        btn_ym.setFixedSize(35,45)
+        btn_ym.pressed.connect(lambda axe = 1: self._nanopos_increment(axe=axe, direction = -1))
+        
+        btn_zp = QPushButton('+Z')
+        btn_zp.setFixedSize(35,45)
+        btn_zp.pressed.connect(lambda axe = 2: self._nanopos_increment(axe=axe))
+        
+        btn_zm = QPushButton('-Z')
+        btn_zm.setFixedSize(35,45)
+        btn_zm.pressed.connect(lambda axe = 2: self._nanopos_increment(axe=axe, direction = -1))
+        
+        
+        step_x = LabeledLineEdit(f'step x (um)')
+        step_x.line_edit.setText("0.5")
+        step_x.setFixedWidth(70)
+        self.steps.append(step_x)
+        step_y = LabeledLineEdit(f'step y (um)')
+        step_y.line_edit.setText("0.5")
+        step_y.setFixedWidth(70)
+        self.steps.append(step_y)
+        step_z = LabeledLineEdit(f'step z (um)')
+        step_z.line_edit.setText("0.2")
+        step_z.setFixedWidth(70)
+        self.steps.append(step_z)
+        
+        
+        
+        layer1.addStretch()
+        layer1.addWidget(btn_yp)    
+        layer1.addSpacing(60)
+        layer1.addWidget(btn_zp)    
+        layer1.addSpacing(50)
+        layer1.addWidget(step_x)    
+        
+        layer2.addStretch()
+        layer2.addWidget(btn_xm)    
+        layer2.addSpacing(50)
+        layer2.addWidget(btn_xp)    
+        layer2.addSpacing(45)
+        layer2.addSpacing(50)
+        layer2.addWidget(step_y)    
+        
+        layer3.addStretch()
+        layer3.addWidget(btn_ym)    
+        layer3.addSpacing(60)
+        layer3.addWidget(btn_zm)    
+        layer3.addSpacing(50)
+        layer3.addWidget(step_z)    
         
         layout.addLayout(layer0)
         layout.addLayout(layer1)
@@ -870,10 +940,22 @@ class MovePanel(QDialog):
         layout.addLayout(layer3)
         layout.addLayout(layer4)
         
+    def _nanopos_goto(self, axe, pos_btn):
+        self.main.sidebar_measure.UI_NanoPos._set_pos(axe=axe,pos_btn=pos_btn, label_update = self.read_labels[axe])
+        
+    def _nanopos_increment(self, axe, direction = 1):
+        text =  self.steps[axe].line_edit.text()
+        if direction == -1:
+            text = direction * float(text)
+            text = str(text)
+        self.main.sidebar_measure.UI_NanoPos._set_pos(axe=axe, text = text, absolute = False, label_update = self.read_labels[axe])
+    
+    def keyPressEvent(self, event):
+        event.ignore()
         
     def closeEvent(self, event):
         self.main.settings.setValue(self.wgsetting, self.saveGeometry())
-        self.main.move_pane_is_open = False
+        self.main.move_panel_is_open = False
         event.accept()
             
 

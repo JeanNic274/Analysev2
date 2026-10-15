@@ -234,8 +234,6 @@ class BasePlot(QWidget):
             self.total_paused_duration += time.time() - self.pause_started_at
             self.pause_started_at = None
         
-        
-
 
 class BaseMap(QWidget):
     def __init__(self, main_window, buttons = [],xlim = None,yaxis = None, xaxis = None, title = "",ylab = "", xlab = ""):
@@ -408,7 +406,7 @@ class BaseMap(QWidget):
 
   
     def update_data(self, data,new_value,coords = None):
-        new_value = new_value[-1]
+        
         pre = tuple((data.ndim-2)*[0])
         self.image.set_data(data[pre])
         if self.data_min == np.inf:
@@ -463,9 +461,6 @@ class BaseMap(QWidget):
         self.canvas.draw_idle()
         
 
-            
-
-
 class SpectrometerGraph(QWidget):
     def __init__(self,main_window):
         super().__init__()
@@ -494,14 +489,13 @@ class SpectrometerGraph(QWidget):
         layout.addWidget(self.graph)
         
     def update_val(self,val):
-        self.graph.update_data(xdatas=[val[0]],ydatas=[val[1]])
+        self.graph.update_data(xdatas=[val[0]],ydatas=[val[2]])
         
     def closeEvent(self, event):
         self.main.settings.setValue("SpectrometerGraph/windowGeometry", self.saveGeometry())
         self.main.graph_spectrometer = None
         event.accept()
-        
-        
+         
         
 class RateGraph(QWidget):
     def __init__(self,main_window):
@@ -591,7 +585,8 @@ class RateGraph(QWidget):
 
 
 class ScanPlot1D(BasePlot):
-    def __init__(self,main_window,axes):
+    def __init__(self,main_window,axes, name = None):
+        self.name = name
         self.buttons = [ 'axvline', 'axhline', 'clear']
         self.x_lab = "f (μm)"
         self.y_lab = "Counts/s"
@@ -622,9 +617,14 @@ class ScanPlot1D(BasePlot):
             
         self._refresh()
         
+    def closeEvent(self, event):
+        self.main.graphs_scan[self.name] = None
+        return super().closeEvent(event)
+        
         
 class ScanPlot2D(BaseMap):
-    def __init__(self,main_window,axes):
+    def __init__(self,main_window,axes, name = None):
+        self.name = name
         self.buttons = [ 'axvline', 'axhline', 'clear']
         self.x_lab = "x (μm)"
         self.y_lab = "y (μm)"
@@ -660,3 +660,7 @@ class ScanPlot2D(BaseMap):
         })
         # self.ax.xaxis.set_major_locator(plt.MaxNLocator(9))
         # self.ax.yaxis.set_major_locator(plt.MaxNLocator(9))
+        
+    def closeEvent(self, event):
+        self.main.graphs_scan[self.name] = None
+        return super().closeEvent(event)

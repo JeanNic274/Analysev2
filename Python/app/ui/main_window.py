@@ -1,19 +1,19 @@
 import time
 t=time.time()
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 import os, signal, sys
 
-def load(msg):
+def temp_msg(msg):
     sys.stdout.write(f'\r\033[K{msg}')
     sys.stdout.flush()
-load('importing numpy')
+temp_msg('importing numpy')
 import numpy
-load('importing matplotlib')
+temp_msg('importing matplotlib')
 import matplotlib
 
 
-load('importing PySide6')
+temp_msg('importing PySide6')
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton, QApplication, QSplitter, QVBoxLayout, QDockWidget
 from PySide6.QtGui import QGuiApplication, Qt
 from PySide6.QtCore import QSettings, QObject, Signal
@@ -31,10 +31,12 @@ t=time.time()
 print(f'------------------ loading toolbar:   ----------------------------',end = '\r')
 from Python.app.ui.toolbar import Toolbar
 print(f'------------------ loaded toolbar:   {time.time()-t:.8f} ------------------')
+t=time.time()
 
 print(f'------------------ loading PlotArea:  ----------------------------',end = '\r')
 from Python.app.ui.plot_area import PlotAreas
 print(f'------------------ loaded PlotArea:  {time.time()-t:.8f} ------------------')
+t=time.time()
 
 from Python.app.Measurements.Fake_instruments import *
 from Python.app.ui.graphs import SpectrometerGraph
@@ -46,7 +48,6 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PL ViewerV2")
-        # self.resize(1200, 800)
         
         self.settings = QSettings(str(Path('data','settings','AppConfig.ini')),QSettings.IniFormat)
         
@@ -63,7 +64,7 @@ class MainWindow(QMainWindow):
         # Device graphs
         self.graph_spectrometer = None
         self.graph_rate_graph = None
-        self.graphs_scan=[]
+        self.graphs_scan={}
         self.move_panel_is_open = False
         #Devices
         self.device_spectrometer = None
@@ -144,6 +145,7 @@ class MainWindow(QMainWindow):
         # ------------ imports for measurement mode ------------
         
         if not self.measurement_mode_on:
+            self.statusBar().showMessage(f"[{datetime.now().strftime("%H:%M:%S")}] Starting LabScan.")
             btn_meas = QPushButton("Lab Scan")
             btn_meas.clicked.connect(self.swap_sidebars)
             self.sidebar_view.top_layout.addWidget(btn_meas)
@@ -178,7 +180,11 @@ class MainWindow(QMainWindow):
 
 
     def swap_sidebars(self):
-        self.sidebar.setCurrentIndex((self.sidebar.currentIndex()+1)%2) 
+        curr_idx = self.sidebar.currentIndex()
+        goto_idx = (curr_idx+1)%2
+        self.sidebar.setCurrentIndex(goto_idx) 
+        if goto_idx == 0:
+            self.sidebar_view.refresh_tree()
             
     
     
