@@ -28,7 +28,6 @@
 from __future__ import absolute_import, print_function, division
 
 import numpy as np
-import scipy
 import os.path
 import time
 import functools
@@ -41,6 +40,8 @@ from ..instruments_base import visaInstrument, visaInstrumentAsync,\
                             decode_float64, quoted_string, _fromstr_helper, ProxyMethod, _encode_block,\
                             locked_calling, quoted_list, quoted_dict, decode_complex128, Block_Codec
 from ..instruments_registry import register_instrument, register_usb_name, register_idn_alias
+
+from ..util import phase_wrap, phase_unwrap
 
 from ..comp2to3 import string_bytes_types, string_upper
 
@@ -87,7 +88,7 @@ class rs_sgma(visaInstrument):
             self.power_level_dbm._doc = 'Range is affected by offset. With offset=0 it is min=%f, max=%f'%(min, max)
 
     def _internal_othergen(self, freq, power):
-        print("Other gen should be at %r Hz, %r dBm"%(freq, power))
+        print("Other gen should be at %s Hz, %s dBm"%(_repr_or_string(freq), _repr_or_string(power)))
 
     @locked_calling
     def _current_config(self, dev_obj=None, options={}):
@@ -1830,11 +1831,11 @@ class rs_znb_network_analyzer(visaInstrumentAsync):
 
     @staticmethod
     def phase_unwrap(phase_deg):
-        return scipy.rad2deg( scipy.unwrap( scipy.deg2rad(phase_deg) ) )
+        return phase_unwrap(phase_deg, deg=True)
 
     @staticmethod
     def phase_wrap(phase_deg):
-        return (phase_deg +180.) % 360 - 180.
+        return phase_wrap(phase_deg, deg=True)
 
     @staticmethod
     def phase_flatten(phase_deg, freq, delay=0., ratio=[0,-1]):
@@ -2035,11 +2036,11 @@ class rs_znb_network_analyzer(visaInstrumentAsync):
         self.trigger_continuous = devChOption('INITiate{ch}:CONTinuous', str_type=bool)
 
         # format could also be SCORr1 - SCORr27 but prefer calib_data for that.
-        self.calc_data = devCalcOption(getstr='CALCulate{ch}:DATA? {format}', str_type=decode_float64, options=dict(format='sdata'),
+        self.calc_data = devCalcOption(getstr='CALCulate{ch}:DATA? {format}', str_type=decode_float64, options=dict(format='sdata'), raw=True,
                                        options_lim=dict(format=ChoiceStrings('FDATa', 'SDATa', 'MDATa', 'NCData', 'UCData')),
                                        autoinit=False, trig=True)
-        self.x_axis = devCalcOption(getstr='CALCulate{ch}:DATA:STIMulus?', str_type=decode_float64, autoinit=False)
-        self.calc_data_all = devChOption(getstr='CALCulate{ch}:DATA:CALL? {format}', str_type=decode_float64, options=dict(format='sdata'),
+        self.x_axis = devCalcOption(getstr='CALCulate{ch}:DATA:STIMulus?', str_type=decode_float64, raw=True, autoinit=False)
+        self.calc_data_all = devChOption(getstr='CALCulate{ch}:DATA:CALL? {format}', str_type=decode_float64, options=dict(format='sdata'), raw=True,
                                        options_lim=dict(format=ChoiceStrings('SDATa', 'FSIData')),
                                        autoinit=False, trig=True)
         self.calc_data_all_list = devChOption(getstr='CALCulate{ch}:DATA:CALL:CATalog?', str_type=quoted_list_znb(), autoinit=False)
@@ -2203,7 +2204,7 @@ class rs_znb_network_analyzer(visaInstrumentAsync):
                                            Q11, Q12, Q21, Q22, PREL: requires p1
                                            L1, L2, LA: requires p1
                                       """)
-        self.calib_data_xaxis = devChOption(getstr='SENSe{ch}:CORRection:STIMulus?', str_type=decode_float64, autoinit=False)
+        self.calib_data_xaxis = devChOption(getstr='SENSe{ch}:CORRection:STIMulus?', str_type=decode_float64, autoinit=False, raw=True)
         self.calib_en = devChOption('SENSe{ch}:CORRection', str_type=bool)
         self.calib_label = devCalcOption(getstr='SENSe{ch}:CORRection:SSTate?', str_type=quoted_string_znb())
         self.calib_power_label = devCalcOption(getstr='SENSe{ch}:CORRection:PSTate?', str_type=quoted_string_znb())

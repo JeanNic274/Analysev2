@@ -33,7 +33,7 @@ from ..instruments_base import visaInstrument, visaInstrumentAsync,\
                             ChoiceDevDep, ChoiceLimits,\
                             decode_float64, _decode_block_base, visa_wrap, locked_calling,\
                             wait, resource_info, ProxyMethod, float_as_fixed,\
-                            _fromstr_helper, _tostr_helper, np_frombuffer
+                            _fromstr_helper, _tostr_helper, np_frombuffer, visa_wrap
 from ..types import dict_improved
 from ..instruments_registry import register_instrument, register_usb_name, register_idn_alias
 
@@ -1510,3 +1510,131 @@ class sr_dc205(visaInstrument):
         self.alias = self.level
         # This needs to be last to complete creation
         super(sr_dc205, self)._create_devs()
+
+
+#######################################################
+##    Stanford Research SR560 low noise voltage preamplifier
+#######################################################
+
+@register_instrument('Stanford_Research_Systems', 'SR560')
+class sr560_preamp(visaInstrument):
+    """
+    This controls a Stanford Research SR560 low noise voltage preamplifier.
+    It is only possible to write to the instrument so the get function only returns
+    the cached state (which starts at None).
+    Useful devices:
+        input_src
+        coulping
+        filter_mode
+        gain
+        freq_hp
+        freq_lp
+    Useful method:
+        resert_overload
+        reset_poweron
+        conf_instr
+    """
+    def __init__(self, visa_addr, unit_num=-1, **kwargs):
+        """ Only works with serial devices.
+            unit_num can be a number between 0 and 3 or -1. See the listen method for more details.
+        """
+        cnsts = visa_wrap.constants
+        self._unit_num = unit_num
+        if unit_num not in [-1, 0, 1, 2, 3]:
+            raise ValueError(self.perror('Invalid unit_num ([-1, 0, 1, 2, 3])'))
+        super(sr560_preamp, self).__init__(visa_addr, parity=cnsts.Parity.none, flow_control=cnsts.VI_ASRL_FLOW_NONE,
+                                            baud_rate=9600, data_bits=8, stop_bits=cnsts.StopBits.two,
+                                            write_termination='\r\n', read_termination='', **kwargs)
+
+    def idn(self):
+        return 'Stanford_Research_Systems,SR560,no_serial,no_firmare'
+
+    @locked_calling
+    def _current_config(self, dev_obj=None, options={}):
+        return self._conf_helper('input_src', 'coupling', 'invert_en', 'gain', 'reserve',
+                                 'filter_mode', 'freq_hp', 'freq_lp',
+                                 'vernier_en', 'vernier_pct', #'blank_en',
+                                 options)
+
+    def unlisten(self):
+        self.write('UNLS')
+
+    def listen(self, addr=None):
+        """
+        Select listen address.
+        When no address is given, will use the unit_num paramter provided during instrument loading.
+        Otherwise provided a number of 0-3 or -1 to talk to all devices at the same time.
+        """
+        if addr is None:
+            addr = self._unit_num
+        if addr not in [-1, 0, 1, 2, 3]:
+            raise ValueError(self.perror('Invalid address (unit_num)'))
+        if addr == -1:
+            self.write('LALL')
+        else:
+            self.write('LISN %d'%addr)
+
+    def conf_instr(self, input_src=None, coupling=None, invert_en=None,
+                     gain=None, reserve=None, filter_mode=None, freq_hp=None, freq_lp=None,
+                     vernier_en=None, vernier_pct=None#, blank_en=None
+                     ):
+        """
+        if any of the parameters are not None, they are set.
+        """
+        # ordering is especially important for filter_mode and freq_hp, freq_lp
+        # as well as the vernier* devcies.
+        ordered_keys = ['input_src', 'coupling', 'invert_en', 'reserve', 'gain',
+                        'filter_mode', 'freq_hp', 'freq_lp',
+                        'vernier_en', 'vernier_pct']
+        lcls = locals()
+        for name in ordered_keys:
+            val = lcls[name]
+            if val is not None:
+                dev = getattr(self, name)
+                dev.set(val)
+
+    def reset_overload(self):
+        self.write('ROLD')
+
+    def reset_factory(self):
+        self.write('*RST')
+
+    def reset_poweron(self):
+        raise NotImplementedError('Use reset_factory instead')
+
+    def _post_set_func(self, val, dev):
+        #self.unlisten()
+        if dev == self.vernier_en:
+            self.vernier_pct.setcache(100)
+        elif dev == self.filter_mode:
+            self.freq_hp.setcache(None)
+            self.freq_lp.setcache(None)
+
+    def _create_devs(self):
+        listen = ProxyMethod(self.listen)
+        #unlisten = ProxyMethod(self.unlisten)
+        post_func = ProxyMethod(self._post_set_func)
+        scpiDevice2 = lambda *args,**kwargs: scpiDevice(*args, autoget=False, autoinit=False,
+                                                        extra_set_func=lambda val, dev: listen(),
+                                                        #extra_set_after_func=lambda val, dev: unlisten(),
+                                                        extra_set_after_func=post_func,
+                                                        cache_as_get=True, **kwargs)
+        self.coupling = scpiDevice2('CPLG', choices=ChoiceIndex(['ground', 'dc', 'ac']))
+        self.reserve = scpiDevice2('DYNR', choices=ChoiceIndex(['low', 'high', 'cal']),
+                                   doc="Do not use the 'cal' mode. It is probably used internally by SR.")
+        self.input_src = scpiDevice2('SRCE', choices=ChoiceIndex(['a', 'a-b', 'b']))
+        self.filter_mode = scpiDevice2('FLTM', choices=ChoiceIndex(['bypass', 'lp6', 'lp12', 'hp6', 'hp12', 'bandpass']))
+        gain_list = ChoiceIndex(make_choice_list([1, 2, 5], 0, 4), normalize=True)
+        self.gain = scpiDevice2('GAIN', choices=gain_list)
+        lp_freq_list = ChoiceIndex(make_choice_list([1, 3], -2, 6)[1:-1], normalize=True)
+        hp_freq_list = ChoiceIndex(make_choice_list([1, 3], -2, 4)[1:-1], normalize=True)
+        self.freq_hp = scpiDevice2('HFRQ', choices=hp_freq_list)
+        self.freq_lp = scpiDevice2('LFRQ', choices=lp_freq_list)
+        # Blanking does not seem to work properl. BLNK 0 seems to blank the output
+        # but BLNK 1 does not recover it (it seems to force the overload on.)
+        #self.blank_en = scpiDevice2('BLINK', str_type=bool)
+        self.invert_en = scpiDevice2('INVT', str_type=bool)
+        self.vernier_en = scpiDevice2('UCAL', str_type=bool)
+        self.vernier_pct = scpiDevice2('UCGN', str_type=int, min=0, max=100)
+        # This needs to be last to complete creation
+        super(sr560_preamp, self)._create_devs()

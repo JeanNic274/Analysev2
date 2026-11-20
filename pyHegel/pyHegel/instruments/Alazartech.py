@@ -1211,7 +1211,7 @@ class ATSBoard(BaseInstrument):
 
 
     def _trigger_level_1_checkdev(self, val):
-        convert_trigger_level(val, self._ext_input_range, justcheck=True)
+        convert_trigger_level(val, self._ext_input_range.get(), justcheck=True)
 
     def _trigger_level_1_setdev(self, val):
         self._ext_trigger_level_1.set(val)
@@ -1636,12 +1636,11 @@ class ATSBoard(BaseInstrument):
 
         # Initialize data
         self.data = {"t":np.linspace(0, self.acquisition_length_sec.get(), samplesPerRecord),
-                     "A":np.array([]),
-                     "B":np.array([])}
+                     "A":[],
+                     "B":[]}
         self._initialized = True
         print(self._initialized)
         self._board.startCapture()  # Arms the board to start the acquisition
-
 
     
     def get_data(self, data, active_channels, nbsamples, nbwindows):
@@ -1662,7 +1661,8 @@ class ATSBoard(BaseInstrument):
             returned_data_sample_number = np.concatenate((returned_data_sample_number, i*np.ones(nbsamples)), axis=0) 
             returned_data_time = np.concatenate((returned_data_time, data["t"]), axis=0)
         returned_data = [data[channel] for channel in active_channels]
-        return [returned_data_sample_number, returned_data_time] + returned_data
+        ret = [returned_data_sample_number, returned_data_time] + returned_data
+        return ret
     
 
     def get_screen_shift(self):
@@ -1735,8 +1735,18 @@ class ATSBoard(BaseInstrument):
                 buffer = self.buffers[buffersCompleted % buffer_count]
                 self._board.waitAsyncBufferComplete(buffer.addr, timeout_ms=timeout)
                 received_data = np.frombuffer(buffer.buffer, dtype=sample_type)
-                for i in range(channel_count):
-                    self.data[channels[i]] = np.concatenate((self.data[channels[i]], (received_data[i*samplesPerBuffer:(i+1)*samplesPerBuffer]-screen_shift*zero_value)/zero_value*screen_size), axis=0)
+
+                data_scaled = (received_data - zero_value*screen_shift) / zero_value * screen_size
+                
+                if channel_count == 1:
+                    self.data[channels[0]].append(data_scaled)
+                    
+                elif channel_count == 2:
+                    data_ch = [data_scaled[:len(data_scaled)//2], data_scaled[len(data_scaled)//2:]]
+                    self.data[channels[0]].append(data_ch[0])
+                    self.data[channels[1]].append(data_ch[1])
+
+
                 buffersCompleted += 1
                 bytesTransferred += buffer.size_bytes
 
@@ -1746,11 +1756,16 @@ class ATSBoard(BaseInstrument):
             self._board.abortAsyncRead()
             self._initialized = False
 
-        return self.get_data(self.data, self.active_channels.get(), self.samples_per_record.get(), 1)
+        return self.data
+        # return self.get_data(self.data, self.active_channels.get(), self.samples_per_record.get(), 1)
 
 
     def _readval_all_getdev(self):
         """
+        # TODO:
+        - [x] faster
+        - [ ] homogenize with other readval and fetch
+
         Realizes multiple triggers:
             - fills the "t" array of dictionnary data with samples_per_records samples between 0 and acquisition_length_sec.
             - fills the active_channels of data with nbwindows records of samples_per_records number of samples.
@@ -1767,7 +1782,6 @@ class ATSBoard(BaseInstrument):
             - data (Array): 2D array of size (nbwindows*len(active_channels)+1, samples_per_record)
                             1st line is time, nbwindows next lines are first active channel, and so on 
         """
-        t0=time.time()
         print(self._initialized)
         if self.trigger_mode.get()!="NPT":
             self.trigger_mode.set("NPT")
@@ -1796,8 +1810,6 @@ class ATSBoard(BaseInstrument):
         screen_shift = self.get_screen_shift()
         zero_value = self.board_info["Zero_value"]  # zero for the output data
         sample_type = self.board_info["Sample_type"]  # output data type
-        t1 = time.time()
-        print(t1-t0)
         try:
             buffersCompleted = 0
             bytesTransferred = 0
@@ -1807,19 +1819,27 @@ class ATSBoard(BaseInstrument):
                 buffer = self.buffers[buffersCompleted % buffer_count]
                 self._board.waitAsyncBufferComplete(buffer.addr, timeout_ms=timeout)
                 buffersCompleted += 1
-                print(buffersCompleted)
                 bytesTransferred += buffer.size_bytes
                 received_data = np.frombuffer(buffer.buffer, dtype=sample_type)
-                for i in range(recordsPerBuffer):
-                    for j in range(channel_count):
-                        self.data[channels[j]] = np.concatenate((self.data[channels[j]], (received_data[(2*j+i)*samplesPerRecord:(2*j+i+1)*samplesPerRecord]-zero_value*screen_shift)/zero_value*screen_size))
-  
+
+                data_scaled = (received_data - zero_value*screen_shift) / zero_value * screen_size
+                
+                if channel_count == 1:
+                    self.data[channels[0]].append(data_scaled)
+
+                elif channel_count == 2:
+                    data_ch = [data_scaled[:len(data_scaled)//2], data_scaled[len(data_scaled)//2:]]
+                    self.data[channels[0]].append(data_ch[0])
+                    self.data[channels[1]].append(data_ch[1])
+
                 # Add the buffer to the end of the list of available buffers.
                 self._board.postAsyncBuffer(buffer.addr, buffer.size_bytes)
         finally:
             self._board.abortAsyncRead()
             self._initialized = False
-        return self.get_data(self.data, self.active_channels.get(), self.samples_per_record.get(), self.nbwindows.get())
+
+        return self.data
+        # return self.get_data(self.data, self.active_channels.get(), self.samples_per_record.get(), self.nbwindows.get())
     
         # # TODO: Select the number of samples per record.
         # samplesPerRecord = self.samples_per_record.get()  # samples per record asked by the user

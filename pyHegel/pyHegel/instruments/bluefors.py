@@ -806,6 +806,8 @@ set/get options for this type of device:
         response = copy.deepcopy(response)
         response.pop('status')
         response.pop('datetime')
+        response.pop('hash', None) # needed for mqtt
+        response.pop('sender', None) # needed for mqtt
         if self._predev:
             response.pop(self._predev[1], None)
         if isinstance(self.choices, Bf_Dict_Choices):
@@ -858,9 +860,59 @@ class EmptyChoice(ChoiceBase):
     def __init__(self, field_names=[]):
         self.field_names = field_names
         self.fmts_lims = [None] * len(field_names)
+    def __repr__(self):
+        r = ''
+        first = True
+        for k, lims in zip(self.field_names, self.fmts_lims):
+            if not first:
+                r += '\n'
+            first = False
+            if lims is None:
+                r += 'key %s has no limits'%(k,)
+            else:
+                r += 'key %s has limits %r'%(k, lims)
+        return r
+
 
 @register_instrument('BlueFors', 'Temperature Controller')
 class bf_temperature_controller(BaseInstrument):
+    """
+    This is the driver for the Bluefors Temperature controller
+    Useful devices:
+        fetch
+        heater_setpoint
+        heater_D
+        heater_I
+        heater_P
+        heater_en
+        heater_manual_power
+        heater_max_power
+        heater_output_current
+        heater_output_power
+        channel_en
+        channel_exc_mode
+        channel_exc_current
+        channel_exc_vmax
+        relay
+        measurement
+        channel
+        heater
+    Some methods available:
+        get_history_heater
+        get_history_temp
+        get_calibration
+        set_calibration
+
+    The address can be: 'bluefors-tc.mshome.net'
+    For firmware >= 1.2.0 (api>=2) there are 2 control algorithm.
+    The original one (simple) and a new adaptive one which does not reset upon parameter change.
+    For simple: P * (e(t) + (1/I) * Integral(e(t)) + D * de/dt)
+    For adaptive: (P * e(t) + I * Integral(e(t)) + D * de/dt ) / 100
+    And to convert from simple(1) to adaptive(2):
+        P_2 = P_1 * 100
+		I_2 = P_1 / I_1 * 100
+		D_2 = P_1 * D_1 * 100
+    """
     _mqtt_connected = False
     def __init__(self, address, **kwargs):
         if not mqtt_loaded:
@@ -870,9 +922,10 @@ class bf_temperature_controller(BaseInstrument):
         self._ip_address = address
         self._mqtt_subscriptions = {'channel/measurement/listen':'To do on connect',
                                     'heater/listen': 'To do on connect',
+                                    'heater/output/listen': 'To do on connect', # only works on api 2 (1.2.0)
                                     'system/resources/listen':'To do on connect',
                                     'channel/listen':'To do on connect'}
-        self._mqtt_listen_buffers = dict(meas=[None]*12, htrs=[None]*4, rsrcs=None, chs=[None]*12, last_junk=None)
+        self._mqtt_listen_buffers = dict(meas=[None]*12, htrs=[None]*4, rsrcs=None, chs=[None]*12, htrs_out=[None]*4, last_junk=None)
         self._mqtt_hash_n = 0
         self._mqtt_sender = unicode_type('pyHegel_' + uuid.uuid4().hex)
         self._read_last_reply_buffer = queue.Queue(maxsize=1)
@@ -932,6 +985,12 @@ class bf_temperature_controller(BaseInstrument):
             self._mqtt_listen_buffers['rsrcs'] = dict(cpu_total=0., disk_usage_data=0, disk_usage_log=0,
                                      memory_free=0, memory_used=0, rtc_battery=0., uptime=0, status=u'OK',
                                      datetime=u'2020-01-01T00:00:00.0')
+        if self._api_version >= 2:
+            for ch in range(1, 5):
+                # Only mqtt seems available
+                d = self.ask('heater/output', proto='mqtt', heater_nr=ch)
+                with self._mqtt_lock:
+                    self._mqtt_listen_buffers['htrs_out'][ch-1] = d
         all_cals = self.ask('calibration-curves/data', proto='post')
         cals_map = {}
         for d in all_cals['data']:
@@ -953,7 +1012,11 @@ class bf_temperature_controller(BaseInstrument):
         with self._mqtt_lock:
             for k in self._mqtt_subscriptions:
                 if self._mqtt_subscriptions[k] != 'del':
-                    self.subscribe(k, _in_connect=True)
+                    # cannot call self.subscribe because it will do instrument lock after mqtt_lock
+                    # but other threads do it in the opposite order, so we can randomly lock up
+                    # So instead I moved the self.subscribe(topic, _in_connect=True) directly here
+                    result, mid = self._mqtt.subscribe(k)
+                    self._mqtt_subscriptions[k] = mid
         self._mqtt_connect_status = 'Connected'
 
     def _empty_buffer(self, buf):
@@ -1000,6 +1063,10 @@ class bf_temperature_controller(BaseInstrument):
             ch = payload['heater_nr']
             with self._mqtt_lock:
                 self._mqtt_listen_buffers['htrs'][ch-1] = payload
+        elif topic == 'heater/output/listen':
+            ch = payload['heater_nr']
+            with self._mqtt_lock:
+                self._mqtt_listen_buffers['htrs_out'][ch-1] = payload
         elif topic == 'channel/listen':
             ch = payload['channel_nr']
             with self._mqtt_lock:
@@ -1201,7 +1268,8 @@ class bf_temperature_controller(BaseInstrument):
 
     def idn(self):
         data = self.ask('system')
-        return "BlueFors,Temperature Controller,%s,%s"%(data['serial'], data['software_version'])
+        # version tc-tc10_1.1.2+fc5755ca.30790 includes a newline at the end, so strip it.
+        return "BlueFors,Temperature Controller,%s,%s"%(data['serial'], data['software_version'].rstrip('\n'))
 
     @locked_calling
     def get_history_heater(self, start, end, outch=None, raw=False):
@@ -1454,7 +1522,7 @@ class bf_temperature_controller(BaseInstrument):
         return data
 
     def _heater_pid_getdev(self, outch=None):
-        """ on get returns the 3 values [P, I, D], on set accepts a dictionnary or keywords P, I and D. """
+        """ on get returns the 3 values [P, I, D], on set accepts a dictionnary or keywords P, I and D. Change heater ch with outch option."""
         ret = self.heater.get(outch=outch)
         pid = ret['control_algorithm_settings']
         return dict_improved([('P', pid['proportional']), ('I', pid['integral']), ('D', pid['derivative'])])
@@ -1474,6 +1542,8 @@ class bf_temperature_controller(BaseInstrument):
         self.heater.set(val, outch=outch)
 
     def _create_devs(self):
+        api_version = self.ask('system', proto='get')['api_version']
+        self._api_version = api_version
         self._finish_mqtt_start()
         self.current_ch = MemoryDevice(1, min=1, max=12)
         self.current_outch = MemoryDevice(1, min=1, max=4)
@@ -1494,15 +1564,26 @@ class bf_temperature_controller(BaseInstrument):
         all_settings = BfChoiceIndex(current_list + ['50uA 64Hz', '150uA 64Hz'], offset=1)
         self.measurement = BlueforsDevice('channel/measurement', readonly=True, readcache='meas', predev=('ch', 'channel_nr', self.current_ch), choices=
                                           Bf_Dict_Choices(dict(settings_nr=all_settings)))
+        algos = ['default PID algorithm']
+        if api_version >= 2:
+             algos = ['conventional', 'step']
         self.heater = BlueforsDevice('heater', proto='post', readcache='htrs', predev=('outch', 'heater_nr', self.current_outch), choices=
-                                     Bf_Dict_Choices(dict(active=BfChoiceLimits(), control_algorithm=BfChoiceIndex(['default PID algorithm'], offset=1),
+                                     Bf_Dict_Choices(dict(active=BfChoiceLimits(), control_algorithm=BfChoiceIndex(algos, offset=1),
                                                           control_algorithm_settings=Bf_Dict_Choices(dict(proportional=BfChoiceLimits(min=0), integral=BfChoiceLimits(min=0), derivative=BfChoiceLimits(min=0))),
                                                           max_power=BfChoiceLimits(min=0), name=BfChoiceLimits(), power=BfChoiceLimits(min=0),
                                                           pid_mode=BfChoiceIndex(['manual', 'pid']), relay_mode=relay_mode_ch, relay_status=relay_status_ch,
                                                           resistance=BfChoiceLimits(min=0), setpoint=BfChoiceLimits(min=0),
                                                           target_temperature=BfChoiceLimits(min=0), target_temperature_shown=BfChoiceLimits()),
                                                      readonly_fields=['relay_status', 'relay_mode']),
-                                     doc='options max_power, control_algorithm_settings only apply for pid mode. power is only for manual mode.')
+                                     doc='options max_power, control_algorithm_settings only apply for pid mode (conventional was called simple and is the original algo, step was called adaptive). power is only for manual mode.')
+        if api_version >= 2:
+            # Only mqtt seems available
+            # choices is needed by Dict_SubDevice
+            #self.heater_output = BlueforsDevice('heater/output', proto='mqtt', readonly=True, predev=('outch', 'heater_nr', self.current_outch),
+            self.heater_output = BlueforsDevice('heater/output', readonly=True, readcache='htrs_out', predev=('outch', 'heater_nr', self.current_outch),
+                                                choices=Bf_Dict_Choices(dict(power=BfChoiceLimits(), current=BfChoiceLimits())))
+            self.heater_output_power = Dict_SubDevice(self.heater_output, 'power')
+            self.heater_output_current = Dict_SubDevice(self.heater_output, 'current')
         self.resources = BlueforsDevice('system/resources', readonly=True, readcache='rsrcs')
         self.channel =  BlueforsDevice('channel', proto='post', readcache='chs', predev=('ch', 'channel_nr', self.current_ch), choices=
                                        Bf_Dict_Choices(dict(active=BfChoiceLimits(), calib_curve_nr=BfChoiceLimits(min=1, max=100),
@@ -1525,6 +1606,7 @@ class bf_temperature_controller(BaseInstrument):
         self._devwrap('enabled_chs')
         self._devwrap('enabled_outchs')
         self._devwrap('heater_relation')
+        # EmptyChoice is to permit allow_kw_as_dict to work.
         self._devwrap('heater_pid', multi=['P', 'I', 'D'], allow_kw_as_dict=True, choices=EmptyChoice( ['P', 'I', 'D']))
         self.heater_pid.type = self.heater_pid.choices # needed for Dict_SubDevice
         self.heater_P = Dict_SubDevice(self.heater_pid, 'P', force_default='subdevice')
@@ -1685,7 +1767,17 @@ class Bf_controller_listen_thread(threading.Thread):
                 return
             readers = []
             ws_map = dict()
-            for endpoint, ws in self.control._websockets_cache.items():
+            try:
+                # protect agains control (a weakref) disapearing
+                # which can hapen during garbage collection since weakref
+                # are removed before the objects execute __del__
+                # It can also happen on python 2 when the owner object is deleted
+                # since the weakref is disconnected before the objects are removed
+                # so we end up called with the weakref invalid.
+                ws_cache_items = self.control._websockets_cache.items()
+            except ReferenceError:
+                return
+            for endpoint, ws in ws_cache_items:
                 readers.append(ws.sock)
                 ws_map[ws.sock] = (endpoint, ws)
                 now = time.time()
@@ -1702,7 +1794,7 @@ class Bf_controller_listen_thread(threading.Thread):
                 data = self.recv(ws)
                 if data == '':
                     continue
-                js_data = dict(status='nothing')
+                #js_data = dict(status='nothing')
                 js_data = json.loads(data)
                 if js_data['status'] == 'NOTIFICATION':
                     self.put_cache(endpoint, js_data)
@@ -1712,7 +1804,10 @@ class Bf_controller_listen_thread(threading.Thread):
     def put_cache(self, endpoint, js_data):
         if endpoint.startswith('ws/'):
             endpoint = endpoint[3:].rstrip('/')
-        path = list(js_data['data'].keys())[0]
+        if endpoint == 'notifications':
+            path = None
+        else:
+            path = list(js_data['data'].keys())[0]
         with self._lock:
             self._listen_cache[(endpoint, path)] = js_data
 
@@ -1776,6 +1871,7 @@ class bf_controller(BaseInstrument):
         find_temp_ch_num
         lakeshore_reset
         lakeshore_check_and_fix
+        script_state
     """
     def __init__(self, address='localhost', port=49099, timeout=3, secure=False, api_key=None, cert=True, **kwargs):
         """
@@ -2004,6 +2100,29 @@ class bf_controller(BaseInstrument):
         if _ask:
             return result
 
+    def script_state(self, state=None):
+        """
+        Without parameters (state is None) returns the current state of the script
+        Otherwise provide one of 'stop', 'run', 'pause'
+        """
+        states = ['stop', 'run', 'pause']
+        states_read = states + ['error_exec', 'error_4', 'error_syntax']
+        val = self.get_value('script.legacy.status')
+        try:
+            cur_state = states_read[val]
+        except IndexError:
+            cur_state = 'error_unknown_%i'%val
+        if state is None:
+            return cur_state
+        else:
+            if state not in states:
+                raise ValueError("states needs to be one of None, 'stop', 'run' or 'pause'")
+            if cur_state == 'run' and state == 'run':
+                # At least for some version, sending a run on an already running script seems to
+                # restart it. Disallow that.
+                raise RuntimeError('script is already running. Not restarting it.')
+            self.write('script.legacy.'+state, call=True)
+
     def list_all_mappers(self, path='mapper',  show_read_only=False, show_type=False, operation='get', endpoint='values', exclude=['mapper.bflegacy', 'driver.bftc.data.calibration_curves.calibration_curve_']):
         """ show_read_only when True, will return a tuple with the second element the read only value of the variables if present
                             when the value is not present, it returns False
@@ -2194,6 +2313,9 @@ class bf_controller(BaseInstrument):
         self.lakeshore_sample_p = lakeshore_dev('driver.lakeshore.settings.outputs.sample.p')
         self.lakeshore_sample_i = lakeshore_dev('driver.lakeshore.settings.outputs.sample.i')
         self.lakeshore_sample_d = lakeshore_dev('driver.lakeshore.settings.outputs.sample.d')
+        self.lakeshore_sample_mode = lakeshore_dev('driver.lakeshore.settings.outputs.sample.mode',
+                                                   choices=ChoiceSimpleMap({0:'off', 2:'manual', 3:'zone', 5:'pid'}))
+        self.lakeshore_sample_manual = lakeshore_dev('driver.lakeshore.settings.outputs.sample.manual_value')
         lakeshore_dev2 = lambda *args, **kwargs: bf_controller_dev(*args, autoinit=False, ch=self.current_ts_ch,
                                                                   get_pre_update='driver.lakeshore.settings.inputs.in{ch}.read',
                                                                   set_post_update='driver.lakeshore.settings.inputs.in{ch}.write', **kwargs)
@@ -2219,6 +2341,9 @@ class bf_controller(BaseInstrument):
         self.still_heater_en = bf_controller_dev('mapper.temperature_control.heaters.still.enabled')
         self.still_heater_power = bf_controller_dev('mapper.temperature_control.heaters.still.power', setget=True)
         self.still_heater_setpoint_power = bf_controller_dev('mapper.temperature_control.heaters.still.setpoint_power', setget=True)
+        self.sample_heater_en = bf_controller_dev('mapper.temperature_control.heaters.sample.enabled')
+        self.sample_heater_power = bf_controller_dev('mapper.temperature_control.heaters.sample.power', setget=True)
+        self.sample_heater_setpoint_power = bf_controller_dev('mapper.temperature_control.heaters.sample.setpoint_power', setget=True)
         self._devwrap('active_temp_ch')
         self._devwrap('fetch')
         self.alias = self.fetch

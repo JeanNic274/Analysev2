@@ -115,15 +115,15 @@ class Ol_ChoiceIndex(ChoiceIndex):
     def __init__(self, OlDataType, normalize=False):
         enum_type = eval(OlDataType)
         self.enum_type_name = OlDataType
-        values = list(enum_type.GetNames(enum_type))
-        names = list(enum_type.GetValues(enum_type))
+        names = list(enum_type.GetNames(enum_type))
+        values = list(enum_type.GetValues(enum_type))
         if not isinstance(values[0], int):
             self._pythonnet3 = True
             noconv = True
         else:
             self._pythonnet3 = False
             noconv = False
-        d = dict(zip(names, values))
+        d = dict(zip(values, names))
         super(Ol_ChoiceIndex, self).__init__(d, normalize=normalize, noconv=noconv)
     def __getitem__(self, key_val):
         """ For a key this returns the value. For value it returns the corresponding key.

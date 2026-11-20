@@ -38,7 +38,8 @@ import matplotlib.colors
 import matplotlib.text
 import collections
 
-from .comp2to3 import string_bytes_types, builtins_set, inspect_getargspec, is_py2
+from .comp2to3 import string_bytes_types, builtins_set, inspect_getargspec, is_py2,\
+                    repr_or_string, repr_number
 
 def getVarNames(func):
     """
@@ -102,7 +103,7 @@ def convVal(p, pe, signif=2):
         p_rescaled, pe_rescaled, expEng, frac_prec = toEng(p, pe, signif=signif)
     except NotImplementedError:
         # p is not a numeric type
-        s = '%r'%p
+        s = repr_or_string(p)
         if len(s)>20:
             s=s[:17]+'...'
         return s, None, None
@@ -110,7 +111,7 @@ def convVal(p, pe, signif=2):
         if p == 0:
             return '0', None, '0'
         else:
-            return ( '{0!r}'.format(p_rescaled, prec=frac_prec), None, '%i'%expEng )
+            return ( repr_number(p_rescaled), None, '%i'%expEng )
     else:
         return ( '{0:.{prec}f}'.format(p_rescaled, prec=frac_prec),
                  '{0:.{prec}f}'.format(pe_rescaled, prec=frac_prec), '%i'%expEng )

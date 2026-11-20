@@ -26,7 +26,6 @@ from __future__ import absolute_import, print_function, division
 import numpy as np
 import random
 import time
-import scipy
 from scipy.optimize import brentq as brentq_rootsolver
 import codecs
 from functools import reduce
@@ -34,18 +33,20 @@ from functools import reduce
 from ..instruments_base import BaseInstrument, visaInstrument, visaInstrumentAsync,\
                             BaseDevice, scpiDevice, MemoryDevice, Dict_SubDevice, ReadvalDev,\
                             ChoiceBase, ChoiceMultiple, ChoiceMultipleDep, ChoiceSimpleMap,\
-                            ChoiceStrings, ChoiceIndex,\
+                            ChoiceStrings, ChoiceIndex, _repr_or_string,\
                             make_choice_list, _fromstr_helper, _tostr_helper,\
                             decode_float64, visa_wrap, locked_calling,\
                             Lock_Extra, Lock_Instruments, _sleep_signal_context_manager, wait,\
                             release_lock_context, mainStatusLine, quoted_string, Choice_bool_OnOff,\
-                            resource_info, ProxyMethod
+                            resource_info, ProxyMethod, decode_int32, _retry_wait, wait_on_event
 from ..types import dict_improved
 from ..instruments_registry import register_instrument, register_usb_name, register_idn_alias
 
 from .logical import FunctionDevice, ScalingDevice
 
-from ..comp2to3 import string_bytes_types, unicode_type
+from ..util import phase_unwrap
+
+from ..comp2to3 import string_bytes_types, unicode_type, fu
 
 # for pfeiffer
 import threading
@@ -573,13 +574,30 @@ class MagnetController_SMC(visaInstrument):
             stay_states = [stay_states]
         with release_lock_context(self):
             with mainStatusLine.new(priority=10, timed=True) as progress:
-                check = lambda x: x.rampstate in stay_states and x.error == 0
-                while check(self.status.get()):
-                    # The instrument is slow. Trying to read too fast is counter productive
-                    wait(.5)
+                status_last = self.status.get()
+                last_pause = True
+                while True:
+                    if status_last.error != 0:
+                        break
+                    elif not status_last.pause and last_pause:
+                        # When coming off pause (and sometimes when starting a ramp)
+                        # it takes a little time for the rampstate to change so add
+                        # some extra delay.
+                        # I think 5s is enough but it is a guess. It might be too much.
+                        wait(5)
+                    elif status_last.pause:
+                        # The instrument is slow. Trying to read too fast is counter productive
+                        wait(.5)
+                    elif status_last.rampstate not in stay_states:
+                        break
+                    else:
+                        # The instrument is slow. Trying to read too fast is counter productive
+                        wait(.5)
                     progress(prog_base.format(field=self.field.get(), time=time.time()-to))
-            if self.status.getcache().error != 0:
-                error_code = self.status.getcache().error
+                    last_pause = status_last.pause
+                    status_last = self.status.get()
+            if status_last.error != 0:
+                error_code = status_last.error
                 errors = []
                 if error_code >= 10:
                     errors.append({1:'Changing polarity with I/V != 0.',
@@ -601,8 +619,9 @@ class MagnetController_SMC(visaInstrument):
         if end_states is not None:
             if isinstance(end_states, string_bytes_types):
                 end_states = [end_states]
-            if self.status.get().rampstate not in end_states:
-                raise RuntimeError(self.perror('The magnet state did not change to %s as expected'%end_states))
+            status_now = self.status.get()
+            if status_now.rampstate not in end_states:
+                raise RuntimeError(self.perror('The magnet state did not change to %s as expected (got %s, before %s)'%(end_states, status_now.rampstate, status_last.rampstate)))
 
     def _do_ramp(self, field_target, wait_time, no_wait_end=False):
         status = self.status.get()
@@ -952,6 +971,9 @@ class pfeiffer_leak_detector_ASM390(visaInstrument):
     This instruments class will communicate with a Pfeiffer ASM390 leak detector.
     It uses the advanced mode.
     It can use the usb connector (which looks like a serial port to the computer)
+    Important devices
+    Important method:
+        get_status (to convert status device)
     """
     def __init__(self, visa_addr, *args, **kwargs):
         rsrc_info = resource_info(visa_addr)
@@ -968,19 +990,44 @@ class pfeiffer_leak_detector_ASM390(visaInstrument):
             kwargs['stop_bits'] = stop_bits
             kwargs['read_termination'] = read_term
             kwargs['write_termination'] = write_term
+        self._in_ask = False
         super(pfeiffer_leak_detector_ASM390, self).__init__(visa_addr, *args, **kwargs)
-    @locked_calling
-    def read(self, raw=False, count=None, chunk_size=None, skip_response_handler=False):
-        ret = super(pfeiffer_leak_detector_ASM390, self).read(raw=raw, count=count, chunk_size=chunk_size)
-        if skip_response_handler:
-            return ret
-        ak = ret[0]
-        ret = ret[1:]
-        if ak not in ['\x06', '\x15']:
+    def _check_answer(self, ak=None):
+        if ak is None:
+            ak = super(pfeiffer_leak_detector_ASM390, self).read(raw=True, count=1)
+        if ak not in [b'\x06', b'\x15']:
             raise RuntimeError(self.perror('Invalid aknowledgement received.'))
-        if ak == '\x15':
+        if ak == b'\x15':
             raise RuntimeError(self.perror('Incorrect command.'))
+    @locked_calling
+    def read(self, raw=False, encoding=None, count=None, chunk_size=None, skip_response_handler=False):
+        ret = b''
+        while True:
+            r = super(pfeiffer_leak_detector_ASM390, self).read(raw=True, count=1)
+            if r == b'\r':
+                self._check_answer()
+                break
+            if len(ret) == 0 and r in [b'\x06', b'\x15']:
+                self._check_answer(r)
+                break
+            ret += r
+        if encoding is not None:
+            retu = fu(ret, encoding=encoding)
+        else:
+            retu = fu(ret)
+        return retu
+    def ask(self, question, raw=False, encoding=None, chunk_size=None):
+        try:
+            self._in_ask = True
+            ret = super(pfeiffer_leak_detector_ASM390, self).ask(question, raw=raw, encoding=encoding, chunk_size=chunk_size)
+        finally:
+            self._in_ask = False
         return ret
+    @locked_calling
+    def write(self, val, termination='default', encoding=None):
+        super(pfeiffer_leak_detector_ASM390, self).write(val, termination=termination, encoding=encoding)
+        if not self._in_ask:
+            self._check_answer()
     def _current_config(self, dev_obj=None, options={}):
         base = self._conf_helper('tracer_gas', 'autozero_en', 'leak_cal', 'leak_uncal', 'leak_unit', 'pressure_inlet', 'pressure_cell')
         base += ['status=%r'%self.get_status()]
@@ -1025,6 +1072,12 @@ class pfeiffer_leak_detector_ASM390(visaInstrument):
                                hv_pump_sync=st(11),
                                sniffer_probe_clogged=not st(14))
         return result
+    def test_cycle_en(self, enable):
+        if enable:
+            s = '=CYE'
+        else:
+            s = '=CYD'
+        self.write(s)
     def _create_devs(self):
         self.pressure_inlet = scpiDevice(getstr='?PE', str_type=compressed_fmt())
         self.pressure_cell = scpiDevice(getstr='?PS', str_type=compressed_fmt())
@@ -1038,6 +1091,7 @@ class pfeiffer_leak_detector_ASM390(visaInstrument):
         self.tracer_gas = scpiDevice(getstr='?GZ', choices=ChoiceIndex({2:'H', 3:'He3', 4:'He4'}))
         self.gage_status = scpiDevice(getstr='?GAU')
         self.autozero_en = scpiDevice(getstr='?AZ', choices=ChoiceSimpleMap(dict(E=True, D=False)))
+        self.vent_en = scpiDevice('=VT{val}','?VT', choices=ChoiceSimpleMap(dict(A=True, O=False)))
         self.alias = self.leak_cal
         # This needs to be last to complete creation
         super(pfeiffer_leak_detector_ASM390, self)._create_devs()
@@ -1116,20 +1170,20 @@ class agilent_twis_torr(visaInstrument):
         return self._conf_helper('pumping_en', 'pressure', 'pressure_unit', 'gauge_status', 'gauge_power', 'pump_status', 'pump_life_hour', 'pump_cycles', options)
     def _do_chksum(self, message):
         cks = reduce(operator.xor, bytearray(message))
-        return '%02X'%cks
+        return b'%02X'%cks
     def _parse(self, string, window, read=False):
         string = bytes(string) # string can be a bytearray which returns int when indexing. Make it bytes.
         chksum = string[-2:]
         if self._do_chksum(string[1:-2]) != chksum:
             raise RuntimeError('Invalid Checksum: %r'%string)
-        if string[0] != '\x02' or string[-3] != '\x03':
+        if string[0:1] != b'\x02' or string[-3:-2] != b'\x03':
             raise RuntimeError('Invalid start/end: %r'%string)
-        addr = string[1]
-        if addr != chr(0x80 + self._serial_address):
+        addr = string[1:2]
+        if addr != b'%c'%(0x80 + self._serial_address):
             raise RuntimeError('Invalid address: %r'%string)
-        resp = string[2]
-        known_answers = {'\x06':'ack', '\x15': 'nack', '\x32': 'unknown window',
-                         '\x33': 'wrong type', '\x34': 'out of range', '\x35':'window disabled'}
+        resp = string[2:3]
+        known_answers = {b'\x06':'ack', b'\x15': 'nack', b'\x32': 'unknown window',
+                         b'\x33': 'wrong type', b'\x34': 'out of range', b'\x35':'window disabled'}
         if len(string) == 6:
             ret = known_answers[resp]
             if read:
@@ -1138,7 +1192,7 @@ class agilent_twis_torr(visaInstrument):
         win = int(string[2:5])
         if win != window:
             raise RuntimeError('Invalid window: %r'%string)
-        if string[5] != '\x30':
+        if string[5:6] != b'\x30':
             raise RuntimeError('Invalid read-write code: %r'%string)
         return string[6:-3]
     def _create_req(self, window, data=None, type='string'):
@@ -1151,54 +1205,54 @@ class agilent_twis_torr(visaInstrument):
                 exp
                 string
         """
-        addr = chr(0x80+self._serial_address)
+        addr = b'%c'%(0x80+self._serial_address)
         if window>999 or window<0:
             raise ValueError(self.perror('window is out of range'))
-        window = '%03i'%window
+        window = b'%03i'%window
         if data is None:
             # read
-            rw = '\x30'
-            data_str = ''
+            rw = b'\x30'
+            data_str = b''
         else:
             # write
-            rw = '\x31'
+            rw = b'\x31'
             if type == 'boolean':
-                data_str = '1' if data else '0'
+                data_str = b'1' if data else b'0'
             elif type == 'int1':
                 if data<0 or data>9:
                     raise ValueError(self.perror('Data is too large'))
-                data_str = '%d'%data
+                data_str = b'%d'%data
             elif type in ['real', 'integer']:
                 if data >=1e6 or data <=-1e-5:
                     raise ValueError(self.perror('Data is too large'))
                 if type == 'integer':
-                    data_str = '%06d'%data
+                    data_str = b'%06d'%data
                 else:
                     # TODO improve this when needed. I have not seen it used.
-                    data_str = '%06.2f'%data
+                    data_str = b'%06.2f'%data
                 data_str = data_str[:6]
             elif type == 'exp':
-                data_str = '%.1E'%data
+                data_str = b'%.1E'%data
             elif type == 'string':
-                data_str = '%-10s'%data
+                data_str = b'%-10s'%data
                 data_str = data_str[:10]
             else:
                 raise ValueError(self.perror('Invalid type'))
-        req = '\x02' + addr + window + rw + data_str + '\x03'
+        req = b'\x02' + addr + window + rw + data_str + b'\x03'
         chksum = self._do_chksum(req[1:])
         req += chksum
         return req
 
-    def read(self, raw=False, count=None, chunk_size=None):
-        ret = ''
+    def read(self, raw=False, encoding=None, count=None, chunk_size=None):
+        ret = b''
         while True:
             c = self.visa.read_raw_n(1)
-            if c == '\x02':
+            if c == b'\x02':
                 # start
-                if ret != '':
+                if ret != b'':
                     print('We are loosing some reply: %r'% ret)
                 ret = c
-            elif c == '\x03': # end
+            elif c == b'\x03': # end
                 cksum = self.visa.read_raw_n_all(2)
                 return ret+c+cksum
             else:
@@ -1223,7 +1277,7 @@ class agilent_twis_torr(visaInstrument):
         elif type in 'string':
             # I have seen responses of 10 and 12 bytes
             # The are left align with extra spaces.
-            return val.rstrip(' ')
+            return val.rstrip(b' ')
         else:
             raise ValueError(self.perror('Invalid type'))
         return val
@@ -1271,8 +1325,8 @@ class agilent_twis_torr(visaInstrument):
         #self.vent_control = agilent_dev(122, 'boolean', enable_set=True, choices=ChoiceSimpleMap({False:'closed', True:'open'}))
         self.vent_open_en = agilent_dev(122, 'boolean', enable_set=True)
         self.vent_automatic_en = agilent_dev(125, 'boolean', enable_set=True, choices=ChoiceSimpleMap({False:True, True:False}))
-        self.vent_opening_delay = agilent_dev(126, 'integer', enable_set=True, time_scale=True, doc='in seconds')
-        self.vent_opening_time = agilent_dev(147, 'integer', enable_set=True, time_scale=True, doc='in seconds. 0 is infinite')
+        self.vent_opening_delay = agilent_dev(126, 'integer', enable_set=True, time_scale=True, doc='in 0.2 seconds')
+        self.vent_opening_time = agilent_dev(147, 'integer', enable_set=True, time_scale=True, doc='in 0.2 seconds. 0 is infinite')
         self.rotation_speed_reading_when_stopping_en = agilent_dev(167, 'boolean', enable_set=True)
         self.control_mode = agilent_dev(8, 'int1', enable_set=True, choices=ChoiceSimpleMap({0:'serial', 1:'remote', 2:'front'}))
         self.active_stop_en = agilent_dev(107, 'boolean', enable_set=True)
@@ -1281,7 +1335,7 @@ class agilent_twis_torr(visaInstrument):
             0: Stop, 1: Waiting interlock, 2: Ramp, 3: Autotuning, 4: Braking, 5: Normal, 6: Fail""")
         self.error_code = agilent_dev(206, 'integer', doc="""\
             0: No Error, 1: No connection, 2: Pump overtemp, 4: Controller overtemp, 8: Power fail,
-            16: --, 32: --, 64: Short circuit, 128: Too high load""")
+            16: Output Fail, 32: OverVoltage, 64: Short circuit, 128: Too high load""")
         self.pump_power = agilent_dev(202, 'real')
         self.pump_temp = agilent_dev(204, 'real')
         self.rotation_Hz = agilent_dev(203, 'real') # t-plus says it is the rotation target, but it fallows  rotation_rpm
@@ -1318,6 +1372,36 @@ class agilent_tps_pump(agilent_twis_torr):
         del self.gauge_power
         del self.gauge_status
         del self.gauge_status_raw
+
+#######################################################
+##    Varian turbo pump (same as agilent pumps)
+#######################################################
+
+@register_instrument('Varian', 'TwisTorr')
+class varian_twis_torr(agilent_twis_torr):
+    """
+    This works for at least Varian Turbo V-750 TwisTorr
+    """
+    def idn(self):
+        return 'Varian,TwisTorr,no_serial,no_firmare'
+    def _current_config(self, dev_obj=None, options={}):
+        return self._conf_helper('pumping_en', 'pump_status', 'pump_life_hour', 'pump_cycles', options)
+    def _create_devs(self):
+        self.pump_slow_speed = agilent_dev(1,  'boolean', enable_set=True)
+        self.rotation_low_speed = agilent_dev(117, 'integer', enable_set=True)
+        self.rotation_high_speed = agilent_dev(120, 'integer', enable_set=True)
+        self.pump_body_temp = agilent_dev(222, 'real')
+        # This needs to be last to complete creation
+        super(varian_twis_torr, self)._create_devs()
+        # Remove stuff from base class that do not work here.
+        del self.rotation_rpm
+        del self.gauge_power
+        del self.gauge_status
+        del self.gauge_status_raw
+        del self.pressure
+        del self.pressure_unit
+        del self.pressure_raw
+        #TODO check controller_heatsink_temp
 
 
 #######################################################
@@ -1566,15 +1650,15 @@ class inficon_vgc50x(visaInstrument):
         return base + self._conf_helper('current_ch', options)
 
     @locked_calling
-    def write(self, cmd, termination='default'):
+    def write(self, cmd, termination='default', encoding=None):
         if self._write_top_level:
             try:
                 self._write_top_level = False
-                self.ask(cmd, not_enq=True)
+                self.ask(cmd, not_enq=True, encoding=encoding)
             finally:
                 self._write_top_level = True
         else:
-            super(inficon_vgc50x, self).write(cmd, termination=termination)
+            super(inficon_vgc50x, self).write(cmd, termination=termination, encoding=encoding)
 
     def continous_output_disable(self):
         """ This stops continous output and empties the read buffer """
@@ -1592,15 +1676,15 @@ class inficon_vgc50x(visaInstrument):
         self.write('COM,%i'%i)
 
     @locked_calling
-    def ask(self, cmd, not_enq=False):
+    def ask(self, cmd, not_enq=False, encoding=None):
         if self._write_top_level:
             try:
                 self._write_top_level = False
-                res = super(inficon_vgc50x, self).ask(cmd)
+                res = super(inficon_vgc50x, self).ask(cmd, encoding=encoding)
             finally:
                 self._write_top_level = True
         else:
-            res = super(inficon_vgc50x, self).ask(cmd)
+            res = super(inficon_vgc50x, self).ask(cmd, encoding=encoding)
         if res != '\x06': # \x06 is ACK
             if res == '\x15': # this is NACK
                 raise RuntimeError(self.perror('Received NACK (negative acknowledge)'))
@@ -1608,7 +1692,7 @@ class inficon_vgc50x(visaInstrument):
                 raise RuntimeError(self.perror('Received unexpected reply (hex:"%s")'%codecs.encode(res, 'hex_codec')))
         if not_enq:
             return
-        super(inficon_vgc50x, self).write('\x05', termination=None) # ENQ character: enquiry (request data)
+        super(inficon_vgc50x, self).write('\x05', termination=None, encoding=encoding) # ENQ character: enquiry (request data)
         return self.read()
     def _create_devs(self):
         self.continous_output_disable()
@@ -1649,16 +1733,23 @@ class inficon_vgc50x(visaInstrument):
         super(inficon_vgc50x, self)._create_devs()
 
 
+#######################################################
+##    Kurt J Lesker 375 Gauge
+#######################################################
+
 class _Pressure_Conv(object):
     scales = dict(torr=1., mbar= 1.3332236842105263, Pa= 133.32236842105263)
-    def __init__(self, unit=None):
+    def __init__(self, unit=None, max_P=None):
         self.unit = unit
+        self.max_P = max_P
     def __call__(self, input_str):
         val = float(input_str)
         if self.unit:
             unit = self.unit.get()
             scale = self.scales[unit]
             val *= scale
+        if self.max_P is not None:
+            val = min(val, self.max_P)
         return val
     def tostr(self, val):
         return '%.2e'%val
@@ -1668,11 +1759,12 @@ class _Pressure_Conv(object):
 class kurtJlesker_375(visaInstrument):
     """
     This is the driver for a Kurt J Lesker model 375 gauge controller.
+    Also works for model 300.
     Most useful devices:
         pressure
+        unit
     Useful methods:
-        datetime
-        continous_output_disable
+        reset
     """
     # we had trouble with the Visa serial connection that kept frezzing.
     # So we use the serial module instead.
@@ -1724,7 +1816,7 @@ class kurtJlesker_375(visaInstrument):
         return rep + "%02X"%self._addr +  cmd
 
     @locked_calling
-    def write(self, cmd, termination='default', no_addr=False, no_resp=False):
+    def write(self, cmd, termination='default', encoding=None, no_addr=False, no_resp=False):
         if self._write_top_level:
             try:
                 self._write_top_level = False
@@ -1746,7 +1838,7 @@ class kurtJlesker_375(visaInstrument):
             super(kurtJlesker_375, self).write(cmd, termination=termination)
 
     @locked_calling
-    def _ask_internal(self, cmd, raw=False, chunk_size=None, no_addr=False, clean_reply=True):
+    def _ask_internal(self, cmd, raw=False, chunk_size=None, no_addr=False, clean_reply=True, add_text=' '):
         if self._write_top_level:
             try:
                 self._write_top_level = False
@@ -1758,7 +1850,7 @@ class kurtJlesker_375(visaInstrument):
         else:
             res = super(kurtJlesker_375, self).ask(cmd, raw=raw, chunk_size=chunk_size)
         if not no_addr and clean_reply:
-            start = self._add_addr(' ', resp=True)
+            start = self._add_addr(add_text, resp=True)
             if not res.startswith(start):
                 raise RuntimeError('Unexpected response: %s'%res)
             res = res[len(start):]
@@ -1772,7 +1864,8 @@ class kurtJlesker_375(visaInstrument):
                 return res
             except visa_wrap.VisaIOError as exc:
                 i += 1
-        raise exc
+                exc_out = exc
+        raise exc_out
 
     def reset(self):
         """ Required for some changes to be applied.
@@ -1789,6 +1882,110 @@ class kurtJlesker_375(visaInstrument):
         self.trip1_above = scpiDevice('SL-{val}', 'RL-', str_type=conv, autoinit=False, setget=True, doc='In instrument unit (not the unit device)')
         self.trip2_below = scpiDevice('SH+{val}', 'RH+', str_type=conv, autoinit=False, setget=True, doc='In instrument unit (not the unit device)')
         self.trip2_above = scpiDevice('SH-{val}', 'RH-', str_type=conv, autoinit=False, setget=True, doc='In instrument unit (not the unit device)')
+        self.alias = self.pressure
+        # This needs to be last to complete creation
+        super(kurtJlesker_375, self)._create_devs()
+
+
+#######################################################
+##    Kurt J Lesker 392 Gauge
+#######################################################
+
+class Choices_KL(ChoiceBase):
+    def __init__(self, python_vals, set_vals, get_vals):
+        self.output = ChoiceSimpleMap(dict(zip(set_vals, python_vals)))
+        self.input = ChoiceSimpleMap(dict(zip(get_vals, python_vals)))
+    def __call__(self, input_str):
+        return self.input(input_str.rstrip())
+    def tostr(self, val):
+        return self.output.tostr(val)
+    def __repr__(self):
+        return self.output.__repr__()
+    def __contains__(self, val):
+        return self.output.__contains__(val)
+
+class KL_bool(Choices_KL):
+    def __init__(self, base):
+        python_vals = [False, True]
+        set_vals = ['0', '1']
+        get_vals = ['0 %s OFF'%base, '1 %s ON'%base]
+        super(KL_bool, self).__init__(python_vals, set_vals, get_vals)
+
+@register_instrument('KurtJLesker', '392')
+class kurtJlesker_392(kurtJlesker_375):
+    """
+    This is the driver for a Kurt J Lesker model 392 gauge.
+    Most useful devices:
+        unit
+        pressure
+        pressure_ig
+        pressure_cg1
+        pressure_cg2
+        ig_status
+        ig_en
+    Useful methods:
+        calibrate_cg_span
+        reset
+    Note that all pressures are in display unit.
+    """
+    def idn(self):
+        return 'KurtJLesker,392,no_serial,%s'%self._sw_version
+
+    def init(self, full=False):
+        if full:
+            self._write_write_wait = 0.050
+
+    def _current_config(self, dev_obj=None, options={}):
+        return self._conf_helper('pressure', 'unit', 'pressure_ig', 'pressure_cg1', 'pressure_cg2',
+                                 'ig_status', 'ig_en', options)
+
+    def _ask_internal(self, cmd, raw=False, chunk_size=None, no_addr=False, clean_reply=True, add_text=' '):
+        if cmd[-1] in ['+', '-']:
+            add_text = cmd[-1]
+        return super(kurtJlesker_392, self)._ask_internal(cmd, raw, chunk_size, no_addr, clean_reply, add_text)
+
+    def set_filanment(self, n):
+        """ select the filament (1 or 2) """
+        if n not in [1, 2]:
+            raise ValueError('n should be 1 or 2')
+        self.write('SF%d'%n)
+
+    def calibrate_cg_zero(self, n, pressure):
+        if n not in [1, 2]:
+            raise ValueError('n should be 1 or 2')
+        ns = 'AB'[n-1]
+        p = _Pressure_Conv().tostr(pressure)
+        self.write('TZ%s %s'%(ns, p))
+
+    def calibrate_cg_span(self, n, pressure):
+        if n not in [1, 2]:
+            raise ValueError('n should be 1 or 2')
+        ns = 'AB'[n-1]
+        p = _Pressure_Conv().tostr(pressure)
+        self.write('TS%s %s'%(ns, p))
+
+    def _create_devs(self):
+        self._sw_version = self.ask('VER')
+        #self.unit = MemoryDevice(self._default_unit, choices=['torr', 'mbar', 'Pa'], doc='unit for pressure, not for trip points.')
+        self.unit = scpiDevice('SU{val}', 'RU', choices=Choices_KL(['torr', 'mbar', 'Pa'], ['T', 'M', 'P'], ['TORR', 'MBAR', 'PASCAL']))
+        self.pressure = scpiDevice(getstr='RDS', str_type=_Pressure_Conv(), doc='returns combination pressure of CG1, IG')
+        self.pressure_ig = scpiDevice(getstr='RD', str_type=_Pressure_Conv(max_P=99))
+        self.pressure_cg1 = scpiDevice(getstr='RDCG1', str_type=_Pressure_Conv())
+        self.pressure_cg2 = scpiDevice(getstr='RDCG2', str_type=_Pressure_Conv())
+        self.ig_en = scpiDevice('IG{val}', 'IGS', choices=KL_bool('IG'))
+        self.degas_en = scpiDevice('DG{val}', 'DGS', choices=KL_bool('DG'))
+        self.ig_status = scpiDevice(getstr='RS')
+        self.ig_emission_current = scpiDevice('SE{val}', 'SES', choices=Choices_KL(['0.1mA', '4mA'], ['0', '1'], ['0.1MA EM', '4.0MA EM']))
+        self.ig_emission_current_meas = scpiDevice(getstr='RDIGE', str_type=float, autoinit=False, doc='in Ampere')
+        self.ig_filament_current_meas = scpiDevice(getstr='RDIGI', str_type=float, autoinit=False, doc='in Ampere')
+        self.ig_filament_voltage_meas = scpiDevice(getstr='RDIGV', str_type=float, autoinit=False, doc='in Volt')
+        conv = _Pressure_Conv()
+        self.trip_ig_below = scpiDevice('SL+{val}', 'RL+', str_type=conv, autoinit=False, setget=True)
+        self.trip_ig_above = scpiDevice('SL-{val}', 'RL-', str_type=conv, autoinit=False, setget=True)
+        self.trip_A_below = scpiDevice('SLA+{val}', 'RLA+', str_type=conv, autoinit=False, setget=True)
+        self.trip_A_above = scpiDevice('SLA-{val}', 'RLA-', str_type=conv, autoinit=False, setget=True)
+        self.trip_B_below = scpiDevice('SLB+{val}', 'RLB+', str_type=conv, autoinit=False, setget=True)
+        self.trip_B_above = scpiDevice('SLB-{val}', 'RLB-', str_type=conv, autoinit=False, setget=True)
         self.alias = self.pressure
         # This needs to be last to complete creation
         super(kurtJlesker_375, self)._create_devs()
@@ -1936,7 +2133,7 @@ class delft_BIAS_DAC(visaInstrument):
             else:
                 return val
         return self._dac2v_conv(val, mode)
-    def read(self, raw=False, count=2, chunk_size=None):
+    def read(self, raw=False, encoding=None, count=2, chunk_size=None):
         # change the count default.
         return super(delft_BIAS_DAC, self).read(count=count)
     def idn(self):
@@ -2082,7 +2279,7 @@ class micro_lambda_mlbf(BaseInstrument):
         if delta < delay:
             wait(delay-delta)
         if self._socket is not None:
-            self._socket.send(val)
+            self._socket.send(val.encode('ascii'))
         else:
             data = [0]*65
             for i, s in enumerate(val):
@@ -2093,7 +2290,7 @@ class micro_lambda_mlbf(BaseInstrument):
     @locked_calling
     def read(self, raw=None, chunk_size=None):
         if self._socket is not None:
-            ret = self._socket.recv(256)
+            ret = self._socket.recv(256).decode('ascii')
         else:
             ret = self._usbdev.read(65, timeout_ms=int(self._usb_timeout*1e3))
             if len(ret) == 0:
@@ -2396,7 +2593,7 @@ class ah_2550a_capacitance_bridge(visaInstrumentAsync):
             if loss is None:
                 loss = prev.loss
             # Need to always specify both, otherwise it is an error
-            self.write('Zero POINT %r,%r'%(cap, loss))
+            self.write('Zero POINT %s,%s'%(_repr_or_string(cap), _repr_or_string(loss)))
         if enable is not None and enable:
             self.write('Zero '+Choice_bool_OnOff.tostr(enable))
         res = self.ask('SHow Zero')
@@ -2444,9 +2641,9 @@ class ah_2550a_capacitance_bridge(visaInstrumentAsync):
         if use_last != 'none':
             self.write('REFerence FEtch %s'%use_last)
         if cap is not None:
-            self.write('REFerence POINT Cap %r'%cap)
+            self.write('REFerence POINT Cap %s'%_repr_or_string(cap))
         if loss is not None:
-            self.write('REFerence POINT LOSs %r'%loss)
+            self.write('REFerence POINT LOSs %s'%_repr_or_string(loss))
         if percent is not None:
             if percent in ['all', 'cap']:
                 self.write('REFerence PERcent Cap ON')
@@ -2479,8 +2676,8 @@ class ah_2550a_capacitance_bridge(visaInstrumentAsync):
     @locked_calling
     def _current_config(self, dev_obj=None, options={}):
         opts = self._conf_helper('average', 'units', 'voltage_max', 'frequency', 'commutate', 'bias', 'cable')
-        opts += ['zero=%r'%self.conf_zero()]
-        opts += ['reference=%r'%self.conf_reference()]
+        opts += ['zero=%s'%_repr_or_string(self.conf_zero())]
+        opts += ['reference=%s'%_repr_or_string(self.conf_reference())]
         opts += self._conf_helper(options)
         return opts
 
@@ -2733,6 +2930,155 @@ class sumitomo_F70(visaInstrument):
 
 
 #######################################################
+##    Stahl electonics HV-series
+#######################################################
+
+class Unit_Type(object):
+    def __init__(self, unit, pre='', conv=float):
+        self.unit = unit
+        self.pre = pre
+        self.conv = conv
+    def tostr(self, val):
+        return '%s'%_repr_or_string(val) + self.unit
+    def __call__(self, s):
+        pre = self.pre
+        l =len(pre)
+        if l:
+            if s[:l] != pre:
+                raise RuntimeError('Invalid string start (missing pre value)')
+            s = s[l:]
+        unit = self.unit
+        l = len(unit)
+        if l:
+            if s[-l:] != unit:
+                raise RuntimeError('Invalid string termination (missing unit).')
+            s = s[:-1]
+        return self.conv(s)
+
+def lock_format(s):
+    shift = 0
+    flags = 0
+    for c in s:
+        f = ord(c)&0x0f
+        f <<= shift
+        flags |= f
+        shift += 4
+    return flags
+
+@register_instrument('Stahl', 'HV')
+class stahl_HV(visaInstrument):
+    """
+    This is to control a Stahl electronics HV-series source.
+       Useful device:
+           volt
+           meas_volt
+           state
+    """
+    def __init__(self, visa_addr, **kwargs):
+        cnsts = visa_wrap.constants
+        rsrc_info = resource_info(visa_addr)
+        if rsrc_info.interface_type == cnsts.InterfaceType.asrl:
+            baud_rate = kwargs.pop('baud_rate', 9600)
+            parity = kwargs.pop('parity', cnsts.Parity.none)
+            data_bits = kwargs.pop('data_bits', 8)
+            stop_bits = kwargs.pop('stop_bits', cnsts.StopBits.one)
+            kwargs['baud_rate'] = baud_rate
+            kwargs['parity'] = parity
+            kwargs['data_bits'] = data_bits
+            kwargs['stop_bits'] = stop_bits
+        kwargs['write_termination'] = '\r'
+        kwargs['read_termination'] = '\r'
+        self._write_top_level = True
+        self._serial_num = None
+        self._instrument_conf = None
+        super(stahl_HV, self).__init__(visa_addr, **kwargs)
+
+    @locked_calling
+    def write(self, val, termination='default', encoding=None):
+        if self._write_top_level:
+            try:
+                self._write_top_level = False
+                self.ask(val, encoding=encoding)
+            finally:
+                self._write_top_level = True
+        else:
+            serialno = self._serial_num
+            if serialno is not None:
+                val = ('HV%03i '%serialno) + val
+            super(stahl_HV, self).write(val, termination=termination, encoding=encoding)
+
+    @locked_calling
+    def ask(self, question, raw=False, encoding=None, chunk_size=None):
+        if self._write_top_level:
+            try:
+                self._write_top_level = False
+                res = super(stahl_HV, self).ask(question, encoding=encoding)
+            finally:
+                self._write_top_level = True
+        else:
+            res = super(stahl_HV, self).ask(question, encoding=encoding)
+            if res != '\x06': # \x06 is ACK
+                raise RuntimeError(self.perror('Did not receive ACK char.'))
+        return res
+
+    def idn(self):
+        """
+        type info:
+            b = bipolar
+            m = millivolt range bipolar
+            u = unipolar
+            r = multi range device
+            q = quadrupole lens
+            s = steerer
+        """
+        res = self.ask('IDN')
+        if res[-1] == 'r':
+            raise RuntimeError('This driver does not handle the multi range option.')
+        name, volt_range, nch, dev_type = res.split(' ')
+        self._instrument_conf = dict(volt_range=float(volt_range), nch=int(nch), dev_type=dev_type)
+        serial = name[2:]
+        self._serial_num = int(serial)
+        fm = 'volt:%s-ch:%s-type:%s'%(volt_range, nch, dev_type)
+        return 'Stahl,HV,%s,%s'%(serial,fm)
+
+    def _current_config(self, dev_obj=None, options={}):
+        orig_ch = self.current_channel.get()
+        vs = []
+        ms = []
+        for ch in range(1, self._instrument_conf['nch']+1):
+            v = self.volt.get(ch=ch)
+            m = self.meas_volt.get()
+            vs.append(v)
+            ms.append(m)
+        self.current_channel.set(orig_ch)
+        base = ['volt=%r'%vs, 'meas_volt=%r'%ms]
+        return base + self._conf_helper('state', 'temperatures', 'optime_hrs', 'uptime', options)
+
+    def _create_devs(self):
+        self.idn()
+        self.current_channel = MemoryDevice(1, choices=list(range(1, self._instrument_conf['nch']+1)))
+        def ChDev(*arg, **kwarg):
+            options = kwarg.pop('options', {}).copy()
+            options.update(ch=self.current_channel)
+            app = kwarg.pop('options_apply', ['ch'])
+            conv = kwarg.pop('options_conv', {}).copy()
+            conv.update(ch=lambda v,s: '%02d'%v)
+            kwarg.update(options=options, options_apply=app, options_conv=conv)
+            return scpiDevice(*arg, **kwarg)
+        self.volt = ChDev('SET{ch} {val}', 'GET{ch}', str_type=float, setget=True)
+        self.meas_volt = ChDev(getstr='U{ch}', str_type=Unit_Type('V'))
+        self.temperatures = scpiDevice(getstr='TEMP', choices=ChoiceMultiple(['glue', 'master'], Unit_Type('C')))
+        self.uptime = scpiDevice(getstr='RTC UPTIME', str_type=Unit_Type('', pre='Uptime: ', conv=lambda x: x))
+        self.optime_hrs = scpiDevice(getstr='RTC OPTIME', str_type=Unit_Type('h', pre='Optime: '))
+        self.calibration_volt = ChDev(getstr='RCORR{ch}', choices=ChoiceMultiple(['span', 'offset'], float, sep=' '))
+        self.calibration_meas_volt = ChDev(getstr='RU{ch}', choices=ChoiceMultiple(['span', 'offset'], float, sep=' '))
+        self.state = scpiDevice(getstr='LOCK', str_type=lock_format, doc='it is a bit flags of the channels state (overloaded when 1).')
+        self.alias = self.volt
+        # This needs to be last to complete creation
+        super(stahl_HV, self)._create_devs()
+
+
+#######################################################
 ##    Dummy instrument
 #######################################################
 
@@ -2798,8 +3144,8 @@ class dummy(BaseInstrument):
         ret = [f]
         if unit == 'db_deg':
             r = 20.*np.log10(np.abs(v))
-            theta = np.angle(v, deg=False)
-            theta = scipy.rad2deg( scipy.unwrap(theta) )
+            theta = np.angle(v, deg=True)
+            theta = phase_unwrap(theta, deg=True)
             ret.append(r)
             ret.append(theta)
         else:
@@ -2883,7 +3229,7 @@ class virtual_gates_instr(BaseInstrument):
 
         super(virtual_gates_instr, self).__init__(**kwargs)
         self.setMatrix(matrix, is_cc)
-        self._update_virt() # init virtual values
+        self._update_virtual() # init virtual values
 
     def idn(self):
         return 'pyHegel_Instrument,virtual_gates_instr,00000,1.0'
@@ -2903,8 +3249,9 @@ class virtual_gates_instr(BaseInstrument):
             self.CC.set(matrixInv)
             self.CCinv.set(matrix)
 
-    def _real_checkdev(self, val, update_virt=True):
+    def _real_checkdev(self, val, update_virtual_after=True):
         BaseDevice._checkdev(self.real, val)
+
     def _real_getdev(self):
         names = []
         vals = []
@@ -2921,7 +3268,8 @@ class virtual_gates_instr(BaseInstrument):
             names.append(name)
             vals.append(val)
         return dict_improved(zip(names, vals))
-    def _real_setdev(self, values, update_virt=True):
+
+    def _real_setdev(self, values, update_virtual_after=True):
         if len(values) != self.nb_real:
             raise ValueError('The number of values must be the same as the number of real devices.')
         for dev, val in zip(self._real_devs, values):
@@ -2929,70 +3277,336 @@ class virtual_gates_instr(BaseInstrument):
                 dev[0].set(val, **dev[1])
             else:
                 dev.set(val)
-        if update_virt:
-            self._update_virt()
+        if update_virtual_after:
+            self._update_virtual()
 
-    def _virtual_checkdev(self, val, update_real=True):
+    def _virtual_checkdev(self, val, set_real_after=True):
         BaseDevice._checkdev(self.virtual, val)
+
     def _virtual_getdev(self):
         ret = []
         for name, dev in zip(self._virt_names, self._virt_devs):
-            ret += [(name, dev.get())]
+            ret += [(name, dev.get(update_virtual_before=False))]
         return dict_improved(ret)
-    def _virtual_setdev(self, values, update_real=True):
+
+    def _virtual_setdev(self, values, set_real_after=True):
         if len(values) != self.nb_virt:
             raise ValueError('The number of values must be the same as the number of virtual devices.')
-        [dev.set(val, update_real=False) for dev, val in zip(self._virt_devs, values)]
-        if update_real:
-            self._update_real()
+        [dev.set(val, set_real_after=False) for dev, val in zip(self._virt_devs, values)]
+        if set_real_after:
+            self._set_real()
 
-    def _update_virt(self):
+    def _update_virtual(self):
+        # Update the vector of virtual values to match the real devices.
         if self.CC is None:
             print('No CC matrix define, updating virtual values from real is disabled (real devices may be changed, but virtual will not be updated).')
             return
         real_vals = self.real.get().values()
         real_vals = [val[0] if isinstance(val, (tuple, list)) else val for val in real_vals]
         virt_vals = np.matmul(self.CC.get(), real_vals)
-        self.virtual.set(virt_vals, update_real=False)
+        self.virtual.set(virt_vals, set_real_after=False)
 
-    def _update_real(self):
+    def _set_real(self):
+        # Sets the values on the real devices based on the virtual vector.
         virt_vals = self.virtual.get().values()
         virt_vals = [val[0] if isinstance(val, (tuple, list)) else val for val in virt_vals]
         real_vals = np.matmul(self.CCinv.get(), virt_vals)
-        self.real.set(real_vals, update_virt=False)
+        self.real.set(real_vals, update_virtual_after=False)
 
     @locked_calling
     def _current_config(self, dev_obj=None, options={}):
         return self._conf_helper(options)
 
-    def _init_devs_mem(self):
-        return MemoryDevice(0, doc='This represent a virtual device. It has it\'s own virtual value. When set, it uses the CCinv matrix and the current values of others virtual devices to set the right value to the real devices.')
-    def _init_devs_set_wrapper(self, orig_set):
-        def new_setter(val, update_real=True):
-            orig_set(val)
-            if update_real:
-                self._update_real()
-        return new_setter
+    def _init_memory_device(self):
+        mem = MemoryDevice(0, doc='This represent a virtual device. It has it\'s own virtual value. When set, it uses the CCinv matrix and the current values of others virtual devices to set the right value to the real devices.')
+        orig_set, orig_get = mem.setcache, mem.getcache
 
-    def _init_devs(self, names):
+        def new_setter(val, set_real_after=True):
+            orig_set(val)
+            if set_real_after:
+                self._set_real()
+
+        def new_getter(update_virtual_before=True):
+            if update_virtual_before:
+                self._update_virtual()
+            return orig_get()
+        
+        mem.set = new_setter
+        mem.get = new_getter
+
+        return mem
+
+    def _init_devices(self, names):
+        # Instanciate virtual devices, and setting custom set/get methods
         devs = []
-        for n in names:
-            mem = self._init_devs_mem()
-            mem.set = self._init_devs_set_wrapper(mem.set)
-            setattr(self, n, mem)
-            devs.append(mem)
+        for name in names:
+            memdev = self._init_memory_device()
+            setattr(self, name, memdev)
+            devs.append(memdev)
         self._virt_devs = devs
 
     def _create_devs(self):
-        self._init_devs(self._virt_names)
+        self._init_devices(self._virt_names)
         self._devwrap('virtual', doc='Get returns a dict of the names and values of virtual devices.\n Set with a vector to set real devices to:  devs = CC@vector')
         self._devwrap('real', doc='Get returns a dict of the names and values of real devices.\n Set with a vector to set virtual devices to:  vdevs = CC-1@vector' )
         self.alias = self.virtual
 
         self.CC = MemoryDevice()
         self.CCinv = MemoryDevice()
-        self.virtnames = MemoryDevice(self._virt_names, doc='set not supported.')
-        self.realdevs = MemoryDevice(self._real_devs, doc='set not supported.')
 
         # This needs to be last to complete creation
         super(virtual_gates_instr ,self)._create_devs()
+
+
+#######################################################
+##    Cryomagnetics inc LM-500 level meter
+#######################################################
+
+class Cryo_Unit(object):
+    def __call__(self, input_str):
+        # Note that the instrument only returns 1 digit after the
+        # dot. But is displays 2 for inches on the instrument itself.
+        v, u = input_str.rstrip(' ').split(' ', 2)
+        if u not in ('cm', 'in', '%'):
+            raise ValueError('Unexpected unit string: %r'%u)
+        return float(v)
+    def tostr(self, val):
+        # The instruments seems to accept full floating point specification
+        # but since it always rounds to at most 2 digits (for in) and 1 digit
+        # of precision on the display (and even to always 1 digit for remote interface)
+        # I set it to 3.
+        return '%.3f'%val
+
+class Cryo_Interval(object):
+    def __call__(self, input_str):
+        ss = input_str.split(':')
+        if len(ss) == 1 and float(ss) == 0:
+            return 0.
+        if len(ss) != 3:
+            raise ValueError('Unexpected Interval string: %r'%input_str)
+        v = np.array(map(float, ss))
+        return sum(v*[60*60, 60, 1.])
+    def tostr(self, val):
+        if val == 0:
+            return '0'
+        else:
+            sec = val%60
+            rest = val//60
+            mn = rest%60
+            hr = rest//60
+            return '%02d:%02d:%02d'%(hr,mn, sec)
+        return '%.3f'%val
+
+#TODO some of the commands might fail if the sensor is a LN2 sensor.
+#       It needs to be tested with such a device.
+#       Then make them autoinit=False or make them dependent of
+#        sensor_type
+
+@register_instrument('Cryomagnetics', 'LM-500')
+class cryomagnetics_lm500(visaInstrument):
+    """
+    This is to control a Cryomagnetics inc LM-500 level meter.
+       Useful device:
+           level_current
+           level_now
+           units
+       Useful methods:
+           meas_now
+    The various lengths/levels use the selected units.
+    Note that analog out is an option, and 2 channels is also an option.
+    When only one channel is installed, either channels will return the same
+    settings.
+    """
+    def __init__(self, visa_addr, *args, **kwargs):
+        cnsts = visa_wrap.constants
+        rsrc_info = resource_info(visa_addr)
+        if rsrc_info.interface_type == cnsts.InterfaceType.asrl:
+            #baud_rate = kwargs.pop('baud_rate', 115200)
+            baud_rate = kwargs.pop('baud_rate', 9600)
+            parity = kwargs.pop('parity', cnsts.Parity.none)
+            data_bits = kwargs.pop('data_bits', 8)
+            stop_bits = kwargs.pop('stop_bits', cnsts.StopBits.one)
+            kwargs['baud_rate'] = baud_rate
+            kwargs['parity'] = parity
+            kwargs['data_bits'] = data_bits
+            kwargs['stop_bits'] = stop_bits
+            kwargs['write_termination'] = '\r\n'
+            kwargs['read_termination'] = '\r\n'
+        else: # gpib
+            kwargs['write_termination'] = '\n'
+            kwargs['read_termination'] = '\n'
+        super(cryomagnetics_lm500, self).__init__(visa_addr, *args, **kwargs)
+
+    @locked_calling
+    def write(self, val, termination='default', encoding=None):
+        super(cryomagnetics_lm500, self).write(val, termination=termination, encoding=encoding)
+        if self.visa.is_serial():
+            # The instruments echoes the command, absorb it
+            echo = self.read()
+
+    def init(self, full=False):
+        if full:
+            if self.visa.is_serial():
+                self.serial_error_reporting_en.set(False)
+
+    @locked_calling
+    def reset_poweron(self):
+        """
+        This returns the instrument to a known state.
+        Use CAREFULLY!
+        """
+        self.write('*RST')
+        wait(5)
+        self.init(True)
+        self.force_get()
+
+    def get_error(self):
+        esr = int(self.ask('*ESR?'))
+        ret = []
+        if esr&4:
+            ret.append('Query Error')
+        if esr&8:
+            ret.append('Device Dependent Error')
+        if esr&16:
+            ret.append('Execution Error')
+        if esr&32:
+            ret.append('Command Error')
+        if esr&64:
+            ret.append('User Request')
+        if esr&128:
+            ret.append('Power On')
+        if len(ret) == 0:
+            ret = ['No Error']
+        return ','.join(ret)
+
+    def _status_getdev(self):
+        # menu_active is 0 or 1
+        #  stat as flags: 1=Read in progress
+        #                 2=Refill active
+        #                 4=Refill timeout occurred
+        #                 8=Auto refill is inhibited by low = 0.0 or timeout
+        #                 16=Alarm limit is exceeded
+        #                 32=Open sensor was detected (LHe channel only)
+        #                 64=Burnout condition was detected
+
+        s1, s2, menu = self.status_raw.get()
+        names = ['read_in_progress', 'refill_active', 'refill_timeout',
+                 'auto_refill_inhinited', 'alarm', 'open_sensor', 'burnout_detected']
+        def parse_stat(stat):
+            d = []
+            for i, n in enumerate(names):
+                d.append((n, bool(stat&(1<<i))))
+            return dict_improved(d)
+        d1 = parse_stat(s1)
+        d2 = parse_stat(s2)
+        return dict_improved(ch1=d1, ch2=d2, menu_active=bool(menu))
+
+    def _ch_helper(self, ch):
+        if ch is not None:
+            ch = self.channel.set(ch)
+        ch = self.channel.get()
+        return ch
+
+    def _wait_helper(self, ch, name_to_check, base):
+        def check_stat():
+            chname = 'ch%d'%ch
+            measuring = self.status.get()[chname][name_to_check]
+            return measuring
+        # It takes a litle time for the status to turn on.
+        _retry_wait(check_stat, timeout=5, progress_base=base+' to start')
+        def meas_event(timeout):
+            stat = check_stat()
+            if stat:
+                wait(timeout)
+                return False
+            return True
+        wait_on_event(meas_event, progress_base=base)
+
+    def fill_now(self, ch=None, wait_done=True, reset=False):
+        """
+        Starts an automated fill now.
+        wait_done when True, it will wait until the measurement is completed.
+        ch is the ch to measure. When None (default) it will use the
+         currently active one (see channel device)
+        Set reset to True to reset the fill timeout error status.
+        """
+        if reset:
+            self.write('*rst')
+            wait(5)
+        ch = self._ch_helper(ch)
+        stat = self.status.get()['ch%d'%ch].auto_refill_inhinited
+        if stat:
+            raise RuntimeError('Auto refill is inhibited.')
+        self.write('FILL %d'%ch)
+        if wait_done:
+            self._wait_helper(ch, 'refill_active', 'waiting for fill')
+
+    def meas_now(self, ch=None, wait_done=True):
+        """
+        Starts a measurement now.
+        wait_done when True, it will wait until the measurement is completed.
+        ch is the ch to measure. When None (default) it will use the
+         currently active one (see channel device)
+        """
+        ch = self._ch_helper(ch)
+        self.write('MEAS %d'%ch)
+        if wait_done:
+            self._wait_helper(ch, 'read_in_progress', 'waiting for level meas')
+
+    def _level_now_getdev(self, ch=None):
+        self.meas_now(ch=ch)
+        return self.level_current.get()
+
+    @locked_calling
+    def _current_config(self, dev_obj=None, options={}):
+        orig_ch = self.channel.get()
+        vals = []
+        for ch in [1, 2]:
+            self.channel.set(ch)
+            vals.append(self._conf_helper('level_current', 'units', 'sensor_length',
+                                 'sensor_type', 'boost_mode', 'level_low', 'level_high',
+                                 'level_alarm', 'continous_meas_en', 'fill_status'))
+        base = []
+        for v1, v2 in zip(*vals):
+            n1, s1 = v1.split('=', 1)
+            n2, s2 = v2.split('=', 1)
+            if n1 != n2:
+                raise RuntimeError('Unexpected names. They should be the same.')
+            base.append('%s=[%s,%s]'%(n1, s1, s2))
+        self.channel.set(orig_ch)
+        return base + self._conf_helper('status', options)
+
+    def _create_devs(self):
+        self.channel =  scpiDevice('CHAN', str_type=int, choices=[1, 2])
+        def ChDev(*arg, **kwarg):
+            options = kwarg.pop('options', {}).copy()
+            options.update(ch=self.channel)
+            app = kwarg.pop('options_apply', ['ch'])
+            kwarg.update(options=options, options_apply=app)
+            return scpiDevice(*arg, **kwarg)
+        self.level_alarm = ChDev('ALARM', str_type=Cryo_Unit(), min=0., setget=True)
+        self.boost_mode = ChDev('BOOST', choices=ChoiceStrings('ON', 'OFF', 'SMART'))
+        self.fill_status = ChDev(getstr='FILL?', doc="returns either 'off', 'timeout', or the active fill time duration.")
+        self.level_low = ChDev('LOW', str_type=Cryo_Unit(), min=0., setget=True)
+        self.level_high = ChDev('HIGH', str_type=Cryo_Unit(), min=0., setget=True)
+        self.meas_interval = ChDev('INTVL', str_type=Cryo_Interval(), min=0., max=3600*99+59*60+59)
+        self.sensor_length = ChDev(getstr='LNGTH?', str_type=Cryo_Unit(), setget=True,
+                                   doc="When unit is %, the returned value is in cm")
+        self.level_current = ChDev(getstr='MEAS?', str_type=Cryo_Unit())
+        clean_space = lambda x: x.rstrip(' ')
+        self.continous_meas_en = ChDev('MODE',
+                                       choices=ChoiceSimpleMap({'Sample/Hold':False, 'Continuous':True}, filter=clean_space))
+        self.serial_error_reporting_en =  scpiDevice('ERROR', str_type=bool)
+        # Some instruments do not have this instruction (older firmware?)
+        self.analog_out_sel =  scpiDevice('OUT', str_type=int, choices=[0, 1, 2], autoinit=False)
+        self.sensor_type =  ChDev(getstr='TYPE?', choices=ChoiceIndex(['LHe', 'LN2']))
+        #self.units = ChDev('UNITS', choices=ChoiceStrings('in', 'cm', '%', redirects={'% ':'%'}))
+        self.units = ChDev('UNITS',
+                           choices=ChoiceStrings('in', 'cm', '%', filter=clean_space))
+        self.status_raw =  scpiDevice('STAT?', str_type=decode_int32, multi=['ch1', 'ch2', 'menu_active'])
+        self._devwrap('status')
+        self._devwrap('level_now', autoinit=False,
+                      doc="Starts a new mesurement and returns the result")
+        self.alias = self.level_current
+        # This needs to be last to complete creation
+        super(cryomagnetics_lm500, self)._create_devs()

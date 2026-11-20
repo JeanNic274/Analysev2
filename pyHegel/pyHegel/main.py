@@ -41,7 +41,14 @@
 
 from __future__ import absolute_import, print_function
 import sys
-import pkgutil
+try:
+    from  pkgutil import find_loader
+except ImportError:
+    from importlib.util import find_spec
+    def find_loader(name):
+        spec = find_spec(name)
+        loader = spec.loader if spec else None
+        return loader
 
 def fix_scipy():
     """ This fixes a problem with scipy 0.14.0-7 from python(x,y) 2.7.6.1
@@ -120,7 +127,9 @@ def which_qt():
     if _which_qt_cache is not None:
         return _which_qt_cache
     # first check modules:
-    if in_module('PyQt5', ['QtCore', 'QtGui', 'QtWidgets']):
+    if in_module('PyQt6', ['QtCore', 'QtGui', 'QtWidgets']):
+        ret = 'qt6'
+    elif in_module('PyQt5', ['QtCore', 'QtGui', 'QtWidgets']):
         ret = 'qt5'
     elif in_module('PyQt4', ['QtCore', 'QtGui']):
         ret = 'qt'
@@ -128,16 +137,16 @@ def which_qt():
         ret = 'qt'
     else:
         # now check paths
-        if pkgutil.find_loader('PyQt5') is not None:
+        if find_loader('PyQt6') is not None:
+            ret = 'qt6'
+        elif find_loader('PyQt5') is not None:
             ret = 'qt5'
-        elif pkgutil.find_loader('PyQt4') is not None:
+        elif find_loader('PyQt4') is not None:
             ret = 'qt'
-        elif pkgutil.find_loader('PySide') is not None:
-            ret = 'qt'
-        elif pkgutil.find_loader('PySide6') is not None:# ----------------------- JN changed for pyside6
+        elif find_loader('PySide') is not None:
             ret = 'qt'
         else:
-            raise RuntimeError('Unable to find a version of Qt') 
+            raise RuntimeError('Unable to find a version of Qt')
     _which_qt_cache = ret
     return ret
 

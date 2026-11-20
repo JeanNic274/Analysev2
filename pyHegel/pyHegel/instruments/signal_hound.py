@@ -316,12 +316,13 @@ class SignalHound_SM200C(BaseInstrument):
             ret = ret.decode('utf-8')
         return ret
 
-    def wait_after_trig(self, no_exc=False):
+    def wait_after_trig(self, max_wait_time=None, no_exc=False):
         try:
-            super(SignalHound_SM200C, self).wait_after_trig()
+            return super(SignalHound_SM200C, self).wait_after_trig(max_wait_time=max_wait_time)
         except Exception:
             if not no_exc:
                 raise
+            return False
 
     def _async_trig_init(self, avg_count=0):
         self._async_last_response = None

@@ -26,16 +26,61 @@ from __future__ import print_function, division
 
 __all__ = ['PyScientificSpinBox']
 
-from PyQt5 import QtGui, QtCore, QtWidgets
-from PyQt5.QtWidgets import QDoubleSpinBox, QAbstractSpinBox, QAction, QActionGroup, QMenu, QApplication, QMessageBox, \
-                            QStyleOptionSpinBox, QSpinBox, QWidgetAction
-from PyQt5.QtGui import QValidator, QDoubleValidator, QKeySequence
-from PyQt5.QtCore import pyqtSlot, pyqtSignal, pyqtProperty, Q_ENUMS, Q_FLAGS, QTimer, QSize, QEvent
-from enum import Enum
+try:
+    from PyQt6 import QtGui, QtCore, QtWidgets
+    from PyQt6.QtWidgets import QDoubleSpinBox, QAbstractSpinBox, QMenu, QApplication, QMessageBox, \
+                                QStyleOptionSpinBox, QSpinBox, QWidgetAction, QCommonStyle
+    from PyQt6.QtGui import QValidator, QDoubleValidator, QKeySequence, QAction, QActionGroup
+    from PyQt6.QtCore import pyqtSlot, pyqtSignal, pyqtProperty, QTimer, QSize, QEvent, pyqtEnum
+    from enum import Enum, Flag
+    EnumBase = Enum
+    FlagBase = Flag
+    # Q_ENUMS and Q_FLAGS need to be at the same level as the class def. They cannnot be inside
+    # a decorator function. So since we call them in pyqt5, we make them do nothing here.
+    Q_ENUMS = lambda x: None
+    Q_FLAGS = lambda x: None
+    # TODO handle ENUMS, Flags
+    #pyqtEnum = lambda x: x
+    pyqtFlag = pyqtEnum
+    QValidatorState = QValidator.State
+    QKeySequenceStandardKey = QKeySequence.StandardKey
+    QtCoreQtKey = QtCore.Qt.Key
+    QtCoreQtMouseButton = QtCore.Qt.MouseButton
+    QEventType = QEvent.Type
+    QtCoreQtFocusReason = QtCore.Qt.FocusReason
+    QAbstractSpinBoxStepEnabledFlag = QAbstractSpinBox.StepEnabledFlag
+    styleContentsType = QCommonStyle.ContentsType
+except ImportError:
+    from PyQt5 import QtGui, QtCore, QtWidgets
+    from PyQt5.QtWidgets import QDoubleSpinBox, QAbstractSpinBox, QAction, QActionGroup, QMenu, QApplication, QMessageBox, \
+                                QStyleOptionSpinBox, QSpinBox, QWidgetAction, QCommonStyle
+    from PyQt5.QtGui import QValidator, QDoubleValidator, QKeySequence
+    from PyQt5.QtCore import pyqtSlot, pyqtSignal, pyqtProperty, Q_ENUMS, Q_FLAGS, QTimer, QSize, QEvent
+    def pyqtEnum(obj):
+        return obj
+    def pyqtFlag(obj):
+        return obj
+    EnumBase = object
+    FlagBase = object
+    QValidatorState = QValidator
+    QKeySequenceStandardKey = QKeySequence
+    QtCoreQtKey = QtCore.Qt
+    QtCoreQtMouseButton = QtCore.Qt
+    QEventType = QEvent
+    QtCoreQtFocusReason = QtCore.Qt
+    QAbstractSpinBoxStepEnabledFlag = QAbstractSpinBox
+    styleContentsType = QCommonStyle
 
 import re
 import numpy as np
 import weakref
+
+# needed if it executed under pyHegel (which overrides python builtin set)
+try:
+    from builtins import min, max, bool
+except ImportError:
+    from __builtin__ import min, max, bool
+
 
 # from https://www.jdreaver.com/posts/2014-07-28-scientific-notation-spin-box-pyside.html
 
@@ -62,6 +107,7 @@ class FloatValidator(QValidator):
     def __init__(self):
         self.prefix = ''
         self.suffix = ''
+        super(FloatValidator, self).__init__()
 
     def clean_suffix_prefix(self, text, pos=None):
         prefix = self.prefix
@@ -87,9 +133,9 @@ class FloatValidator(QValidator):
     def validate(self, string, position):
         #print( 'Validating ', string, position)
         if self.valid_float_string(string):
-            return self.Acceptable, string, position
+            return QValidatorState.Acceptable, string, position
         #return self.Invalid, string, position
-        return self.Intermediate, string, position
+        return QValidatorState.Intermediate, string, position
 
     def fixup(self, text):
         return text
@@ -165,10 +211,12 @@ class PyScientificSpinBox(QDoubleSpinBox):
     #   import PyQt5.QtCore
     #   PyQt5.QtCore.PYQT_VERSION_STR
     #class Sci_Mode(Enum):
-    class Sci_Mode(object):
+    @pyqtEnum
+    class Sci_Mode(EnumBase):
         ENG_UNIT, ENG, SCI = range(3)
     Q_ENUMS(Sci_Mode)
-    class Enabled_Controls(object):
+    @pyqtFlag
+    class Enabled_Controls(FlagBase):
         none = 0x00
         minimum = 0x01
         maximum = 0x02
@@ -177,6 +225,7 @@ class PyScientificSpinBox(QDoubleSpinBox):
         display_mode = 0x10
         log_increment_mode = 0x20
         fixed_exponent = 0x40
+        #all = 0x80
         all = 0x7f
         minmax = 0x03
         no_minmax = all & ~minmax
@@ -187,7 +236,8 @@ class PyScientificSpinBox(QDoubleSpinBox):
             To have a unit, set the suffix.
             keyboardTracking is disabled by default.
             accelerated is enabled by default
-            decimals is overriden and redirected to precision.
+            decimals is overriden and redirected to precision
+            mouse_wheel stepping is enabled by default.
             A new signal, valueChanged_gui, is emitted when the value is updated but at a restricted rate,
                  valueChange_gui_time, and also when pressing enter. It is not emitted when using
                  setValue_quiet
@@ -208,6 +258,7 @@ class PyScientificSpinBox(QDoubleSpinBox):
         self.text_formatter = Format_Float()
         self.text_formatter.precision = precision
         self.validator = FloatValidator()
+        self.mouse_wheel_enabled = kwargs.pop("mouse_wheel", True)
         self._min_increment = 1e-15
         self._log_increment_mode = False
         self._log_increment = 0.01
@@ -233,8 +284,8 @@ class PyScientificSpinBox(QDoubleSpinBox):
         self.setSuffix(self.suffix())
         self.setPrefix(self.prefix())
         # pyqt5 5.6 on windows (at least) QAction requires the parent value.
-        self.copyAction = QAction('&Copy', None, shortcut=QKeySequence(QKeySequence.Copy), triggered=self.handle_copy)
-        self.pasteAction = QAction('&Paste', None, shortcut=QKeySequence(QKeySequence.Paste), triggered=self.handle_paste)
+        self.copyAction = QAction('&Copy', None, shortcut=QKeySequence(QKeySequenceStandardKey.Copy), triggered=self.handle_copy)
+        self.pasteAction = QAction('&Paste', None, shortcut=QKeySequence(QKeySequenceStandardKey.Paste), triggered=self.handle_paste)
         self.addActions(( self.copyAction, self.pasteAction))
         self._create_menu_init()
         self.clipboard = QApplication.instance().clipboard()
@@ -262,6 +313,8 @@ class PyScientificSpinBox(QDoubleSpinBox):
         self.stepUpAction.triggered.connect(self.stepUp)
         self.stepDownAction = QAction('Step &down', None)
         self.stepDownAction.triggered.connect(self.stepDown)
+        self.mouseWheelToggleAction = QAction('Mouse wheel', None, checkable=True, checked=self.mouse_wheel_enabled)
+        self.mouseWheelToggleAction.triggered.connect(self.mouseWheelToggle)
         self.display_mode_grp = QActionGroup(None)
         self.display_mode_eng_unit = QAction('Engineering with &units', None, checkable=True)
         self.display_mode_eng = QAction('&Engineering', None, checkable=True)
@@ -349,6 +402,7 @@ class PyScientificSpinBox(QDoubleSpinBox):
         menu.addActions(( self.copyAction, self.pasteAction ))
         menu.addSeparator()
         menu.addActions(( self.stepUpAction, self.stepDownAction ))
+        menu.addAction(self.mouseWheelToggleAction)
         menu.addSeparator()
         if ec & EC.display_mode:
             menu.addActions(( self.display_mode_sep, self.display_mode_eng_unit, self.display_mode_eng, self.display_mode_sci ))
@@ -361,9 +415,9 @@ class PyScientificSpinBox(QDoubleSpinBox):
         if ec & EC.precision:
             menu.addMenu(self.precision_menu)
         menu.addActions( (self.min_custom_action, self.max_custom_action, self.min_incr_custom_action))
-        self.min_custom_action.setEnabled(ec & EC.minimum)
-        self.max_custom_action.setEnabled(ec & EC.maximum)
-        self.min_incr_custom_action.setEnabled(ec & EC.min_increment)
+        self.min_custom_action.setEnabled(bool(ec & EC.minimum))
+        self.max_custom_action.setEnabled(bool(ec & EC.maximum))
+        self.min_incr_custom_action.setEnabled(bool(ec & EC.min_increment))
         menu.addSeparator()
         menu.addAction(self.help_action)
         return menu
@@ -384,6 +438,13 @@ class PyScientificSpinBox(QDoubleSpinBox):
         suffix = kwargs.pop('suffix', None)
         if suffix is not None:
             self.setSuffix(suffix)
+        if 'display_mode' in kwargs:
+            val = kwargs.pop('display_mode')
+            self.display_mode = val
+        #if 'enabled_controls' in kwargs:
+        #    val = kwargs.pop('enabled_controls')
+        #    self.enabled_controls = val
+        mouse_wheel = kwargs.pop('mouse_wheel')
         if len(kwargs):
             super(PyScientificSpinBox, self).pyqtConfigure(**kwargs)
 
@@ -403,7 +464,8 @@ class PyScientificSpinBox(QDoubleSpinBox):
                     singleStep=self.singleStep(),
                     accelerated=self.isAccelerated(),
                     wrapping=self.wrapping(),
-                    keyboardTracking=self.keyboardTracking())
+                    keyboardTracking=self.keyboardTracking(),
+                    mouse_wheel=self.mouse_wheel_enabled)
 
     def force_update(self):
         val = self.value()
@@ -417,22 +479,29 @@ class PyScientificSpinBox(QDoubleSpinBox):
 
     @pyqtProperty(Enabled_Controls)
     def enabled_controls(self):
+        #print('enabled_controls', self._enabled_controls)
         return self._enabled_controls
     @enabled_controls.setter
     def enabled_controls(self, val):
+        #print('enabled_controls', self._enabled_controls, val)
         self._enabled_controls = val
 
     @pyqtProperty(Sci_Mode)
     #@pyqtProperty(int)
+    #@pyqtProperty("PyScientificSpinBox::Sci_Mode")
+    #@property
     def display_mode(self):
+        #print('display_mode', self._display_mode)
         return self._display_mode
     @display_mode.setter
     def display_mode(self, val):
+        #print('display_mode', self._display_mode, val)
         self._display_mode = val
         self.force_update()
         self.updateGeometry()
+    #display_mode = pyqtProperty(Sci_Mode, display_mode.fget, display_mode.fset, user=True)
 
-    @pyqtProperty(int)
+    @pyqtProperty(float)
     def min_increment(self):
         return self._min_increment
     @min_increment.setter
@@ -497,20 +566,20 @@ class PyScientificSpinBox(QDoubleSpinBox):
     def keyPressEvent(self, event):
         key = event.key()
         self._last_key_pressed_is_enter = False
-        if event.matches(QKeySequence.Copy):
+        if event.matches(QKeySequenceStandardKey.Copy):
             #print('doing copy')
             self.copyAction.trigger()
-        elif event.matches(QKeySequence.Paste):
+        elif event.matches(QKeySequenceStandardKey.Paste):
             #print('doing paste')
             self.pasteAction.trigger()
-        elif key == QtCore.Qt.Key_Escape:
+        elif key == QtCoreQtKey.Key_Escape:
             if self.text_is_being_changed_state:
                 #print('doing escape')
                 self.setValue(self.value())
             else:
                 #print('letting escape propagate')
                 event.ignore()
-        elif key in [QtCore.Qt.Key_Enter, QtCore.Qt.Key_Return]:
+        elif key in [QtCoreQtKey.Key_Enter, QtCoreQtKey.Key_Return]:
             self._last_key_pressed_is_enter = True
             text_was_being_changed_state = self.text_is_being_changed_state
             super(PyScientificSpinBox, self).keyPressEvent(event)
@@ -523,13 +592,13 @@ class PyScientificSpinBox(QDoubleSpinBox):
 
     # Can't seem to do the same thing (stop short timer) for wheelEvent
     def keyReleaseEvent(self, event):
-        if not event.isAutoRepeat() and event.key() in [QtCore.Qt.Key_Up, QtCore.Qt.Key_Down, QtCore.Qt.Key_PageUp, QtCore.Qt.Key_PageDown]:
+        if not event.isAutoRepeat() and event.key() in [QtCoreQtKey.Key_Up, QtCoreQtKey.Key_Down, QtCoreQtKey.Key_PageUp, QtCoreQtKey.Key_PageDown]:
             self._valueChange_timer.stop()
             self._do_valueChanged_gui_emit()
         super(PyScientificSpinBox, self).keyReleaseEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == QtCore.Qt.LeftButton:
+        if event.button() == QtCoreQtMouseButton.LeftButton:
             self._valueChange_timer.stop()
             self._do_valueChanged_gui_emit()
         super(PyScientificSpinBox, self).mouseReleaseEvent(event)
@@ -539,7 +608,7 @@ class PyScientificSpinBox(QDoubleSpinBox):
         super(PyScientificSpinBox, self).mousePressEvent(event)
 
     def focusInEvent(self, event):
-        if event.reason() == QtCore.Qt.MouseFocusReason:
+        if event.reason() == QtCoreQtFocusReason.MouseFocusReason:
             self._last_focus_reason_mouse = True
         l = self.lineEdit()
         super(PyScientificSpinBox, self).focusInEvent(event)
@@ -548,6 +617,12 @@ class PyScientificSpinBox(QDoubleSpinBox):
         # does not increment before the unit (because position is 0, selection is False)
         self.selectAll()
 
+    def wheelEvent(self, event):
+        if not self.mouse_wheel_enabled:
+            event.ignore()
+        else:
+            super(PyScientificSpinBox, self).wheelEvent(event)
+
     def editFinished_slot(self):
         self.text_is_being_changed_state = False
         if self._last_key_pressed_is_enter:
@@ -555,7 +630,7 @@ class PyScientificSpinBox(QDoubleSpinBox):
             self._do_valueChanged_gui_emit(force=True)
 
     def eventFilter(self, watched_obj, event):
-        if event.type() == QEvent.MouseButtonPress and self._last_focus_reason_mouse:
+        if event.type() == QEventType.MouseButtonPress and self._last_focus_reason_mouse:
             self._last_focus_reason_mouse = False
             return True
         return False
@@ -638,14 +713,17 @@ class PyScientificSpinBox(QDoubleSpinBox):
         super(PyScientificSpinBox, self).setPrefix(string)
         self.updateGeometry()
 
+    def mouseWheelToggle(self):
+        self.mouse_wheel_enabled = not self.mouse_wheel_enabled
+
     def contextMenuEvent(self, event):
         if self._disable_context_menu:
             return
         self._in_config_menu = True
         menu = self._create_menu()
         se = self.stepEnabled()
-        self.stepUpAction.setEnabled(se & QAbstractSpinBox.StepUpEnabled)
-        self.stepDownAction.setEnabled(se & QAbstractSpinBox.StepDownEnabled)
+        self.stepUpAction.setEnabled(bool(se & QAbstractSpinBoxStepEnabledFlag.StepUpEnabled))
+        self.stepDownAction.setEnabled(bool(se & QAbstractSpinBoxStepEnabledFlag.StepDownEnabled))
         mode = self.display_mode
         self.display_mode_option[mode].setChecked(True)
         self.log_increment_mode_action.setChecked(self.log_increment_mode)
@@ -682,11 +760,15 @@ class PyScientificSpinBox(QDoubleSpinBox):
         self.max_custom_widget.pyqtConfigure(value=self.maximum(), **conf)
         self.min_incr_custom_widget.pyqtConfigure(value=self.min_increment, minimum=0.,**conf)
         self._in_config_menu = False
-        menu.exec_(event.globalPos())
+        try:
+            menu.exec_(event.globalPos())
+        except:
+            # use eval to prevent syntax error in python 2
+            eval("menu.exec(event.globalPos())")
 
     def validate(self, text, position):
         if self._initializing:
-            return QValidator.Invalid, text, position
+            return QValidatorState.Invalid, text, position
         return self.validator.validate(text, position)
 
     def fixup(self, text):
@@ -828,9 +910,8 @@ class PyScientificSpinBox(QDoubleSpinBox):
         opt = QStyleOptionSpinBox()
         self.initStyleOption(opt)
         style = self.style()
-        hint = style.sizeFromContents(style.CT_SpinBox, opt, QSize(w, h), self)
+        hint = style.sizeFromContents(styleContentsType.CT_SpinBox, opt, QSize(w, h), self)
         qapp = QApplication.instance()
-        hint = hint.expandedTo(qapp.globalStrut())
         return hint
 
     def minimumSizeHint(self):
@@ -971,5 +1052,9 @@ if __name__ == "__main__":
     main_widget.show()
 
     if do_exec:
-        qApp.exec_()
+        try:
+            qApp.exec_()
+        except AttributeError:
+            # use eval to prevent syntax error in python 2
+            eval("qApp.exec()")
 

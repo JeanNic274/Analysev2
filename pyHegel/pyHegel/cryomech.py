@@ -33,7 +33,7 @@ import serial
 import sys
 import time
 
-from .comp2to3 import string_bytes_types
+from .comp2to3 import string_bytes_types, repr_or_string
 
 def do_escape(message):
     ret = ''
@@ -458,7 +458,7 @@ def do_log(com_obj, path, wait=5*60.):
                 with open(filename, 'w') as f:
                     f.write(header)
             data_lst = [repr(t)]
-            data_lst += [repr(data[p]) for p in param]
+            data_lst += [repr_or_string(data[p]) for p in param]
             with open(filename, 'a') as f:
                 if t-last_stamp > 3*3600: # every 3 hours
                     last_stamp = t

@@ -26,12 +26,12 @@ from __future__ import absolute_import, print_function, division
 import time
 import sys
 
-from .qt_wrap import QtCore, QtGui, QtWidgets
+from .qt_wrap import QtCore, QtGui
 from .qt_wrap import sleep as _sleep
 
 from .instruments_base import mainStatusLine
 
-class Sleeper(QtWidgets.QWidget):
+class Sleeper(QtGui.QWidget):
     """
        Start sleeper with
         sl=Sleeper()
@@ -44,9 +44,9 @@ class Sleeper(QtWidgets.QWidget):
         super(Sleeper, self).__init__()
         self.bar = QtGui.QProgressBar()
         self.bar.setMaximum(1000)
-        self.pause_button = QtWidgets.QPushButton('Pause')
+        self.pause_button = QtGui.QPushButton('Pause')
         self.pause_button.setCheckable(True)
-        self.skip_button = QtWidgets.QPushButton('End Sleep Now')
+        self.skip_button = QtGui.QPushButton('End Sleep Now')
         self.elapsed = QtGui.QLabel('0 min')
         self.sleep_length = QtGui.QDoubleSpinBox()
         self.sleep_length.setRange(0.01, 60*24*2) # 2 days max
@@ -168,7 +168,7 @@ def sleep(sec, progress_base='GUI Wait', progress_timed=True):
         sleeper.close()
         raise
 
-class Quit_Button(QtWidgets.QPushButton):
+class Quit_Button(QtGui.QPushButton):
     """
         Starts a Button that will exit the application with clicked.
         Use:

@@ -340,10 +340,8 @@ class iceoxford_temperature_controller(visaInstrument):
         self._devwrap('temperatures')
         super(iceoxford_temperature_controller, self)._create_devs()
 
-    def prep_cooldown(self):
-        """ Setup the ICEoxford program so it is ready for a cooldown.
-            It adjusts the heaters (off), the needle valve and the heatswitch.
-        """
+    def _set_cooldown_state(self):
+        # adjust nv and heater, but not heat_sw
         self.nv_mode.set('auto', noset=True)
         self.nv_setpoint.set(1, noset=True)
         self.nv_ramp.set(100, noset=True)
@@ -362,7 +360,25 @@ class iceoxford_temperature_controller(visaInstrument):
         self.heater_pid.set(p=100, i=20, d=0, noset=True)
         self.heater_setpoint_ramp_en.set(False)
         self.heater_setpoint.set(.5)
+
+    def prep_cooldown(self):
+        """ Setup the ICEoxford program so it is ready for a cooldown.
+            It adjusts the heaters (off), the needle valve and the heatswitch.
+        """
+        self._set_cooldown_state()
         self.heat_sw_mode.set('auto', noset=True)
+        self.heat_sw_input.set('B', noset=True)
+        self.heat_sw_setpoint.set(5, noset=True)
+        self.heat_sw_error_band.set(.5)
+
+    def reset_cool_state(self):
+        """ Setup the ICEoxford program so it is in the standard cold condition.
+            The same as after finish_cooldown (use after a reset of the ICE Temperature control app).
+            It adjusts the heaters (off), the needle valve and the heatswitch.
+        """
+        self._set_cooldown_state()
+        self.heat_sw_relay_en.set(False, noset=True)
+        self.heat_sw_mode.set('manual')
         self.heat_sw_input.set('B', noset=True)
         self.heat_sw_setpoint.set(5, noset=True)
         self.heat_sw_error_band.set(.5)
@@ -402,16 +418,27 @@ class iceoxford_temperature_controller(visaInstrument):
             self.heater_pid.set(p=50, i=50, d=0, noset=True)
             self.heater_setpoint.set(8.)
             self.heater_range.set('medium')
+            to = time.time()
             while True:
                 t1k = self._get_t1k()
                 Pcirc = self.pressure_circulation.get()
                 if t1k > 6 and Pcirc < 3:
                     break
                 wait(10)
+                dt = (time.time() - to)/60. # in minutes
+                if dt > 15:
+                    raise RuntimeError('\n!!!! Problem: timed out trying to boil off the liquid He. TELL the person in charge !!!')
             self.heater_pid.set(p=50, i=10, d=0)
+            # preset some opening of the needle valve to speed up PID
+            self.nv_mode.set('manual', noset=True)
+            self.nv_manual_out.set(10)
+            wait(1)
+            # now set it to the correct parameters for warmup
+            self.nv_mode.set('auto', noset=True)
             self.nv_setpoint.set(5, noset=True)
             self.nv_pid.set(p=1000, i=0.1, d=0)
             i = 0
+            to = time.time()
             # wait until flow > 3 for at least 1 min
             while i < 6:
                 Pcirc = self.pressure_circulation.get()
@@ -420,6 +447,9 @@ class iceoxford_temperature_controller(visaInstrument):
                 else:
                     i = 0
                 wait(10)
+                dt = (time.time() - to)/60. # in minutes
+                if dt > 15:
+                    raise RuntimeError('\n!!!! Problem: timed out trying to reopen the needle valve. TELL the person in charge !!!')
             self.nv_pid.set(p=1000, i=1, d=0)
             print("\n Boil off finished at:", time.ctime())
         else:

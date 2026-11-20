@@ -29,7 +29,7 @@ from ..instruments_base import visaInstrument, visaInstrumentAsync, BaseInstrume
                             ChoiceStrings, ChoiceIndex, ChoiceLimits, _general_check,\
                             make_choice_list, _tostr_helper, _fromstr_helper, ProxyMethod,\
                             decode_float64, quoted_string, scaled_float, visa_wrap, locked_calling,\
-                            wait, release_lock_context, mainStatusLine, resource_info
+                            wait, release_lock_context, mainStatusLine, resource_info, _repr_or_string
 
 from ..instruments_registry import register_instrument, register_usb_name, register_idn_alias
 
@@ -227,13 +227,13 @@ class iTest_be2102(visaInstrument):
         """
         pre = self._pre + ';'
         if gain1 is not None:
-            self.write(pre+'CALibration:GAIN 1,%r'%gain1)
+            self.write(pre+'CALibration:GAIN 1,%s'%_repr_or_string(gain1))
         if offset1 is not None:
-            self.write(pre+'CALibration:OFFset 1,%r'%offset1)
+            self.write(pre+'CALibration:OFFset 1,%s'%_repr_or_string(offset1))
         if gain2 is not None:
-            self.write(pre+'CALibration:GAIN 2,%r'%gain2)
+            self.write(pre+'CALibration:GAIN 2,%s'%_repr_or_string(gain2))
         if offset2 is not None:
-            self.write(pre+'CALibration:OFFset 2,%r'%offset2)
+            self.write(pre+'CALibration:OFFset 2,%s'%_repr_or_string(offset2))
         result = self.ask(pre+'CALibration:GAIN1?; OFFset1?; GAIN2?; OFFset2?')
         return dict(zip(['gain1', 'offset1', 'gain2', 'offset2'], result.split(';')))
 

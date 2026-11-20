@@ -1,3 +1,4 @@
+import time
 # Python API for AMC FW 1.5.1
 from . import ACS
 from .test import Test
@@ -38,6 +39,20 @@ class Device(ACS.Device):
         self.amcids = Amcids(self)
         self.status = Status(self)
         self.system_service = System_service(self)
+        
+    def wait_until_stable(amc_dev, axis):
+        """Waits for the specified AMC axis to become stable."""
+        timeout = 10
+        start = time.time()
+        while True:
+            if amc_dev.status.getStatusMoving(axis) == 0 and \
+                amc_dev.status.getStatusTargetRange(axis):
+                break
+            amc_dev.control.setControlOutput(axis, True)
+            amc_dev.control.setControlMove(axis, True)
+            if time.time() - start > timeout:
+                print(f"Timeout waiting for stage axis {axis}")
+                break
         
         
 

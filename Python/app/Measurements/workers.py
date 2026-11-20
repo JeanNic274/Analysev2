@@ -122,7 +122,7 @@ class ScanWorker(QObject):
                 start, stop, step = axes[name]
                 if (start>stop and step >0) or (start<stop and step <0):
                     start, stop = stop, start
-                start, stop, step = 1000*int(start), 1000*int(stop), 1000*int(step)
+                start, stop, step = int(1000*start), int(1000*stop), int(1000*step)
                 values = np.arange(start, stop + step / 2, step, dtype= int)
                 self.axis_values.append(values)
         except Exception as e:
@@ -164,7 +164,6 @@ class ScanWorker(QObject):
         try:
             with open(self._file_path,'a') as file:
                 index_ranges = [range(len(v)) for v in self.axis_values]
-                
                 combos = list(self._boustrophedon_scan(index_ranges))
                 total = len(combos)
                 file.write('#')
@@ -179,7 +178,6 @@ class ScanWorker(QObject):
                 det_coords = {name: None for name in self.axis_names}
                 t_start = time.time()
                 for i, idx in enumerate(combos):
-                    t_point = time.time()
                     save_data = []
                     
                     if self._stop_requested:

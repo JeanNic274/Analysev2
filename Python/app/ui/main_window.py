@@ -1,4 +1,5 @@
 import time
+import inspect
 t=time.time()
 from datetime import date, datetime
 from pathlib import Path
@@ -38,7 +39,17 @@ from Python.app.ui.plot_area import PlotAreas
 print(f'------------------ loaded PlotArea:  {time.time()-t:.8f} ------------------')
 t=time.time()
 
+
 from Python.app.Measurements.Fake_instruments import *
+from pyHegel.pyHegel import instruments
+
+try: from amc_api_python import AMC
+except ImportError as e: print(e)
+
+
+try: from snAPI.Main import *
+except ImportError as e: print(e)
+
 from Python.app.ui.graphs import SpectrometerGraph
 
 t=time.time()
@@ -47,6 +58,7 @@ t=time.time()
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.meas_mode = 'exp'
         self.setWindowTitle("PL ViewerV2")
         
         self.settings = QSettings(str(Path('data','settings','AppConfig.ini')),QSettings.IniFormat)
@@ -66,6 +78,7 @@ class MainWindow(QMainWindow):
         self.graph_rate_graph = None
         self.graphs_scan={}
         self.move_panel_is_open = False
+        
         #Devices
         self.device_spectrometer = None
         self.device_MH150 = None
@@ -157,21 +170,40 @@ class MainWindow(QMainWindow):
         # if self.graph_spectrometer is None:
         #     self.graph_spectrometer = SpectrometerGraph(self)
         #     self.graph_spectrometer.show()
-            
+        
         if self.device_spectrometer == None:
+            #if self.meas_mode =='fake':
             self.device_spectrometer = Fake_spectrometer()
             
         # ----- MultiHarp
         if self.device_MH150 == None:
-            self.device_MH150 = Fake_MH150()
-            
+            if self.meas_mode =='fake':
+                self.device_MH150 = Fake_MH150()
+            elif self.meas_mode == 'exp':
+                sn=snAPI()
+                sn.getDevice()
+                sn.closeDevice()
+                time.sleep(0.5)
+                sn.getDevice()
+                sn.initDevice(MeasMode.T2)
+                sn.loadIniConfig(r"C:\Codes\Picoquant\snAPI_configs\channels_config.ini")
+                self.device_MH150 = sn.device
+                    
         # ----- Laser
         if self.device_laser == None:
-            self.device_laser = Fake_laser()
+            if self.meas_mode =='fake':
+                self.device_laser = Fake_laser()
+            elif self.meas_mode == 'exp':
+                self.device_laser = instruments.picoQuant.PicoQuant_Taiko_PDL_M1()
             
         # ----- Fake_NanoPositionner
         if self.device_nanopositionner == None:
-            self.device_nanopositionner = Fake_NanoPositionner()
+            if self.meas_mode =='fake':
+                self.device_nanopositionner = Fake_NanoPositionner()
+            elif self.meas_mode == 'exp':
+                amc_address = "amc100num-a01-0248.local"
+                self.device_nanopositionner = AMC.Device(amc_address)
+                self.device_nanopositionner.connect()
             
         # ----- Fake_ESP300
         if self.device_ESP300 == None:

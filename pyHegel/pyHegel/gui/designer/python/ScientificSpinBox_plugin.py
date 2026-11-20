@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-
-from PyQt5.QtGui import QIcon
-from PyQt5.QtDesigner import QPyDesignerCustomWidgetPlugin
+try:
+    from PyQt6.QtGui import QIcon
+    from PyQt6.QtDesigner import QPyDesignerCustomWidgetPlugin
+except:
+    from PyQt5.QtGui import QIcon
+    from PyQt5.QtDesigner import QPyDesignerCustomWidgetPlugin
 from pyHegel.gui.ScientificSpinBox import PyScientificSpinBox
 
 # need to place this in the search path or adjust the environment variable:
@@ -16,6 +19,12 @@ from pyHegel.gui.ScientificSpinBox import PyScientificSpinBox
 # Also:
 #   QtCore.QDir.homePath()
 #    with /.designer/plugins/python appended
+#
+# On linux can start with:
+#  PYQTDESIGNERPATH=~/codes/pyHegel/pyHegel/gui/designer/python: /usr/lib/qt6/bin/designer
+# On windows can start with:
+#  set PYQTDESIGNERPATH=\Codes\pyHegel\pyHegel\gui\designer\python;
+#  \Anaconda3\envs\py311qt6\Library\bin\Designer6.exe
 
 class PyScientificSpinBoxPlugin(QPyDesignerCustomWidgetPlugin):
     def __init__(self, parent=None):

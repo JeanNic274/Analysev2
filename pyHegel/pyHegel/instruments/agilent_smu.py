@@ -27,6 +27,7 @@ import numpy as np
 import time
 import types
 import weakref
+from contextlib import contextmanager
 
 from ..instruments_base import visaInstrument, visaInstrumentAsync,\
                             BaseDevice, scpiDevice, MemoryDevice, ReadvalDev,\
@@ -276,29 +277,30 @@ class agilent_SMU(visaInstrumentAsync):
             async_parsers.append((None, (), {}))
             n_read += 1
         else:
-            for ch, meas in full_chs:
-                if meas == 'v':
-                    is_voltage = True
-                    rng = self.range_voltage_meas
-                    quest, slot = self._measIV_helper_get_quest(is_voltage, ch, None, rng)
-                    last_status = self.meas_last_status
-                    parser = self._measIV_helper_ret_val
-                elif meas == 'i':
-                    is_voltage = False
-                    rng = self.range_current_meas
-                    quest, slot = self._measIV_helper_get_quest(is_voltage, ch, None, rng)
-                    last_status = self.meas_last_status
-                    parser = self._measIV_helper_ret_val
-                else:
-                    quest, slot = self._measZ_helper_get_quest(None, ch)
-                    last_status = dict(Z=self.measZ_last_status,
-                                      bias=self.measZ_bias_last_status,
-                                      level=self.measZ_level_last_status)[ch]
-                    is_voltage = ch
-                    parser = self._measZ_helper_ret_val
-                async_string += ';' + quest
-                async_parsers.append((parser, (is_voltage, slot), {}, last_status))
-                n_read += 1
+            with self._protect_ch_change():
+                for ch, meas in full_chs:
+                    if meas == 'v':
+                        is_voltage = True
+                        rng = self.range_voltage_meas
+                        quest, slot = self._measIV_helper_get_quest(is_voltage, ch, None, rng)
+                        last_status = self.meas_last_status
+                        parser = self._measIV_helper_ret_val
+                    elif meas == 'i':
+                        is_voltage = False
+                        rng = self.range_current_meas
+                        quest, slot = self._measIV_helper_get_quest(is_voltage, ch, None, rng)
+                        last_status = self.meas_last_status
+                        parser = self._measIV_helper_ret_val
+                    else:
+                        quest, slot = self._measZ_helper_get_quest(None, ch)
+                        last_status = dict(Z=self.measZ_last_status,
+                                          bias=self.measZ_bias_last_status,
+                                          level=self.measZ_level_last_status)[ch]
+                        is_voltage = ch
+                        parser = self._measZ_helper_ret_val
+                    async_string += ';' + quest
+                    async_parsers.append((parser, (is_voltage, slot), {}, last_status))
+                    n_read += 1
         if len(async_string) >= 1:
              # we skip the first ';'
              async_string = async_string[1:]
@@ -414,6 +416,17 @@ class agilent_SMU(visaInstrumentAsync):
         res = int(ret[0])
         if res != 0:
             raise RuntimeError(self.perror('Calibration failed (at least one module failed). Returned value is %i'%res))
+
+    @contextmanager
+    def _protect_ch_change(self, cleanup=True):
+        orig_ch = None
+        try:
+            orig_ch = self.current_channel.get()
+            d = dict(cleanup=cleanup)
+            yield d
+        finally:
+            if d["cleanup"] and orig_ch is not None:
+                self.current_channel.set(orig_ch)
 
     def _fetch_opt_helper(self, chs=None, auto='all'):
         mode = 'spot'
@@ -576,18 +589,19 @@ class agilent_SMU(visaInstrumentAsync):
                 ret.extend(val)
             else:
                 ret.append(val)
-        for ch, meas in full_chs:
-            val_str = self._async_trig_current_data.pop(0)
-            func, args, kwargs, last_status = self._async_trigger_parsers.pop(0)
-            val = func(val_str, *args, **kwargs)
-            if status:
-                stat = last_status.get()
-                if isinstance(val, list):
-                    # this is for measZ
-                    val = [val[0], stat[0], val[1], stat[1]]
-                else:
-                    val = [val, stat]
-            ret_append(val)
+        with self._protect_ch_change():
+            for ch, meas in full_chs:
+                val_str = self._async_trig_current_data.pop(0)
+                func, args, kwargs, last_status = self._async_trigger_parsers.pop(0)
+                val = func(val_str, *args, **kwargs)
+                if status:
+                    stat = last_status.get()
+                    if isinstance(val, list):
+                        # this is for measZ
+                        val = [val[0], stat[0], val[1], stat[1]]
+                    else:
+                        val = [val, stat]
+                ret_append(val)
         ret = np.array(ret)
         if status:
             ret.shape = (-1, 2)
@@ -823,7 +837,7 @@ class agilent_SMU(visaInstrumentAsync):
         if range == 0.:
             quest = base + '0'
         else:
-            quest = base + '0,%r'%range
+            quest = base + '0,%s'%_repr_or_string(range)
         return quest, cmu_slot
 
     def _measZ_helper_ret_val(self, result_str, mode, cmu_slot):
@@ -999,10 +1013,11 @@ class agilent_SMU(visaInstrumentAsync):
                 single_ch = ch
                 ch = [ch]
             result_dict = {}
-            for c in ch:
-                func = self.function.get(ch=c) # we set ch here
-                adjust_range(func)
-                result_dict[c] = {k:dev.get() for k, dev in para_dict.items()}
+            with self._protect_ch_change(cleanup=single_ch is None):
+                for c in ch:
+                    func = self.function.get(ch=c) # we set ch here
+                    adjust_range(func)
+                    result_dict[c] = {k:dev.get() for k, dev in para_dict.items()}
             if single_ch is not None:
                 result_dict = result_dict[single_ch]
             return result_dict
@@ -1198,20 +1213,21 @@ class agilent_SMU(visaInstrumentAsync):
             raise ValueError(self.perror('Some values (None) need to be specified: {conf}', conf=conf))
         if conf.ch not in self._valid_ch:
             raise ValueError(self.perror("Invalid ch selection."))
-        func = self.function.get(ch=conf.ch)
-        if func not in ['voltage', 'current']:
-            raise ValueError(self.perror("Selected channel is disabled"))
-        else:
-            if func == 'voltage':
-                base = 'WV'
-                minmax = 100.
-                rgdev = self.range_voltage
+        with self._protect_ch_change():
+            func = self.function.get(ch=conf.ch)
+            if func not in ['voltage', 'current']:
+                raise ValueError(self.perror("Selected channel is disabled"))
             else:
-                base = 'WI'
-                minmax = 0.1
-                rgdev = self.range_current
-        range = rgdev.get()
-        sRange = rgdev.choices.tostr(range)
+                if func == 'voltage':
+                    base = 'WV'
+                    minmax = 100.
+                    rgdev = self.range_voltage
+                else:
+                    base = 'WI'
+                    minmax = 0.1
+                    rgdev = self.range_current
+            range = rgdev.get()
+            sRange = rgdev.choices.tostr(range)
         base += "%i,%i,%s,%.7e,%.7e,%i"
         max_steps = 10001 if self._isB1500 else 1001
         if not (-minmax <= conf.start <= minmax):
@@ -1346,55 +1362,56 @@ class agilent_SMU(visaInstrumentAsync):
         if any(v is None for v in conf.values()):
             raise ValueError(self.perror('Some values (None) need to be specified: {conf}', conf=conf))
         cmds = []
-        for i, c in enumerate(conf.ch):
-            if c not in self._valid_ch:
-                raise ValueError(self.perror("Invalid ch selection."))
-            slot = self._smu2slot[c]
-            f = self.function.get(ch=c)
-            if f not in ['voltage', 'current']:
-                raise ValueError(self.perror("Selected channel is disabled"))
-            if f == 'voltage':
-                rgdev = self.range_voltage
-                minmax = 100.
-            else:
-                rgdev = self.range_current
-                minmax = 0.1
-            rg = rgdev.get()
-            sRange = rgdev.choices.tostr(rg)
-            start = conf.start[i]
-            stop = conf.stop[i]
-            base = conf.base[i]
-            func = {'voltage':1, 'current':2}[f]
-            comp = conf.comp[i]
-            Pcomp = conf.Pcomp[i]
-            if start is None:
-                raise ValueError(self.perror('missing a start value (None): {conf}', conf=conf))
-            pulse_width = conf.pulse_width[i]
-            pulse_delay = conf.pulse_delay[i]
-            if comp is None:
-                comp = 'empty'
-            if Pcomp is None or comp == 'empty':
-                Pcomp = 'empty'
-            if not (-minmax <= start <= minmax):
-                raise ValueError(self.perror("Invalid start."))
-            if stop is not None and not (-minmax <= stop <= minmax):
-                raise ValueError(self.perror("Invalid stop."))
-            pulse_ok = False
-            if pulse_width is not None and pulse_delay is not None:
-                cmds.append('MCPNT{ch},{delay:.7e},{width:.7e}'.format(ch=slot, delay=pulse_delay, width=pulse_width))
-                pulse_ok = True
-            if base is None:
-                entry = 'WNX {N},{ch},{mode},{range},{start:.7e},{stop:.7e}{comp}{power}'
-            else:
-                if not pulse_ok:
-                    raise ValueError('missing pulse delay and width')
-                if stop is None or start==stop:
-                    entry = 'MCPNX {N},{ch},{mode},{range},{base:.7e},{start:.7e}{comp}'
+        with self._protect_ch_change():
+            for i, c in enumerate(conf.ch):
+                if c not in self._valid_ch:
+                    raise ValueError(self.perror("Invalid ch selection."))
+                slot = self._smu2slot[c]
+                f = self.function.get(ch=c)
+                if f not in ['voltage', 'current']:
+                    raise ValueError(self.perror("Selected channel is disabled"))
+                if f == 'voltage':
+                    rgdev = self.range_voltage
+                    minmax = 100.
                 else:
-                    entry = 'MCPWNX {N},{ch},{mode},{range},{base:.7e},{start:.7e},{stop:.7e}{comp}{power}'
-            comp_str = '' if comp=='empty' else ',%.7e'%comp
-            power_str = '' if Pcomp=='empty' else ',%.7e'%Pcomp
-            cmds.append(entry.format(N=i+1, ch=slot, mode=func, range=sRange, base=base, start=start, stop=stop, comp=comp_str, power=power_str))
+                    rgdev = self.range_current
+                    minmax = 0.1
+                rg = rgdev.get()
+                sRange = rgdev.choices.tostr(rg)
+                start = conf.start[i]
+                stop = conf.stop[i]
+                base = conf.base[i]
+                func = {'voltage':1, 'current':2}[f]
+                comp = conf.comp[i]
+                Pcomp = conf.Pcomp[i]
+                if start is None:
+                    raise ValueError(self.perror('missing a start value (None): {conf}', conf=conf))
+                pulse_width = conf.pulse_width[i]
+                pulse_delay = conf.pulse_delay[i]
+                if comp is None:
+                    comp = 'empty'
+                if Pcomp is None or comp == 'empty':
+                    Pcomp = 'empty'
+                if not (-minmax <= start <= minmax):
+                    raise ValueError(self.perror("Invalid start."))
+                if stop is not None and not (-minmax <= stop <= minmax):
+                    raise ValueError(self.perror("Invalid stop."))
+                pulse_ok = False
+                if pulse_width is not None and pulse_delay is not None:
+                    cmds.append('MCPNT{ch},{delay:.7e},{width:.7e}'.format(ch=slot, delay=pulse_delay, width=pulse_width))
+                    pulse_ok = True
+                if base is None:
+                    entry = 'WNX {N},{ch},{mode},{range},{start:.7e},{stop:.7e}{comp}{power}'
+                else:
+                    if not pulse_ok:
+                        raise ValueError('missing pulse delay and width')
+                    if stop is None or start==stop:
+                        entry = 'MCPNX {N},{ch},{mode},{range},{base:.7e},{start:.7e}{comp}'
+                    else:
+                        entry = 'MCPWNX {N},{ch},{mode},{range},{base:.7e},{start:.7e},{stop:.7e}{comp}{power}'
+                comp_str = '' if comp=='empty' else ',%.7e'%comp
+                power_str = '' if Pcomp=='empty' else ',%.7e'%Pcomp
+                cmds.append(entry.format(N=i+1, ch=slot, mode=func, range=sRange, base=base, start=start, stop=stop, comp=comp_str, power=power_str))
         if not (1 <= conf.nsteps <= 10001):
             raise ValueError(self.perror("Invalid steps (must be 1-10001)."))
         if not (0 <= conf.hold <= 655.35):
@@ -1504,7 +1521,7 @@ class agilent_SMU(visaInstrumentAsync):
         else:
             self.write('CLCORR %i,1'%slot)
             for f in freqs:
-                self.write('CORRL %i,%r'%(slot, f))
+                self.write('CORRL %i,%r'%(slot, float(f)))
 
     def conf_impedance_corr_values(self, data=None):
         u"""\
@@ -2006,7 +2023,7 @@ class agilent_SMU(visaInstrumentAsync):
                     raise RuntimeError(self.perror('Unexpected missing entry for _get_filters'))
         return state
 
-    def _parse_block_helper(self, root_string, basename, types=[int], Nv_min=None):
+    def _parse_block_helper(self, root_string, basename, types=[int], Nv_min=None, clean_negative_sign=False):
         Nv = len(types)
         if not root_string.startswith(basename):
             raise RuntimeError(self.perror('Unexpected entry start for %s (%s)'%(basename, root_string)))
@@ -2016,6 +2033,9 @@ class agilent_SMU(visaInstrumentAsync):
             Nv_min = Nv
         if not (Nv_min <= len(vs) <= Nv):
             raise RuntimeError(self.perror('Invalid number of values for %s (%s)'%(basename, root_string)))
+        if clean_negative_sign:
+            # for example impedance_bias *LRN? 7 returns -1.-300 for -1.3
+            vs = [v.replace('.-', '.') for v in vs]
         vals = [types[i](v) for i,v in enumerate(vs)]
         return vals
 
@@ -2316,7 +2336,7 @@ class agilent_SMU(visaInstrumentAsync):
                 return dict(bias=[0.], level=[0.], freq=[1e3])
         if len(rs) != 3:
             raise RuntimeError(self.perror('Invalid number of elemnts for lrn %i'%imp_slot))
-        bias = self._parse_block_helper(rs[0], 'DCV%i,'%imp_slot, [float])
+        bias = self._parse_block_helper(rs[0], 'DCV%i,'%imp_slot, [float], clean_negative_sign=True)
         level = self._parse_block_helper(rs[1], 'ACV%i,'%imp_slot, [float])
         freq = self._parse_block_helper(rs[2], 'FC%i,'%imp_slot, [float])
         return dict(bias=bias, level=level, freq=freq)
@@ -2651,11 +2671,11 @@ class agilent_B2900_smu(visaInstrumentAsync):
             if 1 not in en_chs:
                 lvl = self.src_level.get(ch=1)
                 func = self.src_function.getcache()
-                self.write(':SOURce1:%s:TRIGgered %r'%(func, lvl))
+                self.write(':SOURce1:%s:TRIGgered %s'%(func, _repr_or_string(lvl)))
             if 2 in self._valid_ch and 2 not in en_chs:
                 lvl = self.src_level.get(ch=2)
                 func = self.src_function.getcache()
-                self.write(':SOURce2:%s:TRIGgered %r'%(func, lvl))
+                self.write(':SOURce2:%s:TRIGgered %s'%(func, _repr_or_string(lvl)))
             self.current_channel.set(orig_ch)
             self.data_clear()
         elif mode == 'repeats':
@@ -3153,7 +3173,7 @@ class agilent_B2900_smu(visaInstrumentAsync):
                 raise ValueError('Incorrect type or value for values1')
             shape = {False:'DC', True:'pulse'}
             self.write('trig1:all:count %i'%N)
-            self.write('trig1:acq:delay %r'%Mdelay1)
+            self.write('trig1:acq:delay %s'%_repr_or_string(Mdelay1))
             self.write('trig1:tran:delay 0')
             #self.write('sense1:wait:offset %r'%Mwait1)
             self.src_shape.set(shape[pulse_en1], ch=1)
@@ -3181,7 +3201,7 @@ class agilent_B2900_smu(visaInstrumentAsync):
                 else:
                     raise ValueError('Incorrect type or value for values2')
                 self.write('trig2:all:count %i'%N)
-                self.write('trig2:acq:delay %r'%Mdelay2)
+                self.write('trig2:acq:delay %s'%_repr_or_string(Mdelay2))
                 self.write('trig2:tran:delay 0')
                 #self.write('sense2:wait:offset %r'%Mwait2)
                 self.src_shape.set(shape[pulse_en2], ch=2)
@@ -3382,7 +3402,7 @@ class agilent_B2900_smu(visaInstrumentAsync):
         # these were set by checkdev.
         func = self.src_function.getcache()
         ch = self.current_channel.get()
-        self.write('SOURce{ch}:{func} {val!r}'.format(ch=ch, func=func, val=val))
+        self.write('SOURce{ch}:{func} {val}'.format(ch=ch, func=func, val=_repr_or_string(val)))
 
 # Trace allows caluclating stats (avg, stderr). It needs to be reset between inits (if the number of trace:points is larger than
 #    what is to be acquired)
@@ -3689,7 +3709,7 @@ class keysight_M96xx_smu(visaInstrumentAsync):
         # these were set by checkdev.
         func = self.src_function.getcache()
         ch = self.current_channel.get()
-        self.write('SOURce{ch}:{func} {val!r}'.format(ch=ch, func=func, val=val))
+        self.write('SOURce{ch}:{func} {val}'.format(ch=ch, func=func, val=_repr_or_string(val)))
 
     def conf_ch(self, ch=None, function=None, level=None, range=None, compliance=None,
                 compliance_pos=None, compliance_neg=None, compliance_range=None,

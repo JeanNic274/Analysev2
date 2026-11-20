@@ -33,6 +33,7 @@ import signal
 import sys
 import time
 import threading
+import types
 import weakref
 from collections import OrderedDict  # this is a subclass of dict
 from .qt_wrap import processEvents_managed, sleep
@@ -42,8 +43,10 @@ from . import visa_wrap
 from . import instruments_registry
 from . import types as _types
 from .types import dict_improved
-from .comp2to3 import is_py2, string_bytes_types, thread_error, get_ident, string_upper,\
-                        write_unicode_byte, fu, fb, make_str, get_terminal_size
+from .comp2to3 import is_py2, is_py3, string_bytes_types, thread_error, get_ident, string_upper,\
+                        write_unicode_byte, fu, fb, make_str, get_terminal_size,\
+                        repr_or_string as _repr_or_string, str_or_repr as _str_or_repr,\
+                        repr_or_string_unicode as _repr_or_string_unicode
 if is_py2:
     translate_del_lower = lambda s: s.translate(None, string.ascii_lowercase)
 else:
@@ -70,7 +73,6 @@ try:
     _load_resource_manager()
 except ImportError as exc:
     print('Error loading visa resource manager. You will have reduced functionality.')
-    print(exc)
 
 try:
     _globaldict # keep the previous values (when reloading this file)
@@ -334,20 +336,6 @@ def test_gpib_srq_state(bus=0):
     """
     return rsrc_mngr.get_gpib_intfc_srq_state()
 
-def _repr_or_string(val):
-    if isinstance(val, string_bytes_types):
-        return val
-    else:
-        ret = repr(val)
-        # clean up long int (python 2)
-        if is_py2:
-            if isinstance(val, long):
-                ret = ret.rstrip('L')
-        return ret
-
-def _repr_or_string_unicode(val):
-    return fu(_repr_or_string(val))
-
 def _writevec_flatten_list(vals_list):
     ret = []
     for val in vals_list:
@@ -356,6 +344,8 @@ def _writevec_flatten_list(vals_list):
         elif isinstance(val, (list, tuple)):
             ret.extend(val)
         else:
+            if hasattr(val, 'value'):
+                val = val.value
             ret.append(val)
     return ret
 
@@ -366,6 +356,8 @@ def _writevec(file_obj, vals_list, pre_str=''):
     to a string use repr.
     The columns in the file are separated by tabs.
     pre_str is prepended to every line. Can use '#' when adding comments.
+    if one of the values has a .value attribute, we use that instead
+    (this is used for enums for example)
     """
     vals_list = _writevec_flatten_list(vals_list)
     strs_list = list(map(_repr_or_string_unicode, vals_list))
@@ -495,6 +487,27 @@ def _retry_wait(func, timeout, delay=0.01, progress_base='Wait', progress_timed=
     return ret
 
 
+def reorganize_conf_with_ch(options):
+    """ Here options is a list of channels options strings
+        something like:
+             [['a=1', 'b=2'], ['a=3', 'b=5']]
+        and it gets transformed into:
+            ['a=[1,3], ''b=[2,5]']
+    """
+    first = True
+    for ch_line in options:
+        ch_line_split = [ c.split('=', 1) for c in ch_line]
+        names = [n for n, d in ch_line_split]
+        data = [d for n, d in ch_line_split]
+        if first:
+            data_all = [ [d] for d in data]
+            first = False
+        else:
+            for db, d in zip(data_all, data):
+                db.append(d)
+    return [n+'=['+','.join(d)+']' for n, d in zip(names, data_all)]
+
+
 class Lock_Extra(object):
     def acquire(self):
         return False
@@ -621,14 +634,22 @@ def locked_calling(func, extra=''):
         @functools.wraps(func)
         def locked_call_wrapper(self, *args, **kwargs):
             " locked_call_wrapper is a wrapper that executes func with the instrument locked."
+            #print('lock acquire ', func, args, kwargs, threading.get_ident())
             with self._lock_instrument, self._lock_extra:
+                #ret = func(self, *args, **kwargs)
                 return func(self, *args, **kwargs)
+            #print('lock release ', func, args, kwargs, threading.get_ident())
+            #return ret
     elif extra == '.instr':
         @functools.wraps(func)
         def locked_call_wrapper(self, *args, **kwargs):
             " locked_call_wrapper is a wrapper that executes func with the instrument locked."
+            #print('lock acquire ', func, args, kwargs, threading.get_ident())
             with self.instr._lock_instrument, self.instr._lock_extra:
+                #ret = func(self, *args, **kwargs)
                 return func(self, *args, **kwargs)
+            #print('lock release ', func, args, kwargs, threading.get_ident())
+            #return ret
     else:
         raise ValueError('Invalid extra argument')
     # This is needed in python 2
@@ -640,11 +661,15 @@ def locked_calling_dev(func):
     return locked_calling(func, extra='.instr')
 
 class release_lock_context(object):
-    def __init__(self, instr):
+    def __init__(self, instr, bypass=False):
         self.instr =  instr
         self.n = 0
+        self.bypass = bypass
     def __enter__(self):
+        if self.bypass:
+            return self
         self.n = 0
+        #print('releasing a lock context', self, threading.get_ident())
         try:
             while True:
                 self.instr._lock_release()
@@ -654,6 +679,9 @@ class release_lock_context(object):
                 raise
         return self
     def __exit__(self, exc_type, exc_value, exc_traceback):
+        if self.bypass:
+            return
+        #print('relacquire a lock context', self, threading.get_ident())
         for i in range(self.n):
             self.instr._lock_acquire()
 
@@ -760,7 +788,8 @@ class FastCondition(_base_cond):
 #Allow to chain one device on completion of another one.
 
 class asyncThread(threading.Thread):
-    def __init__(self, operations, lock_instrument, lock_extra, init_ops, detect=None, delay=0., trig=None, cleanup=None):
+    def __init__(self, operations, lock_instrument, lock_extra, init_ops, detect=None, delay=0.,
+                 trig=None, cleanup=None, detect_with_lock=True):
         super(asyncThread, self).__init__()
         self.daemon = True
         self.__stop = False
@@ -774,6 +803,7 @@ class asyncThread(threading.Thread):
         self._init_ops = init_ops # a list of (func, args, kwargs)
         self.results = []
         self._replace_index = 0
+        self._detect_with_lock = detect_with_lock
     def add_init_op(self, func, *args, **kwargs):
         self._init_ops.append((func, args, kwargs))
     def change_delay(self, new_delay):
@@ -805,9 +835,10 @@ class asyncThread(threading.Thread):
                 self._async_trig()
             #print('Thread ready to detect ', time.time()-t0)
             if self._async_detect is not None:
-                while not self._async_detect():
-                    if self.__stop:
-                        break
+                with release_lock_context(self, self._detect_with_lock):
+                    while not self._async_detect():
+                        if self.__stop:
+                            break
             if self.__stop:
                 return
         finally:
@@ -824,6 +855,14 @@ class asyncThread(threading.Thread):
         with _sleep_signal_context_manager():
             self.join(timeout)
         return not self.is_alive()
+    def _lock_acquire(self):
+        # for use by release_lock_context
+        self._lock_instrument.acquire()
+        self._lock_extra.acquire()
+    def _lock_release(self):
+        # for use by release_lock_context
+        self._lock_instrument.release()
+        self._lock_extra.release()
 
 
 # For proper KeyboardInterrupt handling, the docheck function should
@@ -929,7 +968,7 @@ class BaseDevice(object):
     def __init__(self, autoinit=True, doc='', setget=False, allow_kw_as_dict=False,
                   allow_missing_dict=False, allow_val_as_first_dict=False, get_has_check=False,
                   min=None, max=None, choices=None, multi=False, graph=True,
-                  trig=False, redir_async=None, setget_delay=None):
+                  trig=False, redir_async=None, setget_delay=None, no_instr=False):
         # instr and name updated by instrument's _create_devs
         # doc is inserted before the above doc
         # autoinit can be False, True or a number.
@@ -950,7 +989,16 @@ class BaseDevice(object):
         # setget_delay is an minimum wait time between a set and a following get of a values.
         #   some device take time to update, and enabling setget would return the wrong values
         #   without an added delay.
-        self.instr = None
+        # no_instr when True, will allow the device to be used outside of a instrument
+        #  for example, you can create a MemoryDevice that is not part of an instrument.
+        if no_instr:
+            class dummy_instr(object):
+                def __init__(self):
+                    self._lock_instrument = Lock_Instruments()
+                    self._lock_extra = Lock_Extra()
+            self.instr = dummy_instr()
+        else:
+            self.instr = None
         self.name = 'foo'
         # Use thread local data to keep the last_filename and a version of cache
         self._local_data = threading.local()
@@ -1216,7 +1264,7 @@ class BaseDevice(object):
             if val is None or allow_var_kw:
                 if val is None:
                     val = dict()
-                for k in kwarg.keys():
+                for k in list(kwarg.keys()):
                     if k in self.choices.field_names:
                         val[k] = kwarg.pop(k)
         elif nval == 0: # this permits to set a value to None
@@ -1412,7 +1460,7 @@ class BaseInstrument(object):
     # add _quiet_delete here in case we call __del__ before __init__ because of problem in subclass
     _quiet_delete = False
     _quiet_load = True
-    def __init__(self, quiet_delete=False, quiet_load=False):
+    def __init__(self, quiet_delete=False, quiet_load=True):
         self._quiet_load = quiet_load
         self._quiet_delete = quiet_delete
         self.header_val = None
@@ -1421,6 +1469,7 @@ class BaseInstrument(object):
             # don't overwrite what is assigned in subclasses
             self._lock_extra = Lock_Extra()
         self._async_mode = 'wait'
+        self._async_detect_with_lock = True
         self._protect_device_assignments = True
         self._create_devs()
         self._async_local_data = threading.local()
@@ -1432,6 +1481,17 @@ class BaseInstrument(object):
         self._conf_helper_cache = None # this is filled by conf_helper (should be under a locked state to prevent troubles)
         self.init(full=True)
         self._quiet_load = False
+
+    def _check_id_test(self, skip_id_test):
+        if not CHECKING():
+            if not skip_id_test:
+                idns = self.idn_split()
+                if not instruments_registry.check_instr_id(self.__class__, idns['vendor'], idns['model'], idns['firmware']):
+                    print('WARNING: this particular instrument idn is not attached to this class: operations might misbehave.')
+                    #print(self.__class__, idns)
+                    return False # Not correct id
+        return True # ok
+
     def __del__(self):
         if not (self._quiet_delete or self._quiet_load):
             print('Destroying '+repr(self))
@@ -1473,27 +1533,31 @@ class BaseInstrument(object):
             print(self.perror('***** WARNING You should give a value for async_wait *****'))
             self._async_wait_check = False
     @locked_calling
-    def wait_after_trig(self):
+    def wait_after_trig(self, max_wait_time=None):
         """
         waits until the triggered event is finished
         """
         try:
-            ret = wait_on_event(self._async_detect)
+            with release_lock_context(self, self._async_detect_with_lock):
+                ret = wait_on_event(self._async_detect, max_time=max_wait_time)
         finally:
             self._async_cleanup_after()
         return ret
     # Always make sure that asyncThread run behaves in the same way
     @locked_calling
-    def run_and_wait(self):
+    def run_and_wait(self, max_wait_time=None):
         """
         This initiate a trigger and waits for it to finish.
+        It returns False if max_wait_time elapse, True if it did not
+        Before the trigger, it waits the async_delay time (same thing getasync does)
         """
         sleep(self.async_delay.getcache())
         try:
             self._async_trig()
-            self.wait_after_trig()
+            ret = self.wait_after_trig(max_wait_time=max_wait_time)
         finally: # in case we were stopped because of KeyboardInterrupt or something else.
             self._async_cleanup_after()
+        return ret
     def _get_async_local_data(self):
         d = self._async_local_data
         try:
@@ -1536,7 +1600,8 @@ class BaseInstrument(object):
                 data.async_select_list = []
                 data.async_list_init = [(self._async_select, (data.async_select_list, ), {})]
                 delay = self.async_delay.getcache()
-                data.async_task = asyncThread(data.async_list, self._lock_instrument, self._lock_extra, data.async_list_init, delay=delay)
+                data.async_task = asyncThread(data.async_list, self._lock_instrument, self._lock_extra,
+                                              data.async_list_init, delay=delay, detect_with_lock=self._async_detect_with_lock)
                 data.async_list_init.append((self._under_async_setup, (data.async_task,), {}))
                 data.async_level = 0
             if trig:
@@ -1767,17 +1832,21 @@ class BaseInstrument(object):
         if force:
             self.force_get()
         ret = ''
-        np.set_printoptions(threshold=50)
-        for s, obj in self.devs_iter():
-            if obj is self._async_base_dev:
-                continue
-            if self.alias == obj:
-                ret += 'alias = '
-            val = repr(obj.getcache())
-            if len(val) > 200:
-                val = val[:100] + ' ... ' + val[-100:]
-            ret += s+" = "+val+"\n"
-        np.set_printoptions(**poptions)
+        try:
+            np.set_printoptions(threshold=50)
+            for s, obj in self.devs_iter():
+                if obj is self._async_base_dev:
+                    continue
+                if self.alias == obj:
+                    ret += 'alias = '
+                val = _repr_or_string(obj.getcache())
+                # could still be unicode in py2, byte in py3, force it to str in both
+                val = _str_or_repr(val)
+                if len(val) > 200:
+                    val = val[:100] + ' ... ' + val[-100:]
+                ret += s+" = "+val+"\n"
+        finally:
+            np.set_printoptions(**poptions)
         return ret
     def idn(self):
         """
@@ -1828,7 +1897,7 @@ class BaseInstrument(object):
 #######################################################
 
 class MemoryDevice(BaseDevice):
-    def __init__(self, initval=None, **kwarg):
+    def __init__(self, initval=None, no_type_conv=False, **kwarg):
         """
         Provides _tostr and _fromstr using the choices functions if
         choices are given. Otherwise it uses the type of initval.
@@ -1841,6 +1910,7 @@ class MemoryDevice(BaseDevice):
         self.setcache(initval, nolock=True)
         self._setdev_p = True # needed to enable BaseDevice set in checking mode and also the check function
         self._getdev_p = True # needed to enable BaseDevice get in Checking mode
+        self._no_type_conv = no_type_conv
         if self.choices is not None and isinstance(self.choices, ChoiceBase):
             self.type = self.choices
         else:
@@ -1853,12 +1923,102 @@ class MemoryDevice(BaseDevice):
         self.setcache(val)
     def _tostr(self, val):
         # This function converts from val to a str for the command
+        if self._no_type_conv:
+            return val
         t = self.type
         return _tostr_helper(val, t)
     def _fromstr(self, valstr):
         # This function converts from the query result to a value
+        if self._no_type_conv:
+            return valstr
         t = self.type
         return _fromstr_helper(valstr, t)
+
+#######################################################
+##    Memory device update and controlled by ch.
+#######################################################
+
+class MemoryDevice_update(MemoryDevice):
+    def __init__(self, *args, **kwargs):
+        """ update_func is called after a set to update the instrument.
+              It is called with the ch number as the first positional paramter
+              and the self as the second
+            uncond_update_func is like update_func except it is called even if
+               skip_update is True (but not if set to "both"). It is called before update_func
+            nch, when set is the number of channels of data to save internally.
+              With this, it enables the use of ch as an option for set/get
+            ch_helper_func needs to be set when nch is given. That function will
+               be called with the ch parameter and must activate if necessary
+               and return the current channel.
+            first_ch is the first ch number. defaults to 1.
+            ch_name is the ch option name, it defaults to 'ch'
+        """
+        update_func = kwargs.pop('update_func', None)
+        uncond_update_func = kwargs.pop('uncond_update_func', None)
+        nch = self._nch = kwargs.pop('nch', None)
+        first_ch = kwargs.pop('first_ch', 1)
+        ch_helper_func = kwargs.pop('ch_helper_func', None)
+        self._ch_name = kwargs.pop('ch_name', 'ch')
+        self._update_func = func_or_proxy(update_func) if update_func is not None else None
+        self._uncond_update_func = func_or_proxy(uncond_update_func) if uncond_update_func is not None else None
+        self._cached_ch = None
+        super(MemoryDevice_update, self).__init__(*args, **kwargs)
+        if nch is not None:
+            val = self.getcache(local=True)
+            self._internal_vals = [val]*nch
+            self._ch_helper_func = func_or_proxy(ch_helper_func)
+            self._first_ch = first_ch
+            # Need to reenable autoinit so changing channel forces cache update
+            self._autoinit = True
+    def _ch_helper(self, ch=None):
+        if self._nch is not None:
+            ch = self._ch_helper_func(ch)
+        elif ch is not None:
+            raise ValueError(self.perror('You cannnot specify a channel(%s) for this device.'%self._ch_name))
+        return ch
+    def getcache(self, local=False):
+        if local:
+            return super(MemoryDevice_update, self).getcache(local=True)
+        #we need to check if we still are using the same options
+        curr_ch = self._ch_helper()
+        if self._cached_ch != curr_ch:
+            self.setcache(None)
+            self._cached_ch = curr_ch
+        return super(MemoryDevice_update, self).getcache()
+    def _parse_ch_option(self, kwargs):
+        ch = kwargs.pop(self._ch_name, None)
+        if len(kwargs):
+            raise ValueError('Unexpected named parameter')
+        return ch
+    def _getdev(self, **kwargs):
+        ch = self._parse_ch_option(kwargs)
+        ch = self._ch_helper(ch)
+        if ch is None:
+            return super(MemoryDevice_update, self)._getdev()
+        return self._internal_vals[ch-self._first_ch]
+    def _setdev(self, val, skip_update=False, **kwargs):
+        ch = self._parse_ch_option(kwargs)
+        ch = self._ch_helper(None) # Channel already changed in check
+        if ch is not None:
+            self._internal_vals[ch-self._first_ch] = val
+        super(MemoryDevice_update, self)._setdev(val) # This updates the cache
+        self._cached_ch = ch
+        if self._uncond_update_func is not None and not skip_update == 'both':
+            self._uncond_update_func(ch, self)
+        if self._update_func is not None and not skip_update:
+            self._update_func(ch, self)
+    def _checkdev(self, val, skip_update=False, **kwargs):
+        ch = self._parse_ch_option(kwargs)
+        ch = self._ch_helper(ch)
+        super(MemoryDevice_update, self)._checkdev(val)
+
+def func_or_proxy(func):
+    if isinstance(func, types.MethodType):
+        func_self = func.__self__ if is_py3 else func.im_self
+        if func_self is not None:
+            return ProxyMethod(func)
+    return func
+
 
 def _tostr_helper(val, t):
     # This function converts from val to a str for the command
@@ -1866,9 +2026,9 @@ def _tostr_helper(val, t):
         return str(int(bool(val)))
     if t == float or t == int:
         # use repr instead of str to keep full precision
-        return repr(val)
+        return _repr_or_string(val)
     if t == complex:
-        return '%r,%r'%(val.real, val.imag)
+        return '%s,%s'%(_repr_or_string(val.real), _repr_or_string(val.imag))
     if t is None or (type(t) == type and issubclass(t, string_bytes_types)):
         return val
     return t.tostr(val)
@@ -1914,17 +2074,417 @@ def _get_dev_min_max(instr, ask_str, str_type=float, ask='both'):
     return min, max
 
 #######################################################
-##    SCPI device
+##    Base2 device
 #######################################################
 
-class scpiDevice(BaseDevice):
-    _autoset_val_str = ' {val}'
-    def __init__(self,setstr=None, getstr=None, raw=False, chunk_size=None, autoinit=True, autoget=True, get_cached_init=None,
-                 str_type=None, choices=None, doc='',
+class Base2Device(BaseDevice):
+    def __init__(self, autoinit=True, cache_init=None,
+                 cache_as_get=None, multi_cache=None,
+                 choices=None, doc='',
                  auto_min_max=False,
                  options={}, options_lim={}, options_apply=[], options_conv={},
                  extra_check_func=None, extra_set_func=None, extra_set_after_func=None,
+                 extra_get_after_func=None,
+                 ask_write_opt={}, **kwarg):
+        """
+           auto_min_max can be False, True, 'min' or 'max'. True will do both 'min' and
+            'max'. It will call the getstr with min, max to obtain the limits.
+
+           cache_init is the initial value for the cache. It will probably byposs autoinit unless the
+                  value can go back to None.
+           cache_as_get: This is for devices that don't handle get. We are therefore forced
+                         to use a cache. The value can be None (default) or False which is disabled,
+                         True to enable it (for simple value with no options), or a tuple. The first tuple element is
+                         a list of some of the options (from the options
+                         parameter below) that will be used as keys. The second tuple element, if given,
+                         is the initialization dictionnary of the cache (either a single value or a dictionary)
+                         If initialization is not given, it will use cache_init or just be set to None.
+                         The third tuple element is a function applied to val to adjust the set value to
+                         the actual instrument value (for example to produce value discretization).
+                         It has signature func(val, options_base)
+                         The fourth tuple element is a dict of functions to apply to the option. If provided
+                         the keys are the same as the first tuple.
+                         The signature is func(option_name, option_value)
+                         NOTE: the setget options is probably useless here.
+                               It is probably correct to have autoinit=True
+                               (so when the basic cache is set to None, it will be refreshed automatically.)
+            multi_cache: Similar to cache_as_get but it is used for instrument that have
+                         a get but with multiple options. This will allow the cache to return
+                         without having to do a full get. Mostly useful with instruments with
+                         no front panel, otherwise the cache value could be very much outdated.
+                         None or False disables it.
+                         Otherwise use the same tuple as for cache_as_get skipping element 2
+                          (there is no initialization)
+                         To use the cache, get as a new parameter, use_cache, which when True
+                         will try the cache if available, otherwise will proceed to a regular get.
+           options is a list of optional parameters for get and set.
+                  It is a dictionnary, where the keys are the option name
+                  and the values are the default value for each option.
+                  If the value is a device. Then by default the cache of the
+                  device is used.
+                  An option like 'ch' can be used in the setstr/getstr parameter
+                     as {ch} (see string.format)
+                  For the setstr string you can use {val} to specify the position of the
+                  value, otherwise ' {val}' is automatically appended. Note that if specify
+                  {val} in the setstr, autoget is disabled.
+           options_lim is dict of the range of values: It can be
+                      -None (the default) which means no limit
+                      -a tuple of (min, max)
+                               either one can be None to be unset
+                      -a list of choices (the object needs to handle __contains__)
+           options_conv is a dict of functions to convert the value to a useful format.
+                      the functions receives 2 parameters (val, _tostr(val))
+           options_apply is a list of options that need to be set. In that order when defined.
+           By default, autoinit=True is transformed to 10 (higher priority)
+           unless options contains another device, then it is set to 1.
+           extra_check_func, extra_set_func, extra_set_after_func, extra_get_after_func
+           are all functions called before or after (when in the name) the internal
+           implementation proceeds. They allow modification of the default behavior
+           (useful for more complicated range check). There signatures are:
+              extra_check_func(val, dev_obj)
+               can return "__SKIP__NEXT__" to jump the internal implementation
+              extra_set_func(val, dev_obj, **kwargs)
+               can return "__SKIP__NEXT__" to jump the internal implementation
+              extra_set_after_func(val, dev_obj, **kwargs)
+              extra_get_after_func(val, dev_obj, **kwargs)
+        """
+        if auto_min_max not in [False, True, 'min', 'max']:
+            raise ValueError('Invalid auto_min_max values')
+        self._auto_min_max = auto_min_max
+        if autoinit == True:
+            autoinit = 10
+            test = [ True for k,v in options.items() if isinstance(v, BaseDevice)]
+            if len(test):
+                autoinit = 1
+        super(Base2Device, self).__init__(doc=doc, autoinit=autoinit, choices=choices, **kwarg)
+        self._getdev_cache_conf = False
+        if cache_init is not None:
+            # This is to skip setting _getdev_cache
+            self._set_getdev_cache_updated = True
+            self.setcache(cache_init, nolock=True)
+        else:
+            self._set_getdev_cache_updated = False
+        self._multi_cache = False
+        if multi_cache not in [None, False]:
+            if multi_cache is True or not isinstance(multi_cache, tuple):
+                raise ValueError('multi_cache cannot be True and has to be a tuple')
+            if len(multi_cache) not in [1,2,3]:
+                raise ValueError('The multi_cache tuple needs 1, 2 or 3 elements')
+            cache_as_get = (multi_cache[0], None) + multi_cache[1:]
+            self._multi_cache = True
+        if cache_as_get not in [None, False]:
+            self._getdev_p = True
+            if cache_as_get is True:
+                self._getdev_cache_conf = ((), cache_init, None, {}) # list of options, init_values, conv_func, dict of norm funcs
+                self._getdev_cache = {():cache_init}
+            else:
+                if not isinstance(cache_as_get, tuple):
+                    raise ValueError('Invalid cache_as_get value. Should be a tuple or True/False/None')
+                if len(cache_as_get) not in [1, 2, 3, 4]:
+                    raise ValueError('The cache_as_get tuple needs 1, 2, 3 or 4 elements')
+                for el in cache_as_get[0]:
+                    if el not in options:
+                        raise ValueError('cache_as_get list of parameters is not one of the options')
+                conv_func = None
+                norm_funcs = {}
+                if len(cache_as_get) >= 2:
+                    init = cache_as_get[1]
+                    if isinstance(init, dict):
+                        self._getdev_cache = init
+                        init = None
+                    else:
+                        self._getdev_cache = {}
+                    if len(cache_as_get) >= 3:
+                        conv_func = cache_as_get[2]
+                    if len(cache_as_get) >= 4:
+                        norm_funcs = cache_as_get[3]
+                else:
+                    self._getdev_cache = {}
+                    init = cache_init
+                self._getdev_cache_conf = (cache_as_get[0], init, conv_func, norm_funcs)
+        self._options = options
+        self._options_lim = options_lim
+        self._options_apply = options_apply
+        self._options_conv = options_conv
+        self._extra_check_func = extra_check_func
+        self._extra_set_func = extra_set_func
+        self._extra_set_after_func = extra_set_after_func
+        self._extra_get_after_func = extra_get_after_func
+        self._option_cache = {}
+
+    def _delayed_init(self):
+        """ This is called after self.instr is set """
+        auto_min_max = self._auto_min_max
+        if auto_min_max in ['min', 'max']:
+            self._auto_set_min_max(auto_min_max)
+        elif auto_min_max:
+            self._auto_set_min_max()
+        super(Base2Device, self)._delayed_init()
+    def _auto_set_min_max(self, ask='both'):
+        mnmx = self._get_dev_min_max(ask)
+        self._set_dev_min_max(*mnmx)
+    @locked_calling_dev
+    def _get_dev_min_max(self, ask='both'):
+        """ ask can be both, min or max. It always returns a tuple (min, max).
+            If the value was not obtained it will be None.
+            See also instr._get_dev_min_max
+        """
+        raise NotImplementedError(self.perror('obtaining min/max not implemented'))
+    def _set_dev_min_max(self, min=None, max=None):
+        if min is not None:
+            self.min = min
+        if max is not None:
+            self.max = max
+
+    def _get_docstring(self, added=''):
+        # we don't include options starting with _
+        if len(self._options) > 0:
+            added += '---------- Optional Parameters\n'
+            for optname, optval in self._options.items():
+                basedev = False
+                if isinstance(optval, BaseDevice):
+                    basedev = True
+                if optname[0] != '_':
+                    added += '{optname}: has default value {optval!r}\n'.format(optname=optname, optval=optval)
+                    lim = self._options_lim.get(optname, None)
+                    if lim is not None:
+                        if basedev:
+                            added += '        current choices (above device): '
+                        else:
+                            added += '        current choices: '
+                        if isinstance(lim, tuple):
+                            if lim[0] is None and lim[1] is None:
+                                added += 'any value allowed'
+                            else:
+                                if lim[0] is not None:
+                                    added += '%r <= '%lim[0]
+                                added += '%s'%optname
+                                if lim[1] is not None:
+                                    added += ' <= %r'%lim[1]
+                        else:
+                            added += repr(lim)
+                        added += '\n'
+        return super(Base2Device, self)._get_docstring(added=added)
+    def _tostr(self, val):
+        # convert from python value to interface value (can be a string like for scpi or not)
+        # here we do no conversion. Override it in subclass
+        return val
+    def _fromstr(self, valstr):
+        # convert from interface value to python value (input can be a string like for scpi or not)
+        # here we do no conversion. Override it in subclass
+        return valstr
+    def _get_option_values(self, extradict={}):
+        opt = self._options.copy()
+        d = {k:v.getcache() for k, v in opt.items() if isinstance(v, BaseDevice)}
+        opt.update(d)
+        opt.update(extradict)
+        return opt
+    @locked_calling_dev
+    def getcache(self, local=False):
+        if local:
+            return super(Base2Device, self).getcache(local=True)
+        #we need to check if we still are using the same options
+        curr_cache = self._get_option_values()
+        if self._option_cache != curr_cache:
+            self.setcache(None)
+        return super(Base2Device, self).getcache()
+    def _check_option(self, option, val):
+        """
+        Checks the option with value val
+          If it is not an option, raise an KeyError
+          If it is not within min/max or choices for this option, returns an error string
+          If everything is fine, return None
+        """
+        if option not in self._options.keys():
+            raise KeyError(self.perror('This device does not handle option "%s".'%option))
+        lim = self._options_lim.get(option)
+        # if no limits were given but this is a device, use the limits from the device.
+        # TODO use dev.check (trap error)
+        if lim is None and isinstance(self._options[option], BaseDevice):
+            dev = self._options[option]
+            lim = (dev.min, dev.max)
+            if dev.choices is not None:
+                lim = dev.choices
+        return self._general_check(val, lims=lim, msg_src='Option "%s"'%option, str_return=True)
+    def _default_converter(self, val):
+        return _repr_or_string(val) # This used to be repr. This change could break for string values
+    def _conv_one_option(self, val, option_dev, option_lim):
+        if isinstance(option_dev, BaseDevice):
+            try:
+                tostr_val = option_dev._tostr(val)
+            except AttributeError:
+                # Some devices like BaseDevice, cls_WrapDevice don't have _tostr
+                tostr_val = self._default_converter(val)
+        #elif isinstance(option_lim, ChoiceBase):
+        elif option_lim is not None:
+            try:
+                tostr_val = option_lim.tostr(val)
+            except AttributeError:
+                tostr_val = self._default_converter(val)
+        else:
+            tostr_val = self._default_converter(val)
+        return tostr_val
+    def _combine_options(self, **kwarg):
+        # get values from devices when needed.
+        # The list of correct values could be a subset so push them to kwarg
+        # for testing.
+        # clean up kwarg by removing all None values
+        kwarg = { k:v for k, v in kwarg.items() if v is not None}
+        for k, v in kwarg.items():
+            ck = self._check_option(k, v)
+            if ck is not None:
+                # in case of error, raise it
+                raise InvalidArgument(ck)
+        # Some device need to keep track of current value so we set them
+        # if changed
+        for k in self._options_apply:
+            if k in kwarg.keys():
+                v = kwarg[k]
+                opt_dev = self._options[k]
+                if opt_dev.getcache() != v:
+                    opt_dev.set(v)
+        # Now get default values and check them if necessary
+        options = self._get_option_values(kwarg)
+        for k,v in options.items():
+            if k not in kwarg:
+                ck = self._check_option(k, v)
+                if ck is not None:
+                    # There was an error, returned value not currently valid
+                    # so return it instead of dictionnary
+                    raise InvalidAutoArgument(ck)
+        # everything checks out so use those kwarg
+        options.update(kwarg)
+        options_base = options.copy()
+        self._option_cache = options_base
+        for k in options.keys():
+            val = options[k]
+            option_dev  = self._options[k]
+            option_lim = self._options_lim.get(k, None)
+            tostr_val = self._conv_one_option(val, option_dev, option_lim)
+            try:
+                conv = self._options_conv[k]
+            except KeyError:
+                options[k] = tostr_val
+            else:
+                options[k] = conv(val, tostr_val)
+        return options, options_base # converted options (instruments versions) and unconverted options (python's version)
+    def _set_write(self, val, options):
+        # This is called with val already in instrument format.
+        raise NotImplementedError(self.perror('_set_write not implemented'))
+
+    def _get_cache_key(self, options):
+        ret = []
+        for opt_name in self._getdev_cache_conf[0]:
+            norm_func = self._getdev_cache_conf[3].get(opt_name, None)
+            opt_val = options[opt_name]
+            if norm_func is not None:
+                opt_val = norm_func(opt_name, opt_val)
+            ret.append(opt_val)
+        return tuple(ret)
+
+    def _setdev(self, val):
+        # We only reach here if self._setdev_p is not None
+        if self._extra_set_func:
+            if self._extra_set_func(val, self) == "__SKIP__NEXT__":
+                return
+        val_orig = val
+        val = self._tostr(val)
+        options = self._check_cache['options']
+        self._set_write(val, options)
+        if self._getdev_cache_conf:
+            options_base = self._check_cache['options_base']
+            key = self._get_cache_key(options_base)
+            val_orig = self._set_getdev_cache(val_orig, key=key, options_base=options_base)
+            # See comments in setcache for explanation about this
+            # _set_getdev_cache_updated toggle.
+            self._set_getdev_cache_updated = True
+        if self._extra_set_after_func:
+            self._extra_set_after_func(val_orig, self, **options)
+
+    def _get_ask(self, options):
+        # You can add self._get_para_checked() before the actual operation, then you can __init__ with the
+        # get_has_check=True parameter
+        # this returns a value in instrument format
+        raise NotImplementedError(self.perror('_get_ask not implemented'))
+
+    def setcache(self, val, nolock=False, key=None, options_base=None):
+        if self._set_getdev_cache_updated == True:
+            # We don't need to handle the next setcache fully (in BaseDevice set)
+            # because we already set the getdev_cache
+            # This is to try to keep the previous behavior as close as possible to what it was
+            self._set_getdev_cache_updated = False
+            return super(Base2Device, self).setcache(val, nolock=nolock)
+        if nolock == True:
+            super(Base2Device, self).setcache(val, nolock=nolock)
+            self._set_getdev_cache(val, key=key, options_base=options_base)
+        else:
+            with self.instr._lock_instrument: # only local data, so don't need _lock_extra
+                super(Base2Device, self).setcache(val, nolock=True) # already have lock
+                self._set_getdev_cache(val, key=key, options_base=options_base)
+
+    def _set_getdev_cache(self, val, key=None, options_base=None):
+        if not self._getdev_cache_conf:
+            return val
+        if val is None:
+            return val
+        if options_base is None:
+            options, options_base = self._combine_options()
+        if key is None:
+            key = self._get_cache_key(options_base)
+        conv_func = self._getdev_cache_conf[2]
+        if conv_func is not None:
+            val = conv_func(val, options_base)
+            self._set_delayed_cache = val
+        self._getdev_cache[key] = val
+        return val
+
+    def _getdev(self, **kwarg):
+        if self._multi_cache:
+            use_cache = kwarg.pop('use_cache', False)
+        else:
+            use_cache = True
+        try:
+            options, options_base = self._combine_options(**kwarg)
+        except InvalidAutoArgument:
+            self.setcache(None)
+            raise
+        if self._getdev_cache_conf and use_cache:
+            key = self._get_cache_key(options_base)
+            val = self._getdev_cache.get(key, None)
+            if val is None and not self._multi_cache:
+                val = self._getdev_cache_conf[1]
+                val = self._set_getdev_cache(val, key=key, options_base=options_base)
+                self._set_getdev_cache_updated = True
+                # get does a setcache.
+            if not self._multi_cache or val is not None:
+                return val
+        ret = self._get_ask(options)
+        val = self._fromstr(ret)
+        if self._extra_get_after_func:
+            self._extra_get_after_func(val, self, **options)
+        return val
+    def _checkdev(self, val, **kwarg):
+        options, options_base = self._combine_options(**kwarg)
+        # all kwarg have been tested
+        self._check_cache['set_kwarg'] = {}
+        self._check_cache['options'] = options
+        self._check_cache['options_base'] = options_base
+        if self._extra_check_func:
+            if self._extra_check_func(val, self) == "__SKIP__NEXT__":
+                return
+        super(Base2Device, self)._checkdev(val)
+
+
+#######################################################
+##    SCPI device
+#######################################################
+
+class scpiDevice(Base2Device):
+    _autoset_val_str = ' {val}'
+    def __init__(self, setstr=None, getstr=None, raw=False, chunk_size=None, autoinit=True, autoget=True,
+                 str_type=None, choices=None,
                  write_func=None, ask_func=None,
+                 cache_as_get=False,
                  ask_write_opt={}, **kwarg):
         """
            str_type can be float, int, None
@@ -1980,20 +2540,12 @@ class scpiDevice(BaseDevice):
         """
         if setstr is None and getstr is None:
             raise ValueError('At least one of setstr or getstr needs to be specified')
-        if auto_min_max not in [False, True, 'min', 'max']:
-            raise ValueError('Invalid auto_min_max values')
-        self._auto_min_max = auto_min_max
-        if setstr is not None and getstr is None and autoget == False:
+        if setstr is not None and getstr is None and autoget == False and not cache_as_get:
             # we don't have get, so we remove autoinit to prevent problems with cache and force_get (iprint)
             autoinit = False
         if isinstance(choices, ChoiceBase) and str_type is None:
             str_type = choices
-        if autoinit == True:
-            autoinit = 10
-            test = [ True for k,v in options.items() if isinstance(v, BaseDevice)]
-            if len(test):
-                autoinit = 1
-        BaseDevice.__init__(self, doc=doc, autoinit=autoinit, choices=choices, get_has_check=True, **kwarg)
+        super(scpiDevice, self).__init__(autoinit=autoinit, choices=choices, cache_as_get=cache_as_get, get_has_check=True, **kwarg)
         self._setdev_p = setstr
         if setstr is not None:
             fmtr = string.Formatter()
@@ -2004,87 +2556,34 @@ class scpiDevice(BaseDevice):
                     autoget = False
             if not val_present:
                 self._setdev_p = setstr + self._autoset_val_str
-        self._getdev_cache = False
         if getstr is None:
             if autoget:
                 getstr = setstr+'?'
-            elif get_cached_init is not None:
-                self.setcache(get_cached_init, nolock=True)
-                self._getdev_cache = True
+                if cache_as_get:
+                    raise ValueError("You are providing a getstr (with autoget). You don't need to use cache_as_get.")
+            elif cache_as_get:
                 getstr = True
+        elif cache_as_get:
+            raise ValueError("You are providing a getstr. You don't need to use cache_as_get.")
         self._getdev_p = getstr
         self._getdev_last_full_cmd = ''
-        self._options = options
-        self._options_lim = options_lim
-        self._options_apply = options_apply
-        self._options_conv = options_conv
         self._ask_write_opt = ask_write_opt
-        self._extra_check_func = extra_check_func
-        self._extra_set_func = extra_set_func
-        self._extra_set_after_func = extra_set_after_func
         self.type = str_type
         self._raw = raw
         self._chunk_size = chunk_size
-        self._option_cache = {}
         self._write_func = write_func
         self._ask_func = ask_func
 
-    def _delayed_init(self):
-        """ This is called after self.instr is set """
-        auto_min_max = self._auto_min_max
-        if auto_min_max in ['min', 'max']:
-            self._auto_set_min_max(auto_min_max)
-        elif auto_min_max:
-            self._auto_set_min_max()
-        super(scpiDevice, self)._delayed_init()
-    def _auto_set_min_max(self, ask='both'):
-        mnmx = self._get_dev_min_max(ask)
-        self._set_dev_min_max(*mnmx)
     @locked_calling_dev
     def _get_dev_min_max(self, ask='both'):
         """ ask can be both, min or max. It always returns a tuple (min, max).
             If the value was not obtained it will be None.
             See also instr._get_dev_min_max
         """
-        options = self._combine_options()
+        options, options_base = self._combine_options()
         command = self._getdev_p
         command = command.format(**options)
         return _get_dev_min_max(self.instr, command, self.type, ask)
-    def _set_dev_min_max(self, min=None, max=None):
-        if min is not None:
-            self.min = min
-        if max is not None:
-            self.max = max
-
-    def _get_docstring(self, added=''):
-        # we don't include options starting with _
-        if len(self._options) > 0:
-            added += '---------- Optional Parameters\n'
-            for optname, optval in self._options.items():
-                basedev = False
-                if isinstance(optval, BaseDevice):
-                    basedev = True
-                if optname[0] != '_':
-                    added += '{optname}: has default value {optval!r}\n'.format(optname=optname, optval=optval)
-                    lim = self._options_lim.get(optname, None)
-                    if lim is not None:
-                        if basedev:
-                            added += '        current choices (above device): '
-                        else:
-                            added += '        current choices: '
-                        if isinstance(lim, tuple):
-                            if lim[0] is None and lim[1] is None:
-                                added += 'any value allowed'
-                            else:
-                                if lim[0] is not None:
-                                    added += '%r <= '%lim[0]
-                                added += '%s'%optname
-                                if lim[1] is not None:
-                                    added += ' <= %r'%lim[1]
-                        else:
-                            added += repr(lim)
-                        added += '\n'
-        return super(scpiDevice, self)._get_docstring(added=added)
     def _tostr(self, val):
         # This function converts from val to a str for the command
         t = self.type
@@ -2093,142 +2592,39 @@ class scpiDevice(BaseDevice):
         # This function converts from the query result to a value
         t = self.type
         return _fromstr_helper(valstr, t)
-    def _get_option_values(self, extradict={}):
-        opt = self._options.copy()
-        d = {k:v.getcache() for k, v in opt.items() if isinstance(v, BaseDevice)}
-        opt.update(d)
-        opt.update(extradict)
-        return opt
-    @locked_calling_dev
-    def getcache(self, local=False):
-        if local:
-            return super(scpiDevice, self).getcache(local=True)
-        #we need to check if we still are using the same options
-        curr_cache = self._get_option_values()
-        if self._option_cache != curr_cache:
-            self.setcache(None)
-        return super(scpiDevice, self).getcache()
-    def _check_option(self, option, val):
-        """
-        Checks the option with value val
-          If it is not an option, raise an KeyError
-          If it is not within min/max or choices for this option, returns an error string
-          If everything is fine, return None
-        """
-        if option not in self._options.keys():
-            raise KeyError(self.perror('This device does not handle option "%s".'%option))
-        lim = self._options_lim.get(option)
-        # if no limits were given but this is a device, use the limits from the device.
-        # TODO use dev.check (trap error)
-        if lim is None and isinstance(self._options[option], BaseDevice):
-            dev = self._options[option]
-            lim = (dev.min, dev.max)
-            if dev.choices is not None:
-                lim = dev.choices
-        return self._general_check(val, lims=lim, msg_src='Option "%s"'%option, str_return=True)
-    def _combine_options(self, **kwarg):
-        # get values from devices when needed.
-        # The list of correct values could be a subset so push them to kwarg
-        # for testing.
-        # clean up kwarg by removing all None values
-        kwarg = { k:v for k, v in kwarg.items() if v is not None}
-        for k, v in kwarg.items():
-            ck = self._check_option(k, v)
-            if ck is not None:
-                # in case of error, raise it
-                raise InvalidArgument(ck)
-        # Some device need to keep track of current value so we set them
-        # if changed
-        for k in self._options_apply:
-            if k in kwarg.keys():
-                v = kwarg[k]
-                opt_dev = self._options[k]
-                if opt_dev.getcache() != v:
-                    opt_dev.set(v)
-        # Now get default values and check them if necessary
-        options = self._get_option_values(kwarg)
-        for k,v in options.items():
-            if k not in kwarg:
-                ck = self._check_option(k, v)
-                if ck is not None:
-                    # There was an error, returned value not currently valid
-                    # so return it instead of dictionnary
-                    raise InvalidAutoArgument(ck)
-        # everything checks out so use those kwarg
-        options.update(kwarg)
-        self._option_cache = options.copy()
-        for k in options.keys():
-            val = options[k]
-            option_dev  = self._options[k]
-            option_lim = self._options_lim.get(k, None)
-            if isinstance(option_dev, BaseDevice):
-                try:
-                    tostr_val = option_dev._tostr(val)
-                except AttributeError:
-                    # Some devices like BaseDevice, cls_WrapDevice don't have _tostr
-                    tostr_val = repr(val)
-            #elif isinstance(option_lim, ChoiceBase):
-            elif option_lim is not None:
-                try:
-                    tostr_val = option_lim.tostr(val)
-                except AttributeError:
-                    tostr_val = repr(val)
-            else:
-                tostr_val = repr(val)
-            try:
-                conv = self._options_conv[k]
-            except KeyError:
-                options[k] = tostr_val
-            else:
-                options[k] = conv(val, tostr_val)
-        return options
-    def _setdev(self, val):
-        # We only reach here if self._setdev_p is not None
-        if self._extra_set_func:
-            if self._extra_set_func(val, self) == "__SKIP__NEXT__":
-                return
-        val_orig = val
-        val = self._tostr(val)
-        options = self._check_cache['options']
+    def _set_write(self, val, options):
+        # This is called with val already in instrument format.
         command = self._setdev_p
-        command = command.format(val=val, **options)
+        if is_py3 and isinstance(val, (bytes, bytearray)):
+            # can't use format on a str here
+            # and bytes str do not have format, but it does handle % conversion
+            command = command.replace('{val}', '%b')
+            if isinstance(command, str):
+                command = command.format(**options)
+            elif len(options):
+                raise ValueError('Cannot use format on bytes object.')
+            command = fb(command)%val
+        else:
+            command = command.format(val=val, **options)
         if self._write_func is None:
             write = self.instr.write
         else:
             write = self._write_func
         write(command, **self._ask_write_opt)
-        if self._extra_set_after_func:
-            self._extra_set_after_func(val_orig, self, **options)
-    def _getdev(self, **kwarg):
-        if self._getdev_cache:
-            if kwarg == {}:
-                return self.getcache()
-            else:
-                raise SyntaxError(self.perror('This device does not handle _getdev with optional arguments'))
-        try:
-            options = self._combine_options(**kwarg)
-        except InvalidAutoArgument:
-            self.setcache(None)
-            raise
+    def _get_ask(self, options):
+        # you should have self._get_para_checked() before the actual operation
+        # this returns a value in instrument format
         command = self._getdev_p
         command = command.format(**options)
         self._getdev_last_full_cmd = command
-        self._get_para_checked()
         if self._ask_func is None:
             ask = self.instr.ask
         else:
             ask = self._ask_func
+        self._get_para_checked()
         ret = ask(command, raw=self._raw, chunk_size=self._chunk_size, **self._ask_write_opt)
-        return self._fromstr(ret)
-    def _checkdev(self, val, **kwarg):
-        options = self._combine_options(**kwarg)
-        # all kwarg have been tested
-        self._check_cache['set_kwarg'] = {}
-        self._check_cache['options'] = options
-        if self._extra_check_func:
-            if self._extra_check_func(val, self) == "__SKIP__NEXT__":
-                return
-        super(scpiDevice, self)._checkdev(val)
+        return ret
+
 
 #######################################################
 ##    Readval device
@@ -2340,7 +2736,9 @@ def _decode_block(s, t='<f8', sep=None, skip=None):
              the end, or an integer of the number of character to remove from the end.
     """
     block = _decode_block_base(s, skip=skip)
-    if sep is None or len(block) == 0:
+    if len(block) == 0:
+        return np.fromstring('', t, sep=',')
+    if sep is None:
         return np_frombuffer(block, t)
     return np.fromstring(make_str(block), t, sep=sep)
 
@@ -2351,29 +2749,33 @@ def _encode_block(v, sep=None):
     or into a sep separated string. Often sep is ',' for scpi
     """
     if sep is not None:
-        return sep.join(map(repr, v))
+        return sep.join(map(_repr_or_string, v))
     if isinstance(v, string_bytes_types):
         s = v
     else:
         s = np_tobytes(np.asarray(v))
     return _encode_block_base(s)
 
-def _decode_block_auto(s, t='<f8', skip=None):
+def _decode_block_auto(s, t='<f8', skip=None, sep_default=','):
     if len(s) and s[0:1] == b'#':
         sep = None
     else:
-        sep = ','
+        sep = sep_default
     return _decode_block(s, t, sep=sep, skip=skip)
 
 class Block_Codec(object):
-    def __init__(self, dtype='<f8', sep=None, skip=None, single_not_array=False, empty=None):
+    def __init__(self, dtype='<f8', sep=None, skip=None, single_not_array=False, empty=None, decode_auto=False):
         self._dtype = dtype
         self._sep = sep
         self._skip = skip
         self._single_not_array = single_not_array
         self._empty = empty
+        self._decode_auto = decode_auto
     def __call__(self, input_str):
-        ret = _decode_block(input_str, self._dtype, self._sep, self._skip)
+        if self._decode_auto:
+            ret = _decode_block_auto(input_str, self._dtype, self._skip, self._sep)
+        else:
+            ret = _decode_block(input_str, self._dtype, self._sep, self._skip)
         empty = self._empty
         if empty is not None and len(ret) == 0:
             ret = np.append(ret, empty)
@@ -2701,14 +3103,16 @@ class ChoiceStrings(ChoiceBase):
        redirects option is a dictionnary of input strings to some other element.
           It can be useful for device that list ON or 1 as possible values.
           use it like {'1': 'ON'}
+       filter is a function that modifies the instrument string (like strip spaces.)
     """
     def __init__(self, *values, **kwarg):
         # use **kwarg because we can't have keyword arguments after *arg
         self.quotes = kwarg.pop('quotes', False)
         no_short = kwarg.pop('no_short', False)
         self.redirects = kwarg.pop('redirects', {})
+        self.filter = kwarg.pop('filter', None)
         if kwarg != {}:
-            raise TypeError('ChoiceStrings only has quotes=False and no_short=False as keyword arguments')
+            raise TypeError('ChoiceStrings only has quotes=False, no_short=False, redirects={} and filter=None as keyword arguments')
         self.values = values
         self.long = [v.lower() for v in values]
         if no_short:
@@ -2765,6 +3169,8 @@ class ChoiceStrings(ChoiceBase):
         return self.short[self.index(x)].upper()
     def __call__(self, input_str):
         # this is called by dev._fromstr to convert a string to the needed format
+        if self.filter is not None:
+            input_str = self.filter(input_str)
         input_str = self.redirects.get(input_str, input_str)
         if self.quotes:
             if input_str[0] != '"' or input_str[-1] != '"':
@@ -2802,11 +3208,17 @@ class ChoiceSimpleMap(ChoiceBase):
     It can be used to normalize the input entries
     allow_keys will permit __contains__ and tostr to also use entries in the keys
        if values fail.
+    keys_values_list can be used to override the internal list to allow multiple
+        values with the same key (for that to work, do not use allow_keys and set input
+                                  dict for the instrument to pyHegel conversion.)
     """
-    def __init__(self, input_dict, filter=None, allow_keys=False):
+    def __init__(self, input_dict, keys_values_lists = None, filter=None, allow_keys=False):
         self.dict = input_dict
-        self.keys = list(input_dict.keys())
-        self.values = list(input_dict.values())
+        if keys_values_lists is not None:
+            self.keys, self.values = keys_values_lists
+        else:
+            self.keys = list(input_dict.keys())
+            self.values = list(input_dict.values())
         self.filter = filter
         self.allow_keys = allow_keys
         if filter is not None:
@@ -2818,6 +3230,12 @@ class ChoiceSimpleMap(ChoiceBase):
         if not is_in and self.allow_keys:
             is_in = x in self.keys
         return is_in
+    def check_input(self, input_key):
+        # This needs to match what __call__ does.
+        # It is used by ChoiceValMap
+        if self.filter is not None:
+            input_key = self.filter(input_key)
+        return input_key in self.dict
     def __call__(self, input_key):
         if self.filter is not None:
             input_key = self.filter(input_key)
@@ -2840,6 +3258,46 @@ class ChoiceSimpleMap(ChoiceBase):
 
 Choice_bool_OnOff = ChoiceSimpleMap(dict(ON=True, OFF=False), filter=string_upper)
 Choice_bool_YesNo = ChoiceSimpleMap(dict(YES=True, NO=False), filter=string_upper)
+
+class ChoiceValMap(ChoiceBase):
+    """
+    This is a combination of ChoiceLimits and ChoiceSimpleMap.
+    It takes a str_type, min and max like ChoiceLimits for most values.
+    However it takes a dict of special values that are also accepted
+    where keys are the instrument side data and values are the python side ones.
+    Like for ChoiceSimpleMap you can overide the values with a keys_values_lists and
+    with a filter function.
+    For example, you could use {0:'MIN', np.inf:'MAX'}
+    """
+    def __init__(self, special_vals_dict, str_type=float, min=None, max=None, keys_values_lists = None, filter=None, allow_keys=False):
+        self.limits = ChoiceLimits(min=min, max=max, str_type=str_type)
+        self.map = ChoiceSimpleMap(special_vals_dict, keys_values_lists = keys_values_lists, filter=filter, allow_keys=allow_keys)
+    def __call__(self, input_str):
+        if self.map.check_input(input_str):
+            return self.map(input_str)
+        return self.limits(input_str)
+    def tostr(self, val):
+        if val in self.map:
+            return self.map.tostr(val)
+        return self.limits.tostr(val)
+    def __contains__(self, val):
+        if val in self.map:
+            return True
+        return val in self.limits
+    def __repr__(self):
+        base = 'Special values are %r, otherwise '%self.map
+        lims = repr(self.limits)
+        lims.replace('Limits: ', '')
+        return base + lims.replace('Limits: ', '')
+        if self.min is None and self.max is None:
+            return base + 'any val'
+        elif self.min is None:
+            return base + 'val <= %s'%self.max
+        elif self.max is None:
+            return base + '%s <= val'%self.min
+        else:
+            return base + '%s <= val <= %s'%(self.min, self.max)
+
 
 class ChoiceIndex(ChoiceBase):
     """
@@ -3033,7 +3491,8 @@ def make_choice_list(list_values, start_exponent, end_exponent):
 
 
 class ChoiceMultiple(ChoiceBase):
-    def __init__(self, field_names, fmts=int, sep=',', ending_sep=False, ending_sep_get=None, allow_missing_keys=False, reading_sep=None, protect_sep=False):
+    def __init__(self, field_names, fmts=int, sep=',', ending_sep=False, ending_sep_get=None,
+                 allow_missing_keys=False, reading_sep=None, protect_sep=False, allow_short_read=False):
         """
         This handles scpi commands that return a list of options like
          1,2,On,1.34
@@ -3054,6 +3513,8 @@ class ChoiceMultiple(ChoiceBase):
         allow_missing_keys when True, will not produce error for missing field_names when checking
         readding_sep when not None is used instead of sep when obtaining data from instrument.
         protect_sep as in protected_sep_split
+        allow_short_read will skip missing iterms. It can be True/False or a number indicating how many
+               skips are allowed at the end of the fields.
         If any of the fmts has a fixed_length_on_read attribute, it is used for the length in protected_sep_split
         """
         self.field_names = field_names
@@ -3077,6 +3538,11 @@ class ChoiceMultiple(ChoiceBase):
         self.sep = sep
         self.ending_sep_set = ending_sep
         self.ending_sep_get = ending_sep
+        if allow_short_read is False:
+            allow_short_read = 0
+        if allow_short_read is True:
+            allow_short_read = len(field_names)
+        self.allow_short_read = allow_short_read
         if ending_sep_get is not None:
             self.ending_sep_get = ending_sep_get
         self.reading_sep = sep if reading_sep is None else reading_sep
@@ -3090,7 +3556,9 @@ class ChoiceMultiple(ChoiceBase):
             else:
                 raise ValueError('Expected ending sep in class %s'%self.__class__.__name__)
         v_base = protected_sep_split(fromstr, sep=sep, lengths=self.fixed_length, protect=self.protect_sep)
-        if len(v_base) != len(self.field_names):
+        Nb = len(v_base)
+        Nf = len(self.field_names)
+        if Nb != Nf and (Nb > Nf or Nb < Nf-self.allow_short_read):
             raise ValueError('Invalid number of parameters in class %s'%self.__class__.__name__)
         v_conv = []
         names = []
@@ -3447,6 +3915,10 @@ class _SharedStructure(object):
         count = self._get_count()
         if _SharedStructure_debug:
             print('Cleaned up mmap, counter now %i'%self._get_count())
+        # python 3 prevents closing the structure if there are still variable accessing it
+        # so delete them
+        del self.data
+        del self._counter
         self.buffer.close()
         if count == 0 and os.name != 'nt':
             self._shared_obj.unlink()
@@ -3502,8 +3974,10 @@ class visaInstrument(BaseInstrument):
           'USB0::0x0957::0x0118::MY49012345::0::INSTR'
           'USB::0x0957::0x0118::MY49012345'
     """
+    # This is necessary to prevent an exception in __del__ for example when no visa_addr is given
+    _keep_alive_thread = None
     def __init__(self, visa_addr, skip_id_test=False, quiet_delete=False, keep_alive=False, keep_alive_time=15*60, no_visa_lock=False,
-                       timeout=2.9, **kwarg):
+                       timeout=2.9, bypass_open=False, **kwarg):
         """
         skip_id_test when True will skip doing the idn test.
         quiet_delete when True will prevent the print following an instrument delete
@@ -3521,9 +3995,10 @@ class visaInstrument(BaseInstrument):
         self.visa_addr = visa_addr
         self._keep_alive_thread = None
         if not CHECKING():
-            self.visa = rsrc_mngr.open_resource(visa_addr, **kwarg)
-            if not no_visa_lock:
-                self._lock_extra = Lock_Visa(self.visa)
+            if not bypass_open:
+                self.visa = rsrc_mngr.open_resource(visa_addr, **kwarg)
+                if not no_visa_lock:
+                    self._lock_extra = Lock_Visa(self.visa)
             self.set_timeout = timeout
         to = time.time()
         self._last_rw_time = _LastTime(to, to) # When wait time are not 0, it will be replaced
@@ -3538,15 +4013,10 @@ class visaInstrument(BaseInstrument):
             # communication. So keepalive should send at least '\n' if that is valid.
             self._keep_alive_thread = Keep_Alive(keep_alive_time, self._keep_alive_func)
         BaseInstrument.__init__(self, quiet_delete=quiet_delete)
-
-        if not CHECKING():
-            if not skip_id_test:
-                idns = self.idn_split()
-                if not instruments_registry.check_instr_id(self.__class__, idns['vendor'], idns['model'], idns['firmware']):
-                    print('WARNING: this particular instrument idn is not attached to this class: operations might misbehave.')
-                    #print(self.__class__, idns)
+        self._check_id_test(skip_id_test)
         if self._keep_alive_thread:
             self._keep_alive_thread.start()
+
     def __del__(self):
         #print('Destroying '+repr(self))
         # no need to call self.visa.close()
@@ -3645,7 +4115,8 @@ class visaInstrument(BaseInstrument):
             return
         if not isinstance(self._last_rw_time, _SharedStructure):
             # The timeout needs to work across process, So we now share the last time values
-            tagname = 'pyHegel-' + self.__class__.__name__ + '-' + hashlib.sha1(self.visa_addr).hexdigest()
+            tagname = 'pyHegel-' + self.__class__.__name__ + '-' + \
+                            hashlib.sha1(fb(self.visa.instr.resource_name)).hexdigest()
             old = self._last_rw_time
             self._last_rw_time = _SharedStructure(_LastTime, tagname)
             self._last_rw_time.read_time = old.read_time
@@ -3656,7 +4127,7 @@ class visaInstrument(BaseInstrument):
             sleep(delta)
     @locked_calling
     def read(self, raw=False, encoding=None, count=None, chunk_size=None):
-        return self.read_unlocked(raw=raw, count=count, chunk_size=chunk_size)
+        return self.read_unlocked(raw=raw, encoding=encoding, count=count, chunk_size=chunk_size)
     def read_unlocked(self, raw=False, encoding=None, count=None, chunk_size=None):
         """ reads data.
             The default is to read until an end is received in chunk_size blocks

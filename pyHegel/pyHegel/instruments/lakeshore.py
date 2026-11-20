@@ -335,7 +335,7 @@ class lakeshore_336(visaInstrument):
         # see also the begining of _create_devs for write timings.
         super(lakeshore_336, self).__init__(visa_addr, *args, **kwargs)
     @locked_calling
-    def write(self, val, termination='default', opc=None):
+    def write(self, val, termination='default', opc=None, encoding=None):
         if opc is None:
             opc = self._write_with_opc
         if opc and '?' not in val:
@@ -344,7 +344,7 @@ class lakeshore_336(visaInstrument):
             val = val+';*opc?'
             self.ask(val)
         else:
-            super(lakeshore_336, self).write(val, termination=termination)
+            super(lakeshore_336, self).write(val, termination=termination, encoding=encoding)
     @locked_calling
     def _current_config(self, dev_obj=None, options={}):
         old_ch = self.current_ch.getcache()
@@ -791,8 +791,6 @@ class lakeshore_336(visaInstrument):
         self.input_name = devChOption('INNAME {ch},{val}', 'INNAME? {ch}', str_type=quoted_name(15))
 
         self.input_crv = devChOption('INCRV {ch},{val}', 'INCRV? {ch}', str_type=int, min=0)
-        self.input_filter = devChOption('FILTER {ch},{val}', 'FILTER? {ch}',
-                                      choices=ChoiceMultiple(['filter_en', 'n_points', 'window'], [bool, int, int]))
         self.temperature_limit = devChOption('TLIMIT {ch},{val}', 'TLIMIT? {ch}', str_type=float_fix3)
         self.minmax = devChOption(getstr='MDAT? {ch}', str_type=decode_float64, multi=['min', 'max'])
         self.current_output = MemoryDevice(1, choices=[1, 2, 3, 4])
@@ -979,13 +977,17 @@ class lakeshore_340(visaInstrument):
             base = self._conf_helper('current_ch', 'input_set', 'input_crv', 'input_type')
         base += self._conf_helper('heater_range', 'htr_status', 'htr')
         old_loop = self.current_loop.get()
+        loop_dev_list = ['sp', 'pid', 'manual_out', 'control_mode', 'control_setup']
+        if hasattr(self, 'control_filter'):
+            loop_dev_list.append('control_filter')
+        loop_dev_list = ['control_limit', 'control_display', 'ramp_control', 'ramp_sweeping_status']
         for c in [1, 2]:
             self.current_loop.set(c)
-            info = self._conf_helper('sp', 'pid', 'manual_out', 'control_mode', 'control_setup', 'control_filter',
-                              'control_limit', 'control_display', 'ramp_control', 'ramp_sweeping_status')
+            info = self._conf_helper(*loop_dev_list)
             base += ['loop_%i=[%s]'%(c, ', '.join(info))]
         self.current_loop.set(old_loop)
-        base += self._conf_helper('control_limit_max_current_user')
+        if hasattr(self, 'control_limit_max_current_user'):
+            base += self._conf_helper('control_limit_max_current_user')
         old_analog = self.current_analog.get()
         for c in [1, 2]:
             self.current_analog.set(c)
@@ -1093,6 +1095,9 @@ class lakeshore_340(visaInstrument):
         conv = ChoiceMultiple(['master_rev_date', 'master_rev_num', 'master_serial_num', 'sw1', 'input_rev_date',
                          'input_rev_num', 'option_id', 'option_rev_date', 'option_rev_num'], fmts=str)
         rev_dic = conv(rev_str)
+        ms_rev = [int(v, 10) for v in rev_dic['master_rev_num'].split('.')]
+        # Check if before 1.3.8
+        old_rev = ms_rev[0] < 1 or (ms_rev[0] == 1 and ms_rev[1] < 3) or (ms_rev[0] == 1 and ms_rev[1] == 3 and ms_rev[2] < 8)
         ch_Base = ChoiceStrings('A', 'B')
         ch_3462_3464 = ChoiceStrings('A', 'B', 'C', 'D') # 3462=2 other channels, 3464=2 thermocouple
         ch_3468 = ChoiceStrings('A', 'B', 'C1', 'C2', 'C3', 'C4', 'D1', 'D2','D3','D4',
@@ -1145,18 +1150,25 @@ class lakeshore_340(visaInstrument):
         self.ramp_sweeping_status = devLoopOption(getstr='RAMPST? {loop}', str_type=bool)
         htr_ranges = ChoiceIndex(list(range(5+1)))
         self.heater_range = scpiDevice('RANGE', choices=htr_ranges, doc='See manual 6.12.1 to describe range. range 0 is power off. Only for loop 1.')
-        self.control_filter = devLoopOption('CFILT {loop},{val}', 'CFILT? {loop}', str_type=bool)
+        if not old_rev:
+            # This is not documented I but don't see it in master_rev 01.02.05
+            self.control_filter = devLoopOption('CFILT {loop},{val}', 'CFILT? {loop}', str_type=bool)
         csetup = ChoiceMultiple(['channel', 'units', 'loop_en', 'loop_powerup_en'],
                           [ch_opt_sel, ChoiceIndex({1:'kelvin', 2:'celsius', 3:'ohm'}), bool, bool])
+        if old_rev:
+            climit_max_choice = ChoiceIndex([0.25, 0.5, 1.0, 2.0], offset=1)
+        else:
+            climit_max_choice = ChoiceIndex([0.25, 0.5, 1.0, 2.0, 'user'], offset=1)
         climit = ChoiceMultiple(['sp_limit', 'pos_slope', 'neg_slope', 'max_current', 'max_range'],
-                          [float, float, float, ChoiceIndex([0.25, 0.5, 1.0, 2.0, 'user'], offset=1), htr_ranges])
+                          [float, float, float, climit_max_choice, htr_ranges])
         self.control_setup = devLoopOption('CSET {loop},{val}', 'CSET? {loop}', choices=csetup, allow_kw_as_dict=True, allow_missing_dict=True)
         control_display_op = ChoiceMultiple(['n_loop', 'resistance', 'display_unit', 'large_display_en'],
                                             [ChoiceIndex(['none', 'loop1', 'loop2', 'both']), (int, (1, 1000)), ChoiceIndex({1:'current', 2:'power'}), bool])
         self.control_display = devLoopOption('CDISP {loop},{val}', 'CDISP? {loop}', choices=control_display_op, allow_kw_as_dict=True, allow_missing_dict=True,
                                              doc="resistance and display_unit only applies to loop1")
         self.control_limit = devLoopOption('CLIMIT {loop},{val}', 'CLIMIT? {loop}', choices=climit, allow_kw_as_dict=True, allow_missing_dict=True)
-        self.control_limit_max_current_user = scpiDevice('CLIMI', str_type=float, min=0.1, max=2)
+        if not old_rev:
+            self.control_limit_max_current_user = scpiDevice('CLIMI', str_type=float, min=0.1, max=2)
         cmodes = ChoiceIndex({1:'pid', 2:'zone', 3:'open_loop', 4:'auto_tune_PID', 5:'auto_tune_PI', 6:'auto_tune_P'})
         self.control_mode = devLoopOption('CMODE {loop},{val}', 'CMODE? {loop}', choices=cmodes)
 
@@ -1658,9 +1670,6 @@ class lakeshore_370(visaInstrument):
                                64 (6) = T overrange
                                128(7) = T underrange
                         """)
-        self.status_ch = devChOption(getstr='RDGST? {ch}', str_type=int) #flags 1(0)=CS OVL, 2(1)=VCM OVL, 4(2)=VMIX OVL, 8(3)=VDIF OVL
-                               #16(4)=R. OVER, 32(5)=R. UNDER, 64(6)=T. OVER, 128(7)=T. UNDER
-                               # 000 = valid
         tempco = ChoiceIndex({1:'negative', 2:'positive'})
         self.input_set = devChOption('INSET {ch},{val}', 'INSET? {ch}', allow_kw_as_dict=True, allow_missing_dict=True,
                                      choices=ChoiceMultiple(['enabled', 'dwell', 'pause', 'curvno', 'tempco'],
@@ -1848,7 +1857,7 @@ class lakeshore_625(visaInstrument):
         self._extra_create_dev()
 
     @locked_calling
-    def write(self, val, termination='default', opc=None):
+    def write(self, val, termination='default', opc=None, encoding=None):
         if opc is None:
             opc = self._write_with_opc
         if opc and '?' not in val:
@@ -1857,7 +1866,7 @@ class lakeshore_625(visaInstrument):
             val = val+';*opc?'
             self.ask(val)
         else:
-            super(lakeshore_625, self).write(val, termination=termination)
+            super(lakeshore_625, self).write(val, termination=termination, encoding=encoding)
     def _current_config(self, dev_obj=None, options={}):
         base = self._conf_helper('coil_constant', 'field_T', 'field_target_T', 'compliance_voltage', 'ramp_rate_current', 'ramp_rate_unit',
                                  'last_persistent_current', 'field', 'current', 'voltage', 'voltage_remote', 'persistent_conf', 'limits',
@@ -1925,6 +1934,7 @@ class lakeshore_625(visaInstrument):
         else:
             ret = ' '.join(ret)
         return ret
+
     def set_persistent(self, enable, force=False, password=None):
         if enable:
             if force and self._check_password(password=password):
@@ -1933,6 +1943,12 @@ class lakeshore_625(visaInstrument):
                 self.write('PSH 1')
         else:
             self.write('PSH 0')
+    set_persistent.__doc__ = """\
+        To enable the persistent switch heater.
+        To override the security checks, use the force option and
+        provide the password ('%s')"""%_passwd_check
+
+
     def get_persistent_status(self):
         st = self.persistent_status.get()
         return ['off', 'on', 'warming', 'cooling'][st]
@@ -1951,6 +1967,7 @@ class lakeshore_625(visaInstrument):
             password = dev._check_cache['kwarg']['password']
         if password != self._passwd_check:
             raise ValueError('Invalid password.')
+        return True
     def conf_ramp_segments(self, currents=None, rates=None):
         """ when currents is None, show the ramp segments.
             Otherwise all the parameters are lists (or arrays) and need to be of the same length <=5.

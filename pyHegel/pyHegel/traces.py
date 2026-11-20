@@ -33,7 +33,7 @@ import sys
 import gc
 
 from . import qt_wrap  # This is used for reset_pyhegel command
-from .qt_wrap import QtCore, QtGui, QtWidgets
+from .qt_wrap import QtCore, QtGui
 import numpy as np
 import matplotlib
 from matplotlib import pyplot, rcParams, __version__ as mpl_version
@@ -47,12 +47,13 @@ from .comp2to3 import is_py3, string_types, string_bytes_types, unicode_type, is
 
 # same as in fullmpcanvas.py
 # follows new_figure_manager
-if qt_wrap.api == 'pyqt5':
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-    from matplotlib.backends.backend_qt5 import FigureManagerQT
-if qt_wrap.api == 'pyside':
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-    from matplotlib.backends.backend_qt5 import FigureManagerQT
+if qt_wrap.api in ['pyqt5', 'pyqt6']:
+    try:
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+        from matplotlib.backends.backend_qt5 import FigureManagerQT
+    except ImportError:
+        from matplotlib.backends.backend_qt import FigureCanvasQTAgg as FigureCanvas
+        from matplotlib.backends.backend_qt import FigureManagerQT
 else:
     from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.backends.backend_qt4 import FigureManagerQT
@@ -157,20 +158,31 @@ Mouse:
 
 """
 
+if qt_wrap.api == 'pyqt6':
+    QtCoreQtKey = QtCore.Qt.Key
+    QtCoreQtWindowModal = QtCore.Qt.WindowModality.WindowModal
+    QtCoreQtOrientation = QtCore.Qt.Orientation
+    QtGuiQDialogButtonBox = QtGui.QDialogButtonBox.StandardButton
+else:
+    QtCoreQtKey = QtCore.Qt
+    QtCoreQtWindowModal = QtCore.Qt.WindowModal
+    QtCoreQtOrientation = QtCore.Qt
+    QtGuiQDialogButtonBox = QtGui.QDialogButtonBox
+    
 # FigureCanvas is already a subclass of object because of QWidget (for older
 # versions of matplotlib that used old style classes)
 class TraceCanvas(FigureCanvas):
     def __init__(self, *args, **kwargs):
         super(TraceCanvas, self).__init__(*args, **kwargs)
         try:
-            self.keyvald.update({QtCore.Qt.Key_Left:'left',
-                                    QtCore.Qt.Key_Right:'right',
-                                    QtCore.Qt.Key_Up:'up',
-                                    QtCore.Qt.Key_Down:'down',
-                                    QtCore.Qt.Key_Escape:'escape',
-                                    QtCore.Qt.Key_Home:'home',
-                                    QtCore.Qt.Key_End:'end',
-                                    QtCore.Qt.Key_Backspace:'backspace'})
+            self.keyvald.update({QtCoreQtKey.Key_Left:'left',
+                                    QtCoreQtKey.Key_Right:'right',
+                                    QtCoreQtKey.Key_Up:'up',
+                                    QtCoreQtKey.Key_Down:'down',
+                                    QtCoreQtKey.Key_Escape:'escape',
+                                    QtCoreQtKey.Key_Home:'home',
+                                    QtCoreQtKey.Key_End:'end',
+                                    QtCoreQtKey.Key_Backspace:'backspace'})
         except AttributeError: # matplotlib 1.4.2 includes all these keys already
             pass               # in matplotlib.backends.backend_qt5.SPECIAL_KEYS
     def get_default_filename(self, *args, **kwargs):
@@ -424,11 +436,11 @@ def _offsetText_helper(self):
     else:
         self.offsetText.xytext = new_xy
 
-class ExtraDialog(QtWidgets.QDialog):
+class ExtraDialog(QtGui.QDialog):
     def __init__(self, value, parent=None):
         if value is None:
             value = 1.
-        super(ExtraDialog, self).__init__(parent, windowModality=QtCore.Qt.WindowModal)
+        super(ExtraDialog, self).__init__(parent, windowModality=QtCoreQtWindowModal)
         lay = QtGui.QGridLayout()
         self.setLayout(lay)
         sb = QtGui.QDoubleSpinBox(value=value, decimals=3, minimum=0.020, maximum=86400)
@@ -439,7 +451,7 @@ class ExtraDialog(QtWidgets.QDialog):
         self.cb_sync_all_y = cb
         lay.addWidget(QtGui.QLabel('Synchronize all y axes'), 1, 0)
         lay.addWidget(cb, 1, 1)
-        ok = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok)
+        ok = QtGui.QDialogButtonBox(QtGuiQDialogButtonBox.Ok)
         self.button_box = ok
         lay.addWidget(ok, 2, 0, 1, 2)
         ok.accepted.connect(self.hide)
@@ -587,11 +599,28 @@ class Trace(TraceBase):
     def sync_all_y_changed(self, checked):
         if checked:
             grouper = self.axs[0].get_shared_y_axes()
-            grouper.join(*self.axs)
+            try:
+                grouper.join(*self.axs)
+            except AttributeError:
+                # see https://github.com/matplotlib/matplotlib/blob/758a399c1694a85387155788b4c3357c403bf38d/doc/api/prev_api_changes/api_changes_3.6.0/deprecations.rst#L161
+                # where get_shared_x_axes now returns immutable objects.
+                for ax in self.axs[1:]:
+                    ax.sharey(self.axs[0])
         else:
             grouper = self.axs[0].get_shared_y_axes()
-            for ax in self.axs:
-                grouper.remove(ax)
+            try:
+                grouper.remove
+            except AttributeError:
+                # see above. But in this case unsharey does not exist yet so try something
+                for ax in self.axs:
+                    try:
+                        ax.unsharey()
+                    except AttributeError:
+                        ax._shared_axes['y'].remove(ax)
+                        ax._sharey = None
+            else:
+                for ax in self.axs:
+                    grouper.remove(ax)
 
     def set_xlogscale(self, enable=True):
         s = {True:'log', False:'linear'}
@@ -711,11 +740,12 @@ class Trace(TraceBase):
                 self.crvs.append(plt)
             else:
                 self.crvs[i].set_data(x, y)
-        if is_py2:
-            leg = self.axs[0].legend(loc='upper left', bbox_to_anchor=(0, 1.10))
-        else:
-            leg = self.fig.legend(loc='upper left', bbox_to_anchor=(0.1, 0.98))
-        set_draggable(leg)
+        if self.first_update:
+            if is_py2:
+                leg = self.axs[0].legend(loc='upper left', bbox_to_anchor=(0, 1.10))
+            else:
+                leg = self.fig.legend(loc='upper left', bbox_to_anchor=(0.1, 0.98))
+            set_draggable(leg)
         for ax in self.axs:
             ax.relim()
             ax.autoscale(enable=None)
@@ -764,7 +794,7 @@ class TraceLots(TraceBase):
         self.nbpoints = self.fh.tell() // self.byte_per_point
         self.readit() # sets self.vals
         self.mainplot = ax.plot(self.vals)[0]
-        self.bar = QtGui.QScrollBar(QtCore.Qt.Horizontal)
+        self.bar = QtGui.QScrollBar(QtCoreQtOrientation.Horizontal)
         self.bar.setMaximum(self.nbpoints//block_size*2 -1) # every step is half a block size
         self.bar_label = QtGui.QLabel()
         self.central_widget = QtGui.QWidget()
@@ -792,6 +822,16 @@ class TraceLots(TraceBase):
     def update(self):
         self.mainplot.set_ydata(self.vals)
         self.draw()
+
+if qt_wrap.api == 'pyqt6':
+    check_state = lambda widget: widget.checkState() != QtCore.Qt.CheckState.Unchecked
+    def set_check_state(widget, val):
+        valconv = QtCore.Qt.CheckState.Checked if val else QtCore.Qt.CheckState.Unchecked
+        widget.setCheckState(valconv)
+else:        
+    check_state = lambda widget: widget.checkState() != 0
+    def set_check_state(widget, val):
+        widget.setCheckState(val)
 
 class TraceWater(TraceBase):
     def __init__(self, xy, y=None, width=9.00, height=7.00, dpi=72,
@@ -826,8 +866,8 @@ class TraceWater(TraceBase):
         self.ncurves = self.y.shape[0]
         #self.hbar = QtGui.QScrollBar(QtCore.Qt.Horizontal)
         #self.vbar = QtGui.QScrollBar(QtCore.Qt.Vertical)
-        self.hbar = QtGui.QSlider(QtCore.Qt.Horizontal)
-        self.vbar = QtGui.QSlider(QtCore.Qt.Vertical)
+        self.hbar = QtGui.QSlider(QtCoreQtOrientation.Horizontal)
+        self.vbar = QtGui.QSlider(QtCoreQtOrientation.Vertical)
         self.hbar_rev = QtGui.QCheckBox('Reverse')
         self.xlog = QtGui.QCheckBox('Xlog')
         self.ylog = QtGui.QCheckBox('Ylog')
@@ -891,25 +931,25 @@ class TraceWater(TraceBase):
         return bar, rev
     def set_xy_offset(self, xo, yo):
         h, rev = self.x_to_bar(xo)
-        self.hbar_rev.setCheckState(rev)
+        set_check_state(self.hbar_rev, rev)
         v, foo = self.x_to_bar(yo, invert=self.invert_y)
         self.hbar.setValue(h)
         self.vbar.setValue(v)
     def get_xy_offset(self):
         h = self.hbar.value()
         v = self.vbar.value()
-        xo = self.bar_to_x(h, rev=self.hbar_rev.checkState())
+        xo = self.bar_to_x(h, rev=check_state(self.hbar_rev))
         yo = self.bar_to_x(v, invert=self.invert_y)
-        if self.hbar_rev.checkState():
+        if check_state(self.hbar_rev):
             xo = -xo
         return xo, yo
     def get_scaled_xy_offset(self):
         xo, yo = self.get_xy_offset()
-        if self.xlog.checkState():
+        if check_state(self.xlog):
             xs = self.xratio**(xo/2)
         else:
             xs = xo*self.dx/2.
-        if self.ylog.checkState():
+        if check_state(self.ylog):
             ys = self.yratio**yo
         else:
             ys = yo*self.dy
@@ -920,12 +960,12 @@ class TraceWater(TraceBase):
         v = np.arange(self.ncurves)
         x = self.x.T
         y = self.y.T
-        if self.xlog.checkState():
+        if check_state(self.xlog):
             self.ax.set_xscale('log')
             x = x * xs**v
         else:
             x = x + xs*v
-        if self.ylog.checkState():
+        if check_state(self.ylog):
             self.ax.set_yscale('log')
             y = y * ys**v
         else:
@@ -990,6 +1030,8 @@ def plot_time_stack(x, *ys, **kwargs):
     """
        Uses plot_time (so x is the time axis)
        but plots vertically stacked graphs (all the same x axis).
+       if x is None, then the first of the ys elements is used as an x axis for that
+       particular axis.
        Every ys argument is plotted in its own graph (from top to bottom).
        The ys can be a single 2D numpy array (first dim is line index, second is pt index)
         or a list of 1D array.
@@ -1001,10 +1043,13 @@ def plot_time_stack(x, *ys, **kwargs):
        axes, it reuses them, otherwise it creates new ones. You should clf() before changing the
        number of axes.
        title: providing this will put a figure title (title on the first axis).
+       ytitles: providing this will put a y title on all the axes (need the same dimension as the axies)
        A vertical line on all axes is displayed when pressing the mouse button is pressed and no tool is selected.
+       It returns a tuple same as subplots
     """
     labels = kwargs.pop('labels', None)
     title = kwargs.pop('title', None)
+    ytitles = kwargs.pop('ytitles', None)
     if isinstance(ys[-1], str):
         fmt = ys[-1]
         ys = ys[:-1]
@@ -1014,12 +1059,23 @@ def plot_time_stack(x, *ys, **kwargs):
     Nr = len(ys)
     if labels is None:
         labels = [None]*Nr
+    if ytitles is None:
+        ytitles = [None]*Nr
     if len(labels) < Nr:
         labels = labels + [None]*(Nr-len(labels))
+    if len(ytitles) < Nr:
+        ytitles = ytitles + [None]*(Nr-len(ytitles))
     fig = pyplot.gcf()
     if len(fig.axes) < Nr:
         fig1, axs1 = pyplot.subplots(nrows=Nr, sharex=True, squeeze=True, gridspec_kw=dict(hspace=0), num=fig.number)
-        xo = _time2date(x[0])
+        try:
+            len(axs1)
+        except:
+            axs1 = [axs1]
+        if x is None:
+            xo = _time2date(np.array(ys[0])[0,0])
+        else:
+            xo = _time2date(x[0])
         for ax in axs1[1:]:
             ax.yaxis.get_major_locator().set_params(prune='upper')
         for ax in axs1:
@@ -1031,13 +1087,18 @@ def plot_time_stack(x, *ys, **kwargs):
             fig.canvas.mpl_connect('button_release_event', _plot_time_mouse)
     else:
         fig1, axs1 = fig, fig.axes
-    for i, (y, ax, lbls) in enumerate(zip(ys, axs1, labels)):
+    for i, (y, ax, lbls, ytitle) in enumerate(zip(ys, axs1, labels, ytitles)):
         pyplot.sca(ax)
         if i == 0 and title is not None:
             pyplot.title(title)
         if isinstance(y, (list, tuple)):
             y = np.asarray(y)
-        lines = plot_time(x, y.T, *extra, **kwargs)
+        if x is None:
+            xx = y[0]
+            y = y[1:]
+        else:
+            xx = x
+        lines = plot_time(xx, y.T, *extra, **kwargs)
         if lbls is not None:
             if not isinstance(lbls, (list, tuple, np.ndarray)):
                 lbls = [lbls]
@@ -1045,6 +1106,9 @@ def plot_time_stack(x, *ys, **kwargs):
                 l.set_label(lbl)
             leg = pyplot.legend()
             set_draggable(leg)
+        if ytitle is not None:
+            pyplot.ylabel(ytitle)
+    return fig1, axs1
 
 
 
@@ -1070,5 +1134,5 @@ def plot_time_stack_qd(qdata, *indices, **kwargs):
         labels = [titles[sel] for sel in indices]
     kwargs['labels'] = labels
     ys += extra
-    plot_time_stack(qdata.t, *ys, **kwargs)
+    return plot_time_stack(qdata.t, *ys, **kwargs)
 

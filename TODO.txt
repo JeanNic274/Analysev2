@@ -49,6 +49,8 @@
 - [ ] Add safety checks (eg laser on while no filter)
 - [ ] Connect apd counts to continuous worker during scan
 
+- [ ] Add try/except when initializing devices
+
 Status.getStatusFlagsAllAxis
 
 TODO at uni

@@ -34,7 +34,9 @@ is_py2 = sys.version_info[0] == 2
 is_py3 = sys.version_info[0] == 3
 
 def warn_deprecation(mess):
-    warnings.warn(mess, warnings.DeprecationWarning)
+    # DeprecationWarning are not displayed by default, so use UserWarning instead
+    #warnings.warn(mess, DeprecationWarning)
+    warnings.warn(mess, UserWarning, 2)
 
 def comp_execfile(filename, *args):
     if is_py2:
@@ -175,6 +177,7 @@ if is_py3:
     inspect_getargspec = py3_inspect_getargspec
     open_universal = open
     from shutil import get_terminal_size
+    int2byte = lambda x: bytes([x])
 
 else:
     from StringIO import StringIO
@@ -199,6 +202,7 @@ else:
     # It also allows using a encoding.
     import io
     open = io.open
+    int2byte = lambda x: chr(x)
 
 open_utf8 = lambda *args, **kwargs: open(*args, encoding='utf-8')
 
@@ -251,4 +255,208 @@ def with_metaclass(meta, *bases):
         def __prepare__(cls, name, this_bases):
             return meta.__prepare__(name, bases)
     return type.__new__(metaclass, 'temporary_class', (), {})
+
+if is_py3:
+    from enum import IntEnum, IntFlag, EnumMeta
+else:
+    from enum import IntEnum, EnumMeta
+
+    def _IntFlag__new__(cls, value):
+        try:
+            return IntEnum.__new__(cls, value)
+        except ValueError:
+            nv = int.__new__(cls, value)
+            # now lets calculate the correct name
+            if value == 0:
+                name = ''
+            else:
+                names = []
+                values = []
+                val = 0
+                for elem in cls:
+                    elval = elem.value
+                    if (value & elval) == elval:
+                        names.append(elem.name)
+                        values.append(elval)
+                        val |= elval
+                # now simplify. This is not done in python 3 enum.
+                # not that if you have a=7, b=8 and c=9
+                # it will use a|c for 15 instead of a|b
+                keep = []
+                N = len(names)
+                for i in range(N):
+                    vi = values[i]
+                    if vi == 0:
+                        continue
+                    i_ok = True
+                    for j in range(i+1, N):
+                        vj = values[j]
+                        if vi & vj == vi:
+                            # vj contains at least vi
+                            # so we do not need to keep it.
+                            i_ok = False
+                            break
+                    if i_ok:
+                        keep.append(i)
+                # deal with missing flag names
+                unnamed = value ^ val
+                if unnamed:
+                    if len(keep):
+                        names.append(str(unnamed))
+                        keep.append(N)
+                    else:
+                        names = []
+                name = '|'.join(names[i] for i in keep)
+            nv._name_ = name
+            nv._value_ = value
+            nv.__objclass__ = cls
+            nv.__init__(value)
+            cls._value2member_map_[value] = nv
+            return nv
+
+    class EnumFlagMeta(EnumMeta):
+        def __new__(metacls, cls, bases, classdict):
+            cls = super(EnumFlagMeta, metacls).__new__(metacls, cls, bases, classdict)
+            # Need staticmethod here. It it not needed when __new__ is defined inside
+            # a class definition. Be here we change it afterwards so it is required.
+            # It needs to be done here, because the Meta class overwrites the
+            # class __new__ with the Enum.__new__.
+            cls.__new__ = staticmethod(_IntFlag__new__)
+            return cls
+        def __contains__(cls, value):
+            if isinstance(value, cls):
+                return True
+            return value in cls._value2member_map_
+
+    class IntFlag(IntEnum):
+        __metaclass__ = EnumFlagMeta
+        def _get_value(self, flag):
+            if isinstance(flag, self.__class__):
+                other_val = flag._value_
+            elif isinstance(flag, int):
+                other_val = flag
+            else:
+                 return NotImplemented
+            if other_val is None or self._value_ is None:
+                raise TypeError("None cannot be combined")
+            return other_val
+        def __or__(self, other):
+            other_val = self._get_value(other)
+            if other_val is NotImplemented:
+                return NotImplemented
+            return self.__class__(self._value_ | other_val)
+        __ror__ = __or__
+        def __and__(self, other):
+            other_val = self._get_value(other)
+            if other_val is NotImplemented:
+                return NotImplemented
+            return self.__class__(self._value_ & other_val)
+        __rand__= __and__
+        def __xor__(self, other):
+            other_val = self._get_value(other)
+            if other_val is NotImplemented:
+                return NotImplemented
+            return self.__class__(self._value_ ^ other_val)
+        __rxor__= __xor__
+        def __invert__(self):
+            if self._value_ is None:
+                raise TypeError("None cannot be inverted")
+            return self.__class__(~self._value_)
+        # already have __nonzero__ from int
+        def __contains__(self, other):
+            """ Returns True if self has at least the same flags as other """
+            if not isinstance(other, self.__class__):
+                raise TypeError("unsupported operand type")
+            return other._value_ & self._value_ == other._value_
+        def __repr__(self):
+            cls_name = self.__class__.__name__
+            if self.name == "":
+                return "<%s: %s>" % (cls_name, repr(self._value_))
+            else:
+                return super(IntFlag, self).__repr__()
+
+# Differences between python2 and 3
+# in python 3 both IntEnum and IntFlag return str of the int for __str__
+#                 in ptyhon 2 instead it returns representation of the item
+#                 This has to do with pickling which is not taken care of here.
+# in python 3 for IntFlag you can iterate on the instances to get names of bits
+#                and len returns the bit_count if the instance
+#                it also keeps track of mask of all the flags
+#                and a mask of all the single bit flags.
+#                for the list _member_names_ that is used in __iter__ it only
+#                  includes single_bit values
+
+if is_py3:
+    def reraise(tp, value, tb=None):
+        try:
+            if isinstance(tp, BaseException):
+                if value is not None:
+                    raise ValueError('Invalid call to reraise')
+                value = tp
+            elif value is None:
+                value = tp()
+            elif isinstance(value, tuple):
+                value = tp(*value)
+            else:
+                value = tp(value)
+            if value.__traceback__ is not tb:
+                raise value.with_traceback(tb)
+            raise value
+        finally:
+            value = None
+            tb = None
+
+else:
+    def exec_(_code_, _globs_=None, _locs_=None):
+        """Execute code in a namespace."""
+        if _globs_ is None:
+            frame = sys._getframe(1)
+            _globs_ = frame.f_globals
+            if _locs_ is None:
+                _locs_ = frame.f_locals
+            del frame
+        elif _locs_ is None:
+            _locs_ = _globs_
+        exec("""exec _code_ in _globs_, _locs_""")
+
+    exec_("""def reraise(tp, value, tb=None):
+    try:
+        raise tp, value, tb
+    finally:
+        tb = None
+""")
+
+
+def repr_number(val):
+    ret = repr(val)
+    if is_py3:
+        # handle newer numpy which returns np.float64(1.0) like values
+        # with repr. Can than use str instead but I cannot check for the
+        # version since np.set_printoptions(legacy='1.13') can change the behavior.
+        # Also that old version, and str on python 2.7 for floats, do not return
+        # enough digit so those require repr
+        # np.generic is the root of the scalar values in numpy
+        import numpy as np
+        if isinstance(val, np.generic) and ret.startswith('np.'):
+            ret = str(val)
+    # clean up long int (python 2)
+    if is_py2:
+        if isinstance(val, long):
+            ret = ret.rstrip('L')
+    return ret
+
+def repr_or_string(val):
+    if isinstance(val, string_bytes_types):
+        return val
+    return repr_number(val)
+
+def str_or_repr(s):
+    """ Always returns a str type (use repr if needed) """
+    if not isinstance(s, str):
+        return repr(s)
+    else:
+        return s
+
+def repr_or_string_unicode(val):
+    return fu(repr_or_string(val))
 

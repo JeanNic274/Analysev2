@@ -27,12 +27,12 @@ import numpy as np
 import scipy.linalg as la
 import types
 
-from .comp2to3 import xrange
+from pyHegel.comp2to3 import xrange
 
 # TODO error handling
 
 def oneDpoly(X,m,rank=None):
-    """ m est le nombre de termes à créer. 
+    """ m is the number of terms to create.
         if rank is given then the highest power will be rank
         (and m is not used)
     """
@@ -77,24 +77,23 @@ def gen_polyeval(X, pf, param=None, sel=None):
     """ Calls func and returns created polynomial 
 
         here pf is a sequence (p,func)
-        Pour le tableau x(N,...,M,T)=func(X,m,param) et p(T,S,P,Q,...), 
-        m est T=p.shape[0]
-        ou T est le nombre de parametre du fit et S,P,Q ... si présent 
-        sont le nombre de lissage différents réalisé.
+        For the array x(N,...,M,T)=func(X,m,param) and p(T,S,P,Q,...),
+        m is T=p.shape[0]
+        where T is the number of parameters for the fit and S,P,Q ... if
+        present are other fit parameters (when performing multiple fits)
 
-        Le résultat est Y(N,...,M,S,P,Q,...) = x(N,...,M,T+) * p(T+,S,P,Q,...)
-           (le + indique a sum product: 2D produit matricielle)
-        sel si definie fera ls sélection p[:,sel]
+        The result is Y(N,...,M,S,P,Q,...) = x(N,...,M,T+) * p(T+,S,P,Q,...)
+           (The + indicates a sum product: 2D matrix product)
+        sel if defined will select on p like p[:,sel]
              sel can be the result of np.index_exp
               which is detected if sel is a tuple
 
-        Les premières dimensions représenntent des conditions différentes
-        (positions xy différentes ...) les dernières le résultat de différents
-        lissage (des layers de carte 3D)
+        The first dimensions represent the different conditions (different
+        xy positions ...) the last dimensions represent the result of
+        different fits (layers of a 3D map).
 
         DefaultPoly is the function used by default if func is
-        None (initialized to oneDpoly
-
+        None (initialized to oneDpoly)
 """
     p,func = pf
     if not func: func = DefaultPoly
@@ -141,62 +140,60 @@ def lstsq_er(X,Y,cond=-1):
 
 def gen_polyfit(X,Y,m,s=None,func=None, param=None,adjust=None, p0=None, filter=None, errors=True, rcond=-1):
     """
-       This calcutes the fit of a general polynomial expression
-       method in yorick defaults to LUsolve, otherwise it is SVsolve
-       Here we use scipy.linalg.lstsq
+       This calculates the fit of a general polynomial expression.
+       It comes from code in yorick which defaults to LUsolve, otherwise it
+       was SVsolve. Here we use scipy.linalg.lstsq
 
-       La forme de x=func(X,m,param) est (M,..,N,T) 
-        ou T est la liste de parametres de la reponse.
-       Y est (M,...,N,S), ou S est optionnel et represente des
-         solutions supplementaires  
-       La reponse est soit 1D ou 2D
+       func if not given, defaults to DefaultPoly.
 
-       s est l'erreur standard. Elle ajuste le poid du lissage.
-       s est scalaire (effet seulement sur les erreurs, pas sur le lissage)
-        ou s (M,...,N)
-        ou s (M, ..., N, S) 
-         Attention, dans ce dernier cas le lissage sera beaucoup plus lent
-         puisque tous les S fit devront être fait séparément.
-         Dans ce cas Y ne peut pas avoir 
-       Si s n'est pas spécifié, c'est l'équivalent de s=1.
-       Le lissage est le résultat de minimiser:
-             \chi^2 = \sum_{i=1}^N {\left(\frac{y_i - f(x_i)}{s_i}\right)}^2
-       En prenant les dérivés avec p (les paramètres) et en les mettant =0
-       On trouve le minimum.
-           puisque f(x_i) = p_0 x_i^0 + p_1 x_i^1 ...
-           où x^n ne veut pas nécessairement duire la puissance n de x
-           mais bien la combinaison n des éléments du vecteur x_i 
-             (x_i est une vecteur de paramètre indépendant pour le point i)
-           donc d chi^2/dp nous donne les équations
+       The shape of x=func(X,m,param) is (M,..,N,T)
+        where T is the list of parameters.
+       Y is (M,...,N,S), where S is optional and represents additional solutions.
+       The answer is either 1D or 2D.
+
+       s is the standard error. It adjust the weight of the fit.
+       s can be scalar (then only affects the errors, not the fit values)
+        or s (M,...,N)
+        or s (M, ..., N, S)
+         Be warned that in the last case, the fitting will take much longer
+         since all the fits will have to be done individually.
+       If s is not specified, it is the sam as s=1.
+       The fit is the result of minimizing:
+             \\chi^2 = \\sum_{i=1}^N {\\left(\\frac{y_i - f(x_i)}{s_i}\\right)}^2
+       taking de the derivative with respect to p (the parameters) and setting
+       them to =0. Therefore finding the minimum (extremum)
+           since f(x_i) = p_0 x_i^0 + p_1 x_i^1 ...
+           where x^n does not necessarily mean the nth power of x
+           but the nth combination of elements of the x_i vector
+             (x_i is a vector of independent parameters for the point i)
+           then d chi^2/dp turns into the equations
           X p = Y
-        où X_k,l = sum_i (x_i^k x_i^l/s_i^2)
-           p_l sont les paramètres
+        where X_k,l = sum_i (x_i^k x_i^l/s_i^2)
+           p_l are the parameters
            Y_k = sum_i (y_i x_i^k/s_i^2)
-        C'est le système d'équations que lstsq résous de façon interne.
-        Ce qu'on donne à lstsq est X' p = Y'
-        où X'_i,l = x_i^l/s_i
-           p_l commen ci-haut
+        This is the system of equations that lstsq solves internally.
+        What we provide to lstsq is X', and  Y'
+        where X'_i,l = x_i^l/s_i
            Y'_i = y_i/s_i
-         (La définition de lstsq utilise s_i =1)
-        Pour obtenir X et Y de X' et Y' lstsq fait
-         X=X'^T X',  Y=X'^T Y'  où ^T est la transpose
-        Donc si on redéfinie X' et Y' comme ci-haut (divise par s_i)
-        on exécutera une lissage linéaire avec poids variables.
+         (the definition of lstsq uses s_i =1)
+        To obtain X and Y from X' and Y' lstsq does
+         X=X'^T X',  Y=X'^T Y'  where ^T is the transpose
+        So if we redefine X' and Y' like above (divide by s_i)
+        we can performe a linear fit with a variable weight.
 
        filter is a M,.., N matrix where 1 selects the data point
                                     and 0 deselects it
                                    (actually it is selected if >0.5)
 
-       Si  Y(X) est un vecteur (Disons Y=(Yx, Yy) ou Yx=fx(x,y) et Yy=fy(x,y)
-       pour un vecteur Y 2D dépédant d'un vecteur xy=(x,y) aussi 2D.
-       Si Yy et Yx sont indépendant ils peuvent être lissé séparément.
-       Si ils utilisent la même fonction mais des paramètres différents alors
-       ils peuvent être lissé en même temps (Yx et Yy forment la dimension S
-       de Y)
-       Sinon, Yx et Yy doivent être combinés dans le même Y (sans la dimention S
-       et le vecteur X ne sera pas le même pour les éléments Yx et Yy. 
-       Certains des éléments de X seront mis à zéro si il ne s'applique pas aux
-       deux avec le même paramètre.
+       If Y(X) is a vector (lets say Y=(Yx, Yy) or Yx=fx(x,y) and Yy=fy(x,y))
+       for a 2D Y vector dependent on also a 2D xy=(x,y).
+       If Yy and Yx are independent, they can be fit seperately.
+       If they use the same function but with different parameters then they
+       can be fit at the same time (Yx, Yy form the dimensions S of Y)
+       Otherwise, Yx and Yy have to be combined in the same Y (without S and
+       the X vector will not be the same for for Yx and Yy)
+       Some of the elements of X will be zero if they do not apply to both with
+       the same parameter.
 
        adjust is either an array(list) or a selector to pick the
           parameters to adjust (using their index).  
@@ -205,38 +202,36 @@ def gen_polyfit(X,Y,m,s=None,func=None, param=None,adjust=None, p0=None, filter=
 
        rcond is the same as in lstsq
 
-       La fonction retourne: pf,resids,pe, extras
-                où extras est un dict: chiNorm, sigmaCorr, rank, sv, covar (voir lstsq)
-                      pe sont les erreurs sur les parametres
+       The function returns: pf,resids,pe, extras
+                where extras is a dict: chiNorm, sigmaCorr, rank, sv, covar (see lstsq)
+                      pe are the errors on the paramters
                       sv are the singular values
-                        = [] si errors=False
-                      même chose pour covar (covar renorm, diag=1)
-            Si errors == 1 or True: mode auto (corrige pe si il n'y a pas de s)
-                                    sinon retourne le pe calculé
-                  Pour errors ce sont des flags:
-                         1:  Calculer les erreurs
-                         2:  Mode non-automatique
-                         4:  corrige le pe (si mode non-auto)
-                         8:  pe peut avoir dimension differente de p
-                              (sinon p et pe ont les même dimensions)
-                      Toutes les combinaisons (sommes) sont permises.
-                      mode auto (corrige pe si il n'y a pas de s
-                                    sinon retourne le pe calculé)
-                      Valeur défaut: 1 ou True (erreurs auto et même forme que p)
-                      Pas d'erreurs: 0 ou False
-                      Erreurs non-corrigées: 1+2 = 3
-                      Erreurs corrigés: 1+2+4 = 7
-                   Erreurs corrigées signifie que l'on ajuste les s
-                     pour obtenir chiNorm=1 (chiNorm= chi/dof), chi=resids
-
+                        = [] if errors=False
+                      same thing for covar (which is the renormalized covariance with
+                       the diagonal elements normalized to 1)
+            If errors == 1 or True: automatic mode (it fixes pe if there is no s)
+                                    otherwise it returns the calculated pe
+                  The errors values are flags:
+                         1:  calculates the errors
+                         2:  Non-automatic mode
+                         4:  fix the pe (if in non-auto mode)
+                         8:  pe can have different dimensions than p
+                              (otherwise p and pe have the same dimensions)
+                      All combinations (sum) are allowed.
+                      Default value: 1 ou True (automatic errors and same pe shape as p)
+                      No error calculation: 0 ou False
+                      Non corrected errors: 1+2 = 3
+                      Corrected errors: 1+2+4 = 7
+                   Corrected error meains that s is ajusted so that
+                     chiNorm=1 (chiNorm= chi/dof), chi=resids
                       
-            où pf est (p,func) et peut être utilisé avec gen_polyeval
+            where pf is (p,func) and it can be used with gen_polyeval
 
-       Exemple: pour function Y= (a*x+b*y+c,d*x+e*y+c),
-                donc Y1=a*x1_b*y1+c, Y2=d*x1+e*y1+c,
-                     Y3=a*x2_b*y2+c, Y4=d*x2+e*y2+c ...
-                donc X=(x,y,1,x,y) (pour les paramètres (a,b,c,d,e)
-                pour Y1: X1=(x1,y1,1,0,0), Y2: X2=(0,0,1,x1,y1) ...
+       Examples: for function Y= (a*x+b*y+c,d*x+e*y+c),
+                with Y1=a*x1+b*y1+c, Y2=d*x1+e*y1+c,
+                     Y3=a*x2+b*y2+c, Y4=d*x2+e*y2+c ...
+                then X=(x,y,1,x,y) (for parameters (a,b,c,d,e))
+                for Y1: X1=(x1,y1,1,0,0), Y2: X2=(0,0,1,x1,y1) ...
     """
     if not func: func = DefaultPoly
     # need to check this, deal with s (errors), method and adjust
@@ -367,8 +362,8 @@ def rankdata(x, avg=True):
        Returns the rank (order from 1 to n) of the n elements of x
        When avg = True (default), then for x values that are equal,
        it returns the avg.
-       X can be either of shape (N,) or (N,M). It that second case,
-       The rank is obtained along the first dimension only 
+       X can be either of shape (N,) or (N,M). In that second case,
+       the rank is obtained along the first dimension only
        i.e. the rank operation is repeated for x[:,i]
 
        It is faster and accepts more dimensions than scipy's version
@@ -402,7 +397,7 @@ def rankdata(x, avg=True):
             for b,e in zip(begi,endi):
                 sel = ind[b:e+1]
                 val = (b+e)/2.+1
-                print(b,e,val)
+                #print(b,e,val)
                 rank[sel,i] = val
     return rank.reshape(xshapeOrg)
 
@@ -411,7 +406,7 @@ def report(X,Y,pf,func=None, s=1., param=None, adjust=None, filter=None):
     """ Calculate a bunch of fit quality numbers.
         Parameters are the same as for gen_polyfit.
         pf is the result of a polynomial fit or just the parameters
-        for a the func.
+        which then requires a parameter for func.
         Returns a dict with:
                 Chi square      : chisq 
                 Chi square /dof : chisqNorm
@@ -443,6 +438,8 @@ def report(X,Y,pf,func=None, s=1., param=None, adjust=None, filter=None):
               see http://en.wikipedia.org/wiki/Coefficient_of_determination
                   Applied linear statistical models, 3rd, J. Neter, W. Wassermanm
                                                     W.H. Kutner section 7.5
+
+          The data is flatten when X/Y are 2D or more
 
           Pearson's  r = {Sum_i (x_i-xavg)(y_i-yavg)}/
                            sqrt{ [Sum_i (x_i-xavg)^2] [Sum_i (y_i - yavg)^2] }
@@ -478,8 +475,9 @@ def report(X,Y,pf,func=None, s=1., param=None, adjust=None, filter=None):
                            sqrt{ [Sum_i (y_i-f(x_i))^2] [Sum_i (y_i - yavg)^2] }
                   with yfit = f(x_i) is the result of the fit evaluated
                   with the best fit parameters.
-                  range [-1, 1]
-             This is a coorelator between the fit error and the data.
+                  range [-1, 1] but will tend to be positive (because of correlations
+                  between the 2 terms.
+             This is a correlator between the fit error and the data.
              For a perfect fit it goes to 0.
              Under certain conditions (see below) r = sqrt(1-R^2)
 
@@ -572,7 +570,7 @@ def report(X,Y,pf,func=None, s=1., param=None, adjust=None, filter=None):
     # we can do that with: yavg = mean(w*y)/mean(w)
     # where mean(x) =  (sum_i x_i) / N
     # Which works fine in either case (Nw=1 or =Ny)
-    wavg = np.mean(w,axis=0)
+    wavg = np.mean(np.atleast_1d(w),axis=0)
     Yavg = np.mean(Y*w,axis=0)/wavg # or np.average
     Yfd = (Y-yfit)
     chisq = np.sum(Yfd**2 * w, axis=0)
@@ -667,7 +665,11 @@ if __name__ == "__main__":
     clf()
     figure(4)
     clf()
+    # generate a 2D vector for x (x1, x2) xx.shape is (2, 500)
     xx=x+np.array([0,1.01])[:,None]
+    # generate a 2D vector y (y1, y2) that depends on the 2D vector x
+    # There are 3 different such vectors to do 3 fits at the same time.
+    # the yy.shape is (2,N,3)
     yy=np.zeros((2,N,3))
     yy[:,:,0]=4+6*xx**2+np.random.randn(2,N)*.1
     yy[:,:,1]=1+2*xx**2+np.random.randn(2,N)*.1
@@ -690,6 +692,8 @@ if __name__ == "__main__":
     plot(xx.T,gen_polyeval(xx,(p[:,2],f)).T,'g',label='fit no s')
     pprint (( 'fit no s',p,pe,res,extras ))
     pprint ( report(xx,yy,(p,f)) )
+    # repeating axes in adjust or having in the wrong order should not cause
+    # a problem
     ((p,f),res,pe,extras) = gen_polyfit(xx,yy,4,s=10,adjust=[0,0,2],
                      p0=np.array([[-1,-20,-3,0],[-.1,-.2,-.3,0],[11,9,13,0]]).T,errors=ER)
     figure(2)
@@ -698,7 +702,7 @@ if __name__ == "__main__":
     plot(xx.T,gen_polyeval(xx,(p[:,1],f)).T,'r',label='fit constant s, adj0,2')
     figure(4)
     plot(xx.T,gen_polyeval(xx,(p[:,2],f)).T,'r',label='fit constant s, adj0,2')
-    pprint (( 'fit constant s',p,pe,res,extras ))
+    pprint (( 'fit constant s, adj0,2',p,pe,res,extras ))
     pprint ( report(xx,yy,(p,f),s=10,adjust=[0,0,2]) )
     sss[1,20,:]=100
     sss[0,N-50,2]=-100 # negative sigma does not make sense, but code should not care
@@ -712,10 +716,10 @@ if __name__ == "__main__":
     pprint (( 'fit with s',pf[0],pe,res,extras ))
     pprint ( report(xx,yy,pf,s=sss) )
     (pf,res,pe,extras) = gen_polyfit(xx,yy,4,s=sss[...,0],errors=ER)
-    pprint (( 'fit with s uniform',p,pe,res,extras ))
+    pprint (( 'fit with s not varying across fits',pf[0],pe,res,extras ))
     pprint ( report(xx,yy,pf,s=sss[...,0]) )
     (pf,res,pe,extras) = gen_polyfit(xx,yy,2,s=sss,errors=ER)
-    pprint (( 'fit with s linear(y=mx+b)',p,pe,res,extras ))
+    pprint (( 'fit with s linear(y=mx+b)',pf[0],pe,res,extras ))
     rep=report(xx,yy,pf,s=sss)
     pprint ( rep )
     pprint ( 1-rep['rstar']**2 )

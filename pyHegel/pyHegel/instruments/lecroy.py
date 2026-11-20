@@ -466,7 +466,7 @@ class waveformdata(object):
     def __init__(self, return_only_header=False):
         self.return_only_header = return_only_header
     def __call__(self, inputstr):
-        ds =inputstr.split(',', 1) # strip DESC, TEXT, TIME, DAT1, DAT2, ALL
+        ds =inputstr.split(b',', 1) # strip DESC, TEXT, TIME, DAT1, DAT2, ALL
         fullblock = _decode_block_base(ds[1])
         header = WAVEDESC.from_buffer_copy(fullblock)
         if self.return_only_header:
@@ -695,16 +695,16 @@ class lecroy_wavemaster(visaInstrumentAsync):
         see also vbs_write
         """
         return self.ask("VBS? 'Return=%s'"%command)
-    def write(self, command, use_vbs=False):
+    def write(self, command, termination='default', encoding=None, use_vbs=False):
         if use_vbs:
             self.vbs_write(command)
         else:
-            super(lecroy_wavemaster, self).write(command)
-    def ask(self, command, raw=False, chunk_size=None, use_vbs=False):
+            super(lecroy_wavemaster, self).write(command, encoding=encoding, termination=termination)
+    def ask(self, command, raw=False, encoding=None, chunk_size=None, use_vbs=False):
         if use_vbs:
             return self.vbs_ask(command)
         else:
-            return super(lecroy_wavemaster, self).ask(command, raw=raw, chunk_size=chunk_size)
+            return super(lecroy_wavemaster, self).ask(command, raw=raw, encoding=encoding, chunk_size=chunk_size)
     def _snap_png_getdev(self, area='dso', white_back=False):
         """
         Use like this: get(wave.snap_png, filename='testname.png')
@@ -1151,7 +1151,7 @@ class lecroy_wavemaster(visaInstrumentAsync):
             return lecParaOption(*arg, **kwarg)
         # parameter_view_en is the same as trace_enV, except it uses 1-12 instead of 'P1'-'P12'
         self.parameter_view_en = lecParaOption('app.Measure.P{ch}.View', choices=ChoiceDict({True:'-1', False:'0'}), write_quotes=False)
-        self.parameter_value = lecParaOptionStat('app.Measure.P{ch}.{stat}.Result.Value', str_type=vbs_float_nodata)
+        self.parameter_value = lecParaOptionStat('app.Measure.P{ch}.{stat}.Result.Value', str_type=vbs_float_nodata, autoinit=False)
         self.parameter_vresol = lecParaOptionStat('app.Measure.P{ch}.{stat}.Result.VerticalResolution', str_type=vbs_float_nodata)
         pstat_choice = lecroy_dict([('', 'mode'), ('', 'ch'), ('', 'func'), 'avg', 'high', 'last', 'low', 'sigma', 'sweeps'], [str]*3+[float_undef]*6, required=2, repeats=2)
         pstat_modes = para_type[:3] # skip OFF

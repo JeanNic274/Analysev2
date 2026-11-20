@@ -32,7 +32,7 @@ import time
 
 from ..instruments_base import BaseDevice, BaseInstrument, ProxyMethod,\
                         _find_global_name, _get_conf_header, locked_calling_dev,\
-                        FastEvent, wait_on_event, CHECKING, wait
+                        FastEvent, wait_on_event, CHECKING, wait, _repr_or_string as _repr
 from ..instruments_registry import add_to_instruments
 
 def _asDevice(dev):
@@ -396,8 +396,8 @@ class ScalingDevice(LogicalDevice):
         self._getdev_p = True
     @locked_calling_dev
     def _current_config(self, dev_obj=None, options={}):
-        head = ['Scaling:: fact=%r offset=%r invert_trans=%s calc_first_n=%s keep_last_n=%s basedev=%s'%(
-            self._scale, self._offset, self._invert_trans, self._calc_first_n, self._keep_last_n, self._basedev.getfullname())]
+        head = ['Scaling:: fact=%s offset=%s invert_trans=%s calc_first_n=%s keep_last_n=%s basedev=%s'%(
+            _repr(self._scale), _repr(self._offset), self._invert_trans, self._calc_first_n, self._keep_last_n, self._basedev.getfullname())]
         return self._current_config_addbase(head, options=options)
     def conv_fromdev(self, raw):
         if self._invert_trans:
@@ -429,6 +429,8 @@ class ScalingDevice(LogicalDevice):
             return val, raw_keep
     def _getdev_log(self):
         raw = self._cached_data[0]
+        if raw is None:
+            return None
         return self._prep_output(raw)
     def _setdev(self, val):
         basedev, base_kwarg = self._check_cache['gl']
@@ -502,6 +504,8 @@ class FunctionDevice(LogicalDevice):
             return val, raw
     def _getdev_log(self):
         raw = self._cached_data[0]
+        if raw is None:
+            return None
         return self._prep_output(raw)
     def _setdev(self, val):
         basedev, base_kwarg = self._check_cache['gl']
@@ -579,7 +583,7 @@ class LimitDevice(LogicalDevice):
             self.max = max
     @locked_calling_dev
     def _current_config(self, dev_obj=None, options={}):
-        head = ['Limiting:: min=%r max=%r basedev=%s'%(self.min, self.max, self._basedev.getfullname())]
+        head = ['Limiting:: min=%s max=%s basedev=%s'%(_repr(self.min), _repr(self.max), self._basedev.getfullname())]
         return self._current_config_addbase(head, options=options)
     def _getdev_log(self):
         return self._cached_data[0]
@@ -753,11 +757,13 @@ class RThetaDevice(LogicalDevice):
         self._getdev_p = True
     @locked_calling_dev
     def _current_config(self, dev_obj=None, options={}):
-        head = ['R_Theta_Device:: %r, xoffset=%g, yoffset=%g'%(self._basedevs, self._xoffset, self._yoffset)]
+        head = ['R_Theta_Device:: %r, xoffset=%s, yoffset=%s'%(self._basedevs, _repr(self._xoffset), _repr(self._yoffset))]
         return self._current_config_addbase(head, options=options)
     def _getdev_log(self):
         raw_x = self._cached_data[0]
         raw_y = self._cached_data[1]
+        if raw_x is None or raw_y is None:
+            return [None]*4
         x = raw_x - self._xoffset
         y = raw_y - self._yoffset
         z = x+1j*y
@@ -874,7 +880,7 @@ class Average(LogicalDevice):
         return super(Average, self).getformat(**kwarg)
     @locked_calling_dev
     def _current_config(self, dev_obj=None, options={}):
-        head = ['Average:: %r, filter_time=%r, repeat_time=%r'%(self._basedev, self._filter_time, self._repeat_time)]
+        head = ['Average:: %r, filter_time=%s, repeat_time=%s'%(self._basedev, _repr(self._filter_time), _repr(self._repeat_time))]
         return self._current_config_addbase(head, options=options)
     def _getdev_log(self, **kwarg):
         gl, foo = self._get_auto_list(kwarg, autoget='all', op='get')
@@ -977,10 +983,10 @@ class RampDevice(LogicalDevice):
     @locked_calling_dev
     def _current_config(self, dev_obj=None, options={}):
         if self._mode_is_rate:
-            head1 = 'rate=%r'%self._rate
+            head1 = 'rate=%s'%_repr(self._rate)
         else:
-            head1 = 'interval=%r'%self._interval
-        head = ['Ramp:: %s dt_interval=%r, basedev=%s'%(head1, self._dt, self._basedev.getfullname())]
+            head1 = 'interval=%s'%_repr(self._interval)
+        head = ['Ramp:: %s dt_interval=%s, basedev=%s'%(head1, _repr(self._dt), self._basedev.getfullname())]
         return self._current_config_addbase(head, options=options)
     def _getdev_log(self, **kwarg):
         gl, foo = self._get_auto_list(kwarg, autoget='all', op='get')
@@ -1133,4 +1139,62 @@ class FunctionWrap(LogicalDevice):
             if ret is not None:
                 return ret
         return super(FunctionWrap, self).getformat(**kwarg)
+
+@add_to_instruments()
+class NamedParamDevice:
+    """ Gives a name to a device kw parameter to be used on more than one device:
+
+    So instead of:
+        P1_level = (instr.level, dict(ch=1))
+        P1_slew_dc = (instr.slew_dc, dict(ch=1))
+        ...
+
+        get(P1_level)
+        set(P1_slew_dc, 0)
+    
+    It enables:
+        P1 = NamedParamDevice(instr, dict(ch=1))
+        get(P1.level)
+        set(P1.ramp, 0)
+
+    Note:
+    giving an `alias_dev` changes the behavior of:
+        P1.get()
+    to
+        P1.alias_dev.get()
+
+    """
+    def __init__(self, instrument, arg_dict, alias_dev=None, name=None):
+        self._instrument = instrument
+        self._arg_dict = arg_dict
+        self._alias_dev = alias_dev if alias_dev else instrument.alias
+        self._name = name
+
+    def get(self):
+        return self._alias_dev.get(**self._arg_dict)
+
+    def set(self, val):
+        return self._alias_dev.set(val, **self._arg_dict)
+
+    def check(self, val):
+        return self._alias_dev.check(val, **self._arg_dict)
+
+    def getformat(self):
+        return self._alias_dev.getformat(**self._arg_dict)
+
+    def getfullname(self):
+        return self._name if self._name else self._alias_dev.getfullname()
+    
+    def force_get(self):
+        return self._alias_dev.force_get()
+    
+    def set_ret_cache(self, val):
+        return self._alias_dev.set_ret_cache(val, **self._arg_dict)
+
+    def __getattr__(self, device_name):
+        """
+        Called on self.<device_name>.get()
+        """
+        device = getattr(self._instrument, device_name)
+        return (device, self._arg_dict)
 

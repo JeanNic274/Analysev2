@@ -1,19 +1,12 @@
 # -*- coding: utf-8 -*-
 
-"""
- This is and example local_config file. It is loaded if no local_config file is found.
- To make your own one, create a local_config.py and place it in one of the same directories
- where pyHegel.ini can be placed (see pyHegel_default.ini for those locations)
-  It is often in the .pyHegel directory under the user home directory.
-"""
-
 from __future__ import absolute_import
 
 from pyHegel import instruments
 from pyHegel.instruments_registry import register_instrument, register_usb_name
 
 # Lets force a new ids and usb product ids onto the agilent multimeter instrument class
-register_instrument('Agilent', 'DMM', usb_vendor_product=[0x0957, 0xFFFF])(instruments.agilent_multi_34410A)
+register_instrument('Agilent', 'DMM', usb_vendor_product=[0x0957, 0x0607])(instruments.agilent_multi_34410A)
 
 # Lets override the default name for usb vendor id 0x0957 which is Agilent Technologies
 register_usb_name('Keysight', 0x0957)
@@ -21,23 +14,114 @@ register_usb_name('Keysight', 0x0957)
 # Lest override the usb name for the Yokogawa GS200
 register_usb_name('GS200 DC current/voltage source', 0x0B21, 0x0039)
 
-conf = dict(
-             # Let start with some Yokogawa GS200 DC voltage/current sources
-             yo1 = (instruments.yokogawa_gs200, (10,)), # This is gpib address 10
-             yo2 = (instruments.yokogawa_gs200, (13,)), # This is gpib address 13
-             # The following use the usb visa address. It is unique to that device serial number
-             yo4 = (instruments.yokogawa_gs200, ('USB0::0x0B21::0x0039::91M555555',)),
-             # Now some Agilent(Keysight) multimeters
-             dmm1 = (instruments.agilent_multi_34410A, (11,)), # This is gpib address 11
-             # Now using a usb address
-             dmm5 = (instruments.agilent_multi_34410A, ('USB0::0x0957::0x0607::MY44444444',)),
-             # Now using a lan address (VXI-11 interface)
-             # Note that some device might be available in the .local domain
-             dmm6 = (instruments.agilent_multi_34410A, ('TCPIP0::192.168.137.143',)),
-             dmm7 = (instruments.agilent_multi_34410A, ('TCPIP0::A-34410A-22222.mshome.net',)),
-             # A Standford Research Systems SR830 lockin amplifier
+conf = dict( yo1 = (instruments.yokogawa_gs200, (10,)),
+             yo2 = (instruments.yokogawa_gs200, (13,)),
+             yo3 = (instruments.yokogawa_gs200, (9,)),
+             #yo4 = (instruments.yokogawa_gs200, (1,)),
+             #yo5 = (instruments.yokogawa_gs200, (7,)),
+             yo4 = (instruments.yokogawa_gs200, ('USB0::0x0B21::0x0039::91M504009',)),
+             yo5 = (instruments.yokogawa_gs200, ('USB0::0x0B21::0x0039::91L622196',)),
+             yo6 = (instruments.yokogawa_gs200, ('USB0::0x0B21::0x0039::91KB11653',)),
+             yo7 = (instruments.yokogawa_gs200, ('USB0::0x0B21::0x0039::91L620548',)),
+             yo8 = (instruments.yokogawa_gs200, ('USB0::0x0B21::0x0039::91K130524',)),
+             yo9 = (instruments.yokogawa_gs200, ('USB0::0x0B21::0x0039::91L412844',)),
+             yo10 = (instruments.yokogawa_gs200, ('USB0::0x0B21::0x0039::91KB11655',)),
+             yo11 = (instruments.yokogawa_gs200, ('USB0::0x0B21::0x0039::91M504010',)),
+             yo12 = (instruments.yokogawa_gs200, ('USB0::0x0B21::0x0039::91R932375',)),
+             yo13 = (instruments.yokogawa_gs200, ('USB0::0x0B21::0x0039::91R932374',)),
+             dmm1 = (instruments.agilent_multi_34410A, (11,)),
+             dmm2 = (instruments.agilent_multi_34410A, (22,)),
+             dmm3 = (instruments.agilent_multi_34410A, (6,)),
+             dmm5 = (instruments.agilent_multi_34410A, ('USB0::0x0957::0x0607::MY47021100',)),
+             dmm6 = (instruments.agilent_multi_34410A, ('USB0::0x0957::0x0607::MY47021456',)),
+             dmm7 = (instruments.agilent_multi_34410A, ('USB0::0x0957::0x0607::MY47015885',)),
+             dmm8 = (instruments.agilent_multi_34410A, ('USB0::0x0957::0x0607::MY47021443',)),
+             dmm9 = (instruments.agilent_multi_34410A, ('USB0::0x0957::0x0607::MY47027848',)),
+             dmm10 = (instruments.agilent_multi_34410A, ('USB0::0x0957::0x0607::MY47021374',)),
+             dmm11 = (instruments.agilent_multi_34410A, ('USB0::0x0957::0x0607::MY47026778',)),
+             dmm12 = (instruments.agilent_multi_34410A, ('USB0::0x0957::0x0607::MY47014242',)),
+             dmm13 = (instruments.agilent_multi_34410A, ('USB0::0x0957::0x0607::MY47026633',)),
+             dmm14 = (instruments.agilent_multi_34410A, ('USB0::0x0957::0x0607::MY47027781',)),
              sr1 = (instruments.sr830_lia, (3,)),
-             # A Lakeshore Cryotronics 370 AC resistance bridge/temperature controller using a serial port
-             # and specifying the still heater resistance and the still heater resistance including the leads.
-             tc1 = (instruments.lakeshore_370, ('ASRL1', 120.), dict(still_full_res=136.4)),
+             sr2 = (instruments.sr830_lia, (8,)),
+             sr5 = (instruments.sr865_lia, ('USB0::0xB506::0x2000::003782',)),
+             srnet = (instruments.sr780_analyzer, (24,)),
+             tc1 = (instruments.lakeshore_325, (13,)),
+             tc2 = (instruments.lakeshore_340, (12,)),
+             tc3 = (instruments.lakeshore_370, ('ASRL4', 120., 136.4)),
+             tm1 = (instruments.lakeshore_224, (13,)),
+             tc4test = (instruments.lakeshore_370, ('ASRL4', 120.), dict(still_full_res=136.4)),
+             gen1 = (instruments.agilent_rf_33522A, (10,)),
+             gen2 = (instruments.agilent_rf_33522A, (14,)),
+             gen5 = (instruments.agilent_rf_33522A, ('USB0::0x0957::0x2307::MY50005306',)),
+             gen6 = (instruments.agilent_rf_33522A, ('USB0::0x0957::0x2307::MY50000526',)),
+             gen7 = (instruments.agilent_rf_33522A, ('USB0::0x0957::0x2307::MY50001717',)),
+             gen8 = (instruments.agilent_rf_33522A, ('USB0::0x0957::0x2307::MY50001970',)),
+             bnc1 = (instruments.BNC_rf_845, ('USB0::0x03EB::0xAFFF::141-215330500-0233::0',)),
+             bnc2 = (instruments.BNC_rf_845, ('USB0::0x03EB::0xAFFF::141-215330500-0234::0',)),
+             bnc3 = (instruments.BNC_rf_845, ('USB0::0x03EB::0xAFFF::141-215330500-0235::0',)),
+             bnc4 = (instruments.BNC_rf_845, ('USB0::0x03EB::0xAFFF::141-215330500-0236::0',)),
+             rf1 = (instruments.sr384_rf, (16,)),
+             rf2 = (instruments.sr384_rf, (27,)),
+             foo1 = (instruments.dummy, ()),
+             foo2 = (instruments.dummy, ()),
+             loop = (instruments.loop, ()),
+             # EXA is gpib 8
+             exa1 = (instruments.agilent_EXA, ('USB::0x0957::0x0B0B::MY51170142',)),
+             exa2 = (instruments.agilent_EXA, ('USB::0x0957::0x0B0B::MY52220278',)),
+             pxa = (instruments.agilent_EXA, ('USB::0x2A8D::0x0D0B::MY51380626',)),
+             # PNA-L is gpib 16
+             pna1 = (instruments.agilent_PNAL, ('USB0::0x0957::0x0118::MY49001395',)),
+             ena1 = (instruments.agilent_ENA, ('USB0::2391::4873::MY49203311::0',)),
+             pnax = (instruments.agilent_PNAL, ('USB0::0x2A8D::0x2B01::MY52041560::0',)),
+             ff1 = (instruments.agilent_FieldFox, ('TCPIP0::A-N9916A-02987.mshome.net::inst0::INSTR',)),
+             #ENA E5071C we had as a temporary loan summer 2012
+             #ena1 = (instrument.agilent_ENA, ('USB0::0x0957::0x0D09::MY46213332',)),
+             # scope is USB only
+             s500 = (instruments.infiniiVision_3000, ('USB0::2391::6050::MY51135769::INSTR',)),
+             s200 = (instruments.infiniiVision_3000, ('USB0::0x0957::0x1796::MY51135849',)),
+             smso = (instruments.infiniiVision_3000, ('USB0::0x0957::0x17A2::MY52161105::0',)),
+             # lecroy scope using TCPIP, using an alias
+             #lecr = (instruments.lecroy_wavemaster, ('lecroy',)),
+             #lecr = (instruments.lecroy_wavemaster, ('TCPIP0::LCRY0829N67924.local',)),
+             lecr = (instruments.lecroy_wavemaster, ('TCPIP0::LCRY0829N67924.mshome.net::inst0::INSTR',)),
+             # acq board
+             acq1 = (instruments.Acq_Board_Instrument, ('127.0.0.1', 18800)),
+             acq2 = (instruments.Acq_Board_Instrument, ('127.0.0.1', 18801)),
+             # MXG generator is gpib 19
+             mxg1 = (instruments.agilent_rf_MXG, ('USB0::0x0957::0x1F01::MY50140552',)),
+             # PSG generator
+             psg1 = (instruments.agilent_rf_PSG, (19,)),
+             psg2 = (instruments.agilent_rf_PSG, (20,)),
+             # Data Translation Box
+             dt1 = (instruments.DataTranslation, ()),
+             # Agilent attenuator
+             att1 = (instruments.agilent_rf_Attenuator, ('USB0::0x0957::0x4C18::MY52200101',)),
+             att2 = (instruments.agilent_rf_Attenuator, ('USB0::0x0957::0x4C18::MY52200128',)),
+             # Power meters
+             epm1 = (instruments.agilent_PowerMeter, ('USB0::0x0957::0x5418::MY52290056',)),
+             # Arbitratry waveform generator
+             #awg1 = (instruments.agilent_AWG, ('awg1',)),
+             awg1 = (instruments.agilent_AWG, ('TCPIP0::localhost::inst0::INSTR',)),
+             #Bluefors
+             bf1 = (instruments.bf_valves, ()),
+             # delay box
+             delay1 = (instruments.colby_pdl_100a, (5,)),
+             # zurich UHFLI
+             zi = (instruments.zurich_UHF, ()),
+             # agilent power supply
+             ps1 = (instruments.agilent_power_supply_E363x, (5,)),
+             # keithley 2450 smu
+             smu1 = (instruments.keithley_2450_smu, ('USB0::1510::9296::04088622::0',)),
+             # Agilent/Leysight
+             smu2 = (instruments.agilent_SMU, (17,)),
+             smu3 = (instruments.agilent_B2900_smu, ('USB0::0x0957::0x8E18::MY51140506::0',)),
+             # Rohde & Schwarz ZNB network analyzer
+             znb = (instruments.rs_znb_network_analyzer, ('tcpip::ZNB40-72-101744.mshome.net::inst0::instr',)),
+             # Rohde & Schwarz RTO scope
+             rto = (instruments.rs_rto_scope, ('tcpip::RTO2014-300206.mshome.net::inst0::instr',)),
+             # Guszik default card
+             gz = (instruments.guzik_adp7104, ()),
+             # Keysight usb vna
+             vna1 = (instruments.agilent_PNAL, ('TCPIP0::localhost::hislip_PXI10_CHASSIS1_SLOT1_INDEX0::INSTR',))
         )

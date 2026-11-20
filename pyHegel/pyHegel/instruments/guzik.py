@@ -438,7 +438,7 @@ class guzik_adp7104(BaseInstrument):
             raise RuntimeError(self.perror('You are requesting more memory than is available (with a reserve of 5 GiB)'))
         self._destroy_op()
         self._gsa_Nch = Nch
-        channels_list = ','.join(['CH%i'%i for i in channels])
+        channels_list = b','.join([b'CH%i'%i for i in channels])
         conf = c_long()
         SDK = self._gsasdk
         board_index = self._board_index

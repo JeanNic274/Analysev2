@@ -26,15 +26,24 @@ from __future__ import absolute_import, print_function, division
 
 import struct
 import numpy
+import sys
 import time
+import numpy as np
 
-from ..instruments_base import visaInstrument, scpiDevice, ChoiceStrings, BaseDevice, \
-                               visaInstrumentAsync, locked_calling, wait, ChoiceMultiple
+from ..instruments_base import BaseInstrument, visaInstrument, scpiDevice, ChoiceStrings, BaseDevice,\
+                               visaInstrumentAsync, locked_calling, wait, ChoiceMultiple,\
+                               visa_wrap, resource_info, ProxyMethod, MemoryDevice
 from ..instruments_registry import register_instrument
 from .logical import FunctionWrap
 
+from ..comp2to3 import fb, int2byte
+
+#######################################################
+##    Thorlabs power meter PM100A
+#######################################################
+
 @register_instrument('Thorlabs', 'PM100A', alias='PM100A Power Meter')
-class thorlabs_power_meter(visaInstrumentAsync):
+class thorlabs_power_meter(visaInstrument):
     """
     To load the instrument: th1 = instruments.thorlabs_power_meter('USB0::0x1313::0x8079::P1005280::INSTR')
     This controls the power meter console from Thorlabs
@@ -70,6 +79,11 @@ class thorlabs_power_meter(visaInstrumentAsync):
 
         config += [options]
         return self._conf_helper(*config)
+
+    # instrument does not work with standard read_status_byte so we overwrite it
+    # it is called by clear in init.
+    def read_status_byte(self):
+        return int(self.ask('*stb?'))
 
     def zero_adjust(self):
         """
@@ -209,6 +223,215 @@ class thorlabs_power_meter(visaInstrumentAsync):
 
         super(thorlabs_power_meter, self)._create_devs()
 
+
+#######################################################
+##    Thorlabs power meter PM103E
+#######################################################
+
+#@register_instrument('Thorlabs', 'PM103E', '1.0.2.122')
+@register_instrument('Thorlabs', 'PM103E')
+class thorlabs_pm103e(visaInstrument):
+    """
+    To load the instrument: th1 = instruments.thorlabs_pm103e('tcpip::PM103E-24.mshome.net::2000::socket')
+    This controls and ethernet connecected PM103E power meterfrom Thorlabs
+    Most useful devices:
+        readval
+        measure (note that this will change what readval reads)
+    Devices to change usefull settings:
+        configuration (initialized to power on connection)
+        average_count
+        wavelength_nm
+        diameter
+        response_AW
+        response_VW
+    """
+    def __init__(self, visa_addr, **kwargs):
+        cnsts = visa_wrap.constants
+        rsrc_info = resource_info(visa_addr)
+        if rsrc_info.interface_type == cnsts.InterfaceType.asrl:
+            baud_rate = kwargs.pop('baud_rate', 115200)
+            parity = kwargs.pop('parity', cnsts.Parity.none)
+            data_bits = kwargs.pop('data_bits', 8)
+            stop_bits = kwargs.pop('stop_bits', cnsts.StopBits.one)
+            kwargs['baud_rate'] = baud_rate
+            kwargs['parity'] = parity
+            kwargs['data_bits'] = data_bits
+            kwargs['stop_bits'] = stop_bits
+            self._serial_mode = True
+        else:
+            self._serial_mode = False # ethernet mode
+        kwargs['write_termination'] = '\n'
+        kwargs['read_termination'] = '\n'
+        kwargs['keep_alive'] = 'auto'
+        kwargs['keep_alive_time'] = 1.5*60 # the device seems to timeout on tcp around 2 min (120s) so set it to 90
+        self._write_top_level = True
+        self._serial_num = None
+        self._instrument_conf = None
+        super(thorlabs_pm103e, self).__init__(visa_addr, **kwargs)
+
+    def init(self, full=False):
+        # after power on, it does not seem to know what configuration it has (it times out on query)
+        # so set it to something
+        self.configuration.set('power')
+
+    def _handle_read_header(self, header):
+        base, l = struct.unpack('<HH', header)
+        if base != 0x00ca:
+            raise RuntimeError(self.perror('Invalid communication header base code.'))
+        return l
+    def read_unlocked(self, raw=False, encoding=None, count=None, chunk_size=None):
+        if not self._serial_mode:
+            encoding = 'bytes'
+            header = super(thorlabs_pm103e, self).read_unlocked(raw=True, count=4, encoding='bytes')
+            l = self._handle_read_header(header)
+            ret = super(thorlabs_pm103e, self).read_unlocked(raw=True, encoding=encoding, count=l, chunk_size=chunk_size)
+            #print(repr(header), repr(ret))
+            ret = visa_wrap._strip_termination(ret, b'\n')
+            ret = ret.decode('utf8')
+            #if len(ret)-4 + 1 != l:
+            #    raise RuntimeError(self.perror('Invalid communication header length code.'))
+        else:
+            ret = super(thorlabs_pm103e, self).read_unlocked(raw=raw, encoding=encoding, count=count, chunk_size=chunk_size)
+        return ret
+
+    @locked_calling
+    def write(self, val, termination='default', encoding=None):
+        if not self._serial_mode:
+            l = len(val)
+            h = struct.pack('<HH', 0x00ca, l+1) # +1 for termination character
+            val = h + fb(val)
+        super(thorlabs_pm103e, self).write(val, termination=termination, encoding=encoding)
+
+    @locked_calling
+    def _current_config(self, dev_obj=None, options={}):
+        config = ['sensor_idn', 'average_count', 'user_attenuation',
+                  'zero_adjust_state_done', 'zero_adjust_magnitude',
+                  'wavelength_nm', 'diameter', 'configuration', 'adapter', 'filter_en',
+                  'current_meas_mode',
+                  'power_range', 'power_auto_range_en', 'power_delta_mode_en', 'power_delta_reference']
+        adapter  = self.adapter.get().lower()
+        #adapter can be 'PHOTodiode', 'THERmal', 'PYRo' or None
+        extra = []
+        if adapter == 'photodiode':
+            # These are not autoinit so:
+            extra += ['response_photodiode_AW']
+            extra += ['current_range', 'current_auto_range_en', 'current_delta_mode_en', 'current_delta_reference']
+        else: # thermal? or pyro
+            extra += ['response_pyrosensor_VW']
+            extra += ['voltage_range', 'voltage_auto_range_en', 'voltage_delta_mode_en', 'voltage_delta_reference']
+        for k in extra:
+            getattr(self, k).get()
+        config += extra
+        config += [options]
+        return self._conf_helper(*config)
+
+    def zero_adjust(self):
+        """
+            Performs a zero adjustment routine
+        """
+        self.write(':SENse:CORRection:COLLect:ZERO')
+    def zero_adjust_abort(self):
+        self.write(':SENse:CORRection:COLLect:ZERO:ABORt')
+
+    def _fix_power_unit_change(self, val, dev_obj, **kwargs):
+        # If the current configuration is power, chaning power unit will not
+        # come into effect unless we reapply that we want power
+        if self.configuration.get() == 'power':
+            self.configuration.set('power')
+    def _keep_configuration(self, val, dev_obj, **kwargs):
+        prev = self.configuration.getcache()
+        if kwargs['mode'] not in self.configuration.choices[[prev]]:
+            # not the same value, reset the configuration
+            self.configuration.set(prev)
+
+    def _readval_getdev(self, maxrep=10, **kwargs):
+        """ reads a value, protecting against inf value (obtained when autoranging).
+            It will repeat up to maxrep times trying to get a non inf value.
+        """
+        ret = self._readval.get(**kwargs)
+        rep = 1
+        while ret == np.inf and rep < maxrep:
+            ret = self._readval.get(**kwargs)
+            rep += 1
+        return ret
+
+    def _create_devs(self):
+        self.sensor_idn = scpiDevice(getstr='SYSTem:SENSor:IDN?', doc='Query info about the connected sensor')
+        self.average_count = scpiDevice(':SENSe:AVERage:COUNt', str_type=int, setget=True, max=1000,
+                                        doc="It looks like it is also the time in ms.")
+
+        # CORRection, everithing about power correction
+        self.user_attenuation = scpiDevice(':SENSe:CORRection', str_type=float,
+                                           doc='set-get the current user attenuation for power correction in dB', setget=True)
+        self.zero_adjust_state_done = scpiDevice(getstr='SENSe:CORRection:COLLect:ZERO:STATe?', str_type=bool)
+        self.zero_adjust_magnitude = scpiDevice(getstr=':SENSe:CORRection:COLLect:ZERO:MAGNitude?',
+                                                doc='get the magnitude obtained after the zero adjustment routine',
+                                                autoinit=False)
+        self.wavelength_nm = scpiDevice(':SENSe:CORRection:WAVelength', str_type=float, setget=True)
+        self.diameter = scpiDevice(':SENSe:CORRection:BEAMdiameter', str_type=float, setget=True,
+                                   doc='set-get the beam diameter in mm')
+
+        # POWer, everything about power/current or power/voltage conversion
+        self.response_photodiode_AW = scpiDevice(':SENse:CORR:POW:RESPonse', str_type=float,
+                                      doc='set-get the photodiode response value in A/W', setget=True, autoinit=False)
+
+        self.response_pyrosensor_VW = scpiDevice(':SENse:CORR:ENERgy:RESPonse', str_type=float,
+                                      doc='set-get the thermopile response value in V/W', setget=True, autoinit=False)
+
+        # CURRent (only for photodiodes)
+        kwargs = dict(autoinit=False)
+        self.current_auto_range_en = scpiDevice(':SENSe:CURRent:RANGe:AUTO', str_type=bool, **kwargs)
+        self.current_range = scpiDevice(':SENSe:CURRent:RANGe', str_type=float, doc='Sets the current range in A', setget=True, **kwargs)
+        self.current_delta_reference = scpiDevice(':SENSe:CURRent:REF', str_type=float, doc='current delta reference value in A', setget=True, **kwargs)
+        self.current_delta_mode_en = scpiDevice(':SENSe:CURRent:REF:STATe', str_type=bool, setget=True, **kwargs)
+
+        # POWer
+        self.power_auto_range_en = scpiDevice(':SENSe:POW:RANGe:AUTO', str_type=bool)
+        self.power_range = scpiDevice(':SENSe:POW:RANGe', str_type=float, doc='Sets the power range in W', setget=True)
+        self.power_delta_reference = scpiDevice(':SENSe:POW:REF', str_type=float, doc='power delta reference value in W', setget=True)
+        self.power_delta_mode_en = scpiDevice(':SENSe:POW:REF:STATe', str_type=bool)
+        # changing unit is only active after a change in configuration.
+# TODO fix this unit change problem
+        self.power_unit = scpiDevice('SENSe:POWer:UNIT', choices=ChoiceStrings('DBM', 'W'), extra_set_after_func=ProxyMethod(self._fix_power_unit_change))
+
+        # VOLTage (only for pyroelectric sensors)
+        kwargs = dict(autoinit=False)
+        self.voltage_auto_range_en = scpiDevice(':SENSe:VOLT:RANGe:AUTO', str_type=bool, **kwargs)
+        self.voltage_range = scpiDevice(':SENSe:VOLT:RANGe', str_type=float, doc='Sets the voltage range in V', setget=True, **kwargs)
+        self.voltage_delta_reference = scpiDevice(':SENSe:VOLT:REF', str_type=float, doc='voltage delta reference value in V', setget=True, **kwargs)
+        self.voltage_delta_mode_en = scpiDevice(':SENSe:VOLT:REF:STATe', str_type=bool, **kwargs)
+
+        # INPUTS
+        self.filter_en = scpiDevice(':INPut:FILTer', str_type=bool)
+        self.adapter = scpiDevice(':INPut:ADAPter', choices=ChoiceStrings('PHOTodiode', 'THERmal', 'PYRo'))
+
+        # CONFIGURATION
+        conf_choices = ChoiceStrings('POWer', 'CURRent', 'VOLTage', 'PDENsity', 'TEMPerature', 'RESistance', 'FREQuency')
+        self.configuration = scpiDevice(setstr=':CONF:{val}', getstr='CONF?', choices=conf_choices,
+                                        doc='set-get the current measurement configuration')
+        self.current_meas_mode = MemoryDevice('power', choices=conf_choices)
+        self.measure = scpiDevice(getstr='MEASURE:{mode}?', str_type=float, autoinit=False,
+                                  doc="""This reads any of the measure.""",
+                                  options=dict(mode=self.current_meas_mode),
+                                  extra_get_after_func=ProxyMethod(self._keep_configuration),
+                                  options_apply=['mode'])
+
+        # MEASUREMENTS
+        # TODO, for longer average_count than 1000, need to implement proper
+        #  'init;*OPC' -> wait -> fetch
+        # also can only seem able to fetch once the last value.
+        #self.fetch = scpiDevice(getstr='FETCh?', str_type=float, autoinit=False, trig=True)
+        self._readval = scpiDevice(getstr='READ?', str_type=float, autoinit=False, trig=True)
+        self._devwrap('readval')
+        self.alias = self.readval
+
+        super(thorlabs_pm103e, self)._create_devs()
+
+
+#######################################################
+##    APTDevice
+#######################################################
+
 # Source/dest id:
 HOST = 0x01
 MOTHER_BOARD = 0x11
@@ -217,12 +440,13 @@ BAY_1 = 0x22
 GENERIC_USB = 0x50
 
 def encodeAPT(id, param1=0, param2=0, dest_byte=GENERIC_USB, source_byte=HOST, data=None):
+    conv = int2byte
     if data:
         dest_data = dest_byte | 0x80
         data_length = len(data)
-        return struct.pack('<HHcc{0:d}s'.format(data_length), id, data_length, chr(dest_data), chr(source_byte), data)
+        return struct.pack('<HHcc{0:d}s'.format(data_length), id, data_length, conv(dest_data), conv(source_byte), data)
     else:
-        return struct.pack('<Hcccc', id, chr(param1), chr(param2), chr(dest_byte), chr(source_byte))
+        return struct.pack('<Hcccc', id, conv(param1), conv(param2), conv(dest_byte), conv(source_byte))
 
 
 def decodeAPT(message):
@@ -276,12 +500,15 @@ class APTDevice(BaseDevice):
             #return ret[1::]
             return {k:ret[1 + n] for n, k in enumerate(self.get_names)}
 
+#######################################################
+##    Thorlabs KDC101
+#######################################################
 
 @register_instrument('Thorlabs', 'KDC101', alias='KDC101 Rotation stage')
-class ThorlabsKDC101(visaInstrument):
+class ThorlabsKDC101_serial(visaInstrument):
     """
     Controller Thorlabs KDC101 for the rotating stage
-    To load the instrument: th = instruments.ThorlabsKDC101()
+    To load the instrument: th = instruments.ThorlabsKDC101_serial('ASRL4::INSTR')
     Most useful devices:
         angle
         enc_counter
@@ -299,17 +526,27 @@ class ThorlabsKDC101(visaInstrument):
         deg_to_inc
         inc_to_deg
     """
-    def __init__(self, visa_addr='ASRL3::INSTR', *arg, **kwarg):
-        skip_id_test = kwarg.pop('skip_id_test', True)
-        baud_rate = kwarg.pop('baud_rate', 115200)
-        write_termination = kwarg.pop('write_termination', '')
-        kwarg['skip_id_test'] = skip_id_test
-        kwarg['baud_rate'] = baud_rate
-        kwarg['write_termination'] = write_termination
-        super(ThorlabsKDC101, self).__init__(visa_addr, *arg, **kwarg)
+    def __init__(self, visa_addr, *arg, **kwargs):
+        """
+        Parameters:
+            enc_count_per_deg which defaults to 1919.6418578623391
+        """
+        cnsts = visa_wrap.constants
+        rsrc_info = resource_info(visa_addr)
+        if rsrc_info.interface_type == cnsts.InterfaceType.asrl:
+            baud_rate = kwargs.pop('baud_rate', 115200)
+            parity = kwargs.pop('parity', cnsts.Parity.none)
+            data_bits = kwargs.pop('data_bits', 8)
+            stop_bits = kwargs.pop('stop_bits', cnsts.StopBits.one)
+            kwargs['baud_rate'] = baud_rate
+            kwargs['parity'] = parity
+            kwargs['data_bits'] = data_bits
+            kwargs['stop_bits'] = stop_bits
+        # This is temporary until idn returns the proper information
+        kwargs['skip_id_test'] = True
+        self.enc_count_per_deg = kwargs.pop('enc_count_per_deg', 1919.6418578623391)
+        super(ThorlabsKDC101_serial, self).__init__(visa_addr, *arg, **kwargs)
         self._suspend_endofmove_msgs()
-
-        self.enc_count_per_deg = kwarg.pop('enc_count_per_deg', 1919.6418578623391)
         #self.resume_endofmove_msgs()
 
     def idn(self):
@@ -320,20 +557,21 @@ class ThorlabsKDC101(visaInstrument):
         return part_a, part_b
 
 
-    def write(self, val, termination=''):
+    def write(self, val, termination='', encoding=None):
         # some checks to prevent the controller from being bricked
-        if ord(val[4]) != GENERIC_USB and ord(val[4]) != GENERIC_USB | 0x80:
+        if ord(val[4:5]) != GENERIC_USB and ord(val[4:5]) != GENERIC_USB | 0x80:
             raise Exception("Not a valid APT command!")
-        super(ThorlabsKDC101, self).write(val)
+        #print( val)
+        super(ThorlabsKDC101_serial, self).write(val, termination=termination, encoding=encoding)
 
-    def read(self, raw=False, count=None, chunk_size=None):
+    def read(self, raw=False, count=None, encoding=None, chunk_size=None):
         # First we try to read the header, if the dest byte is 0x01 (HOST), no data packet to follow, if 0x81 (HOST logic OR'd with 0x80 )
-        header = super(ThorlabsKDC101, self).read(count=6)
+        header = super(ThorlabsKDC101_serial, self).read(count=6)
         if header[4] == HOST:
             return header
         elif header[4] == HOST | 0x80:
             count, = struct.unpack('<H', header[2:4])
-            return header + super(ThorlabsKDC101, self).read(count=count)
+            return header + super(ThorlabsKDC101_serial, self).read(count=count)
 
     def _wait_for_endofmove(self, timeout_ms=60000):
         time_0 = time.time()
@@ -364,9 +602,6 @@ class ThorlabsKDC101(visaInstrument):
         self.write(message)
         res = self.read()
         return res[8::]
-
-
-
 
     def _suspend_endofmove_msgs(self):
         message = encodeAPT(0x046B)
@@ -495,4 +730,99 @@ class ThorlabsKDC101(visaInstrument):
             autoinit=False
         )
 
-        super(ThorlabsKDC101, self)._create_devs()
+        super(ThorlabsKDC101_serial, self)._create_devs()
+
+
+clr = None
+Decimal = None
+DeviceManagerCLI = None
+KCubeDCServo = None
+#GenericMotorCLI = None
+DCServoCLI = None
+DeviceConfiguration = None
+_assembly_Version = None
+
+_delayed_imports_done = False
+
+def _delayed_imports():
+    global _delayed_imports_done
+    if not _delayed_imports_done:
+        global clr, Decimal, DeviceManagerCLI, KCubeDCServo, DeviceConfiguration
+        try:
+            import clr
+            from System import Decimal
+        except ImportError as exc:
+            raise RuntimeError('Unable to import windows clr/System: %s'%exc)
+        try:
+            _Thorlabs_Kinesis_dir = r'C:\Program Files\Thorlabs\Kinesis'
+            if _Thorlabs_Kinesis_dir not in sys.path:
+                sys.path.append(_Thorlabs_Kinesis_dir)
+            clr.AddReference('Thorlabs.MotionControl.DeviceManagerCLI')
+            clr.AddReference('Thorlabs.MotionControl.GenericMotorCLI')
+            clr.AddReference('Thorlabs.MotionControl.KCube.DCServoCLI')
+            #import Thorlabs.MotionControl.DeviceManagerCLI as DeviceManagerCLI
+            from Thorlabs.MotionControl.DeviceManagerCLI import DeviceManagerCLI, DeviceConfiguration
+            #import Thorlabs.MotionControl.GenericMotorCLI as GenericMotorCLI
+            #import  Thorlabs.MotionControl.KCube.DCServoCLI as DCServoCLI
+            from Thorlabs.MotionControl.KCube.DCServoCLI import KCubeDCServo
+        except ImportError as exc:
+            raise RuntimeError(
+                "Unable to load ThorlabsKDC101_DOTNET Module. Make sure pythonnet and "
+                "thorlabs software are installed: %s"%exc)
+        _delayed_imports_done = True
+
+
+@register_instrument("Thorlabs", "KDC101_DOTNET", alias="KDC101 Rotation stage .NET implementation")
+class ThorlabsKDC101_DOTNET(BaseInstrument):
+    """
+    Controller Thorlabs KDC101 for the rotating stage
+    Very experimental, please be mindful.
+    Implemented using DOTNET libraries.
+    To load the instrument: th = instruments.ThorlabsKDC101_DOTNET()
+    Most useful devices:
+        angle
+    Useful commands:
+        home
+    """
+    # Code taken from Thorlab's github example project, very experimental.
+    def __init__(self, serial_no="27257399", timeout=60000, quiet_delete=False, quiet_load=True):
+        self.serial_no = serial_no
+        DeviceManagerCLI.BuildDeviceList()
+        self._device = KCubeDCServo.CreateKCubeDCServo(self.serial_no)
+        self._device.Connect(serial_no)
+        time.sleep(0.25)
+        self._device.StartPolling(250)
+        time.sleep(0.25)
+        self._device.EnableDevice()
+        dev_info = self._device.GetDeviceInfo()
+        print(dev_info.Description)
+
+        if not self._device.IsSettingsInitialized():
+            self._device.WaitForSettingsInitialized(10000)
+            assert self._device.IsSettingsInitialized() is True
+
+        self.motor_config = self._device.LoadMotorConfiguration(
+            serial_no, DeviceConfiguration.DeviceSettingsUseOptionType.UseFileSettings)
+        self.motor_config.DeviceSettingsName = "PRMTZ8"
+        self.motor_config.UpdateCurrentConfiguration()
+        self._device.SetSettings(self._device.MotorDeviceSettings, True, False)
+        self.timeout = timeout
+        super(ThorlabsKDC101_DOTNET, self).__init__(quiet_delete=quiet_delete, quiet_load=quiet_load)
+
+    def home(self):
+        self._device.Home(self.timeout)
+
+    def _angle_setdev(self, angle):
+        angle = Decimal(angle)
+        self._device.MoveTo(angle, self.timeout)
+
+    def _angle_getdev(self):
+        return float(self._device.Position.ToString())
+
+    def _create_devs(self):
+        self._devwrap('getdev')
+        return super(ThorlabsKDC101_DOTNET, self)._create_devs()
+
+    def __del__(self):
+        self._device.Disconnect()
+        return super(ThorlabsKDC101_DOTNET, self).__del__()

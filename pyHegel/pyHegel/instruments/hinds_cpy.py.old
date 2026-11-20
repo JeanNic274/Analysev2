@@ -1,0 +1,111 @@
+from ..instruments_base import (
+    scpiDevice,
+    BaseInstrument,
+)
+from ..instruments_registry import (
+    register_instrument,
+)
+from ..comp2to3 import fb
+
+import serial
+
+import re
+
+
+class _range_type(object):
+    def __call__(self, from_str):
+        values = from_str.split(",")
+        return (float(values[0]), float(values[1]))
+
+    def tostr(self, data):
+        return "{},{}".format(data[0], data[1])
+
+
+range_type = _range_type()
+
+
+@register_instrument("Hind Instruments", "PEM-CSC")
+class hinds_pem_csc(BaseInstrument):
+    """
+    This controls the Hinds PhotoElastic Modulator Controller (PEM-CSC)
+    Make sure the device is powered on and the COM port is correctly configured.
+    Useful devices:
+        Get/Set devices :
+            modulator_drive_voltage
+            modulator_retardance_nm
+        Get device :
+            modulator_freq_hz
+        Set device :
+            output
+    """
+
+    def __init__(
+        self,
+        com_port="COM3",
+        baudrate=115200,
+        timeout=0.5,
+        quiet_delete=False,
+        quiet_load=True,
+    ):
+        self.dev = serial.Serial(
+            port=com_port,
+            baudrate=baudrate,
+            bytesize=serial.EIGHTBITS,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+            timeout=timeout,
+        )
+        super().__init__(quiet_delete, quiet_load)
+
+    def __del__(self):
+        self.dev.close()
+        return super().__del__()
+
+    def read(self, raw=False):
+        value = self.dev.readall().decode("utf-8")
+        return value if raw else re.findall(r"\((.*?)\)|$", value)[0]
+
+    def write(self, val):
+        return self.dev.write(fb(val) + fb("\n"))
+
+    def ask(self, question, raw=None, chunk_size=None):
+        self.write(question)
+        return self.read()
+
+    def _create_devs(self):
+        self.idn = scpiDevice(getstr="*IDN?", str_type=str)
+        self.modulator_drive_voltage = scpiDevice(
+            getstr=":MOD:DRV?",
+            setstr=":MOD:DRV ",
+            str_type=float,
+            options_lim=(0, 1),
+            doc="Modulator drive voltage in volt ranging from 0 to 1.",
+        )
+        self.modulator_retardance_nm = scpiDevice(
+            getstr=":MOD:AMP?",
+            setstr=":MOD:AMP ",
+            str_type=float,
+            doc="""Modulator retardation amplitude in nanometers.
+            For instance, if half wave retardance at 633nm is desired, the argument should be '316.5'.""",
+        )
+        self.modulator_retardance_range_nm = scpiDevice(
+            getstr=":MOD:AMPR?",
+            str_type=range_type,
+            doc="Modulation retardation amplitude range from lowest to hightest in nanometers.",
+        )
+        self.modulator_freq_hz = scpiDevice(
+            getstr=":MOD:FREQ?",
+            str_type=float,
+            doc="Modulation frequency in Hz.",
+        )
+        self.modulator_stable = scpiDevice(
+            getstr=":MOD:STABLE?",
+            str_type=bool,
+            doc="Modulation stability, True if stable, False otherwise.",
+        )
+        self.output = scpiDevice(
+            setstr=":SYS:PEMO ",
+            str_type=int,
+            doc="PEM Active or Inactive. 1 if active, 0 if inactive.",
+        )
+        return super()._create_devs()

@@ -931,7 +931,7 @@ class UI_Laser(DraggableFrame):
         layer2.addWidget(QLabel('Mode: '))
         
         self.qbox_laser_mode = MyQComboBox()        
-        self.qbox_laser_mode.addItems(['cw','pulse','burst'])
+        self.qbox_laser_mode.addItems(['cw','pulsed','burst'])
         self.qbox_laser_mode.currentTextChanged.connect(self._set_laser)
         layer2.addWidget(self.qbox_laser_mode)
         
@@ -1002,7 +1002,7 @@ class UI_Laser(DraggableFrame):
         if freq is not None and freq != "":
             try:
                 frq = int(float(freq) * 1000)
-                cmds.set(device.freq, frq)
+                cmds.set(device.pulse_burst_freq_Hz, frq)
                 print(f"Frequency is now: {freq} kHz")
             except ValueError:
                 invalid_parameters.append('freq '+freq)
@@ -1041,7 +1041,7 @@ class UI_NanoPos(DraggableFrame):
         
         self.layout.addLayout(layer0)
         
-        axis = {'x':0,'y':1,'z':2}
+        axis = {'x':0,'y':2,'z':1}
         
         for k,ax in axis.items():
         
@@ -1139,7 +1139,6 @@ class UI_NanoPos(DraggableFrame):
         
         def measure_fn(): 
             return device.move.getPosition(ax)/1000
-        
         self._cont_thread[ax] = QThread()
         self._cont_worker[ax] = ContinuousReadWorker(measure_fn, interval_ms=500)
         self._cont_worker[ax].moveToThread(self._cont_thread[ax])

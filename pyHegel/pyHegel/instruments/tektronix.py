@@ -39,6 +39,8 @@ from ..instruments_base import visaInstrument, visaInstrumentAsync,\
                             ChoiceSimple, _retry_wait, Block_Codec, ChoiceSimpleMap
 from ..instruments_registry import register_instrument, register_usb_name, register_idn_alias
 
+from ..comp2to3 import fb
+
 register_usb_name('TEKTRONIX', 0x0699)
 
 
@@ -155,8 +157,8 @@ class tektronix_AWG(visaInstrumentAsync):
         self.waveform_volt_ampl = devWfOption(getstr='WLISt:WAVeform:AMPLitude? "{wfname}"',setstr='WLISt:WAVeform:AMPLitude "{wfname}"', str_type=float, autoinit=False)
 
         self.waveform_length = devWfOption(getstr='WLISt:WAVeform:LENGth? "{wfname}"', setstr='WLIST:WAVEFORM:RESAMPLE "{wfname}", ', str_type=int, autoinit=False)
-        self.waveform_data = devWfOption(getstr='WLISt:WAVeform:DATA? "{wfname}"', setstr='WLISt:WAVeform:DATA "{wfname}", {val}; *OPC', str_type=Block_Codec(np.float32), autoinit=False)
-        self.waveform_marker_data = devWfOption(setstr='WLISt:WAVeform:MARKer:DATA "{wfname}",{val}', getstr='WLISt:WAVeform:MARKer:DATA? "{wfname}"', str_type=Block_Codec(np.uint8), autoinit=False)
+        self.waveform_data = devWfOption(getstr='WLISt:WAVeform:DATA? "{wfname}"', setstr='WLISt:WAVeform:DATA "{wfname}", {val}; *OPC', str_type=Block_Codec(np.float32, decode_auto=True), autoinit=False, raw=True)
+        self.waveform_marker_data = devWfOption(setstr='WLISt:WAVeform:MARKer:DATA "{wfname}",{val}', getstr='WLISt:WAVeform:MARKer:DATA? "{wfname}"', str_type=Block_Codec(np.uint8, decode_auto=True), autoinit=False, raw=True)
         self.marker_volt_ampl = devMkrOption('SOURce{ch}:MARKer{mkr}:VOLTage:AMPLitude', str_type=float, min=0.2, max=1.75,autoinit=False) # min et max déterminés en essayant
         self.marker_volt_offset = devMkrOption('SOURce{ch}:MARKer{mkr}:VOLTage:OFFSet', str_type=float, min=-0.4, max=1.65,autoinit=False) # min et max déterminés en essayant
         self.marker_volt_high = devMkrOption('SOURce{ch}:MARKer{mkr}:VOLTage:HIGH', str_type=float, min=-0.3, max=1.75,autoinit=False) # min et max déterminés en essayant
@@ -181,7 +183,7 @@ class tektronix_AWG(visaInstrumentAsync):
         else:
             self.write('AWGControl:STOP:IMMediate')
 
-    def waveform_create(self, wav, wfname, sample_rate=None, amplitude=None, force=False, marker=(0, -1)):
+    def waveform_create(self, wav, wfname, sample_rate=None, amplitude=None, force=True, marker=(0, -1)):
         """
         Creates a waveform wfname with wav as its data (wav is a list or ndarray)
         If wfname already exists and force is set to True, the existing
@@ -191,16 +193,16 @@ class tektronix_AWG(visaInstrumentAsync):
         marker is a tuple (marker_on, marker_off)
         """
         # Test if wfname is already taken
-        if wfname in self.list_waveforms.get():
-            if force:
-                self.waveform_delete(wfname)
-                print("Waveform {} was deleted".format(wfname))
-            else:
-                raise RuntimeError('Destination waveform name already exists. Add the option "force=True" to overwrite')
-                return 1
+        # if wfname in self.list_waveforms.get():
+        if force:
+            self.waveform_delete(wfname)
+        #         #print("Waveform {} was deleted".format(wfname))
+        #     else:
+        #         raise RuntimeError('Destination waveform name already exists. Add the option "force=True" to overwrite')
+        #         return 1
         self.write('wlist:wav:new "{}",{}'.format(wfname,len(wav)))
-        print("Waveform {} was created".format(wfname))
-        self.write('wlist:wav:data "{}",{}'.format(wfname,Block_Codec(np.float32).tostr(wav)))
+        #print("Waveform {} was created".format(wfname))
+        self.write(b'wlist:wav:data "%s",'%fb(wfname) + Block_Codec(np.float32).tostr(wav))
         if sample_rate is not None:
             self.waveform_sample_rate.set(sample_rate, wfname=wfname)
         if amplitude is not None:

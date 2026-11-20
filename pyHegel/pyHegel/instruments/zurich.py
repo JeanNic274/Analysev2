@@ -185,7 +185,7 @@ class ziDev(scpiDevice):
     def _setdev(self, val, **kwarg):
         if self._setdev_p is None:
             raise NotImplementedError(self.perror('This device does not handle _setdev'))
-        options = self._combine_options(**kwarg)
+        options, options_base = self._combine_options(**kwarg)
         command = self._setdev_p
         repeat = self._input_repeat
         if repeat is None:
@@ -200,7 +200,7 @@ class ziDev(scpiDevice):
         if self._getdev_p is None:
             raise NotImplementedError(self.perror('This device does not handle _getdev'))
         try:
-            options = self._combine_options(**kwarg)
+            options, options_base = self._combine_options(**kwarg)
         except InvalidAutoArgument:
             self.setcache(None)
             raise
@@ -473,10 +473,13 @@ class zurich_UHF(BaseInstrument):
             self.current_sigouts.set(c)
             xx = self._conf_helper('sigouts_en', 'sigouts_offset', 'sigouts_range', 'sigouts_50ohm_en',
                                  'sigouts_autorange_en', 'sigouts_output_clipped')
-            data = []
+            data1 = []
+            data2 = []
             for d in self.current_sigouts_demod.choices.choices[c]:
-                data.append(self.sigouts_ampl_Vp.get(demod=d))
-            xx.append('sigouts_ampl_Vp=%r'%data)
+                data1.append(self.sigouts_ampl_Vp.get(demod=d))
+                data2.append(self.sigouts_ampl_en.get())
+            xx.append('sigouts_ampl_en=%r'%data2)
+            xx.append('sigouts_ampl_Vp=%r'%data1)
             base +=  ['sigouts_%i=[%s]'%(c, ','.join(xx).replace('sigouts_',''))]
         self.current_sigouts.set(orig_out_ch)
         self.current_sigouts_demod.set(orig_out_demod)
@@ -958,7 +961,7 @@ class zurich_UHF(BaseInstrument):
         ziDev_ch_sigins = lambda *arg, **kwarg: ziDev_ch_gen(self.current_sigins, *arg, **kwarg)
         ziDev_ch_sigouts = lambda *arg, **kwarg: ziDev_ch_gen(self.current_sigouts, *arg, **kwarg)
         ziDev_ch_auxouts = lambda *arg, **kwarg: ziDev_ch_gen(self.current_auxouts, *arg, **kwarg)
-        self.demod_freq = ziDev_ch_demod(getstr='demods/{ch}/freq', str_type=float)
+        self.demod_freq = ziDev_ch_demod('demods/{ch}/freq', str_type=float)
         self.demod_harm = ziDev_ch_demod('demods/{ch}/harmonic', str_type=int)
         self.demod_en = ziDev_ch_demod('demods/{ch}/enable', str_type=bool)
         # demod_sinc_en did not do anything before 14.08. In 14.02 in made UHF crash. Now it works
@@ -1096,9 +1099,9 @@ class zurich_UHF(BaseInstrument):
 
         tc_to_bw = ProxyMethod(self._tc_to_enbw_3dB)
         func1 = lambda v: tc_to_bw(v, enbw=False)
-        self.demod_bw3db = FunctionDevice(self.demod_tc, func1, func1)
+        self.demod_bw3db = FunctionDevice(self.demod_tc, func1, func1, quiet_del=True)
         func2 = lambda v: tc_to_bw(v)
-        self.demod_enbw = FunctionDevice(self.demod_tc, func2, func2)
+        self.demod_enbw = FunctionDevice(self.demod_tc, func2, func2, quiet_del=True)
 
         # This needs to be last to complete creation
         super(zurich_UHF, self)._create_devs()
@@ -1650,27 +1653,16 @@ def _find_tc(zi, start, stop, skip_start=False, skip_stop=False):
 
 import ctypes
 import weakref
-from numpy.ctypeslib import as_array
-from ctypes import Structure, Union, POINTER, byref, sizeof, addressof, resize,\
+from ctypes import Structure, Union, POINTER, byref, addressof,\
                    c_int, c_int16, c_int32, c_short, c_ushort, c_uint,\
                    c_double, c_float,\
                    c_uint32, c_uint8, c_uint16, c_int64, c_uint64,\
-                   c_void_p, c_char_p, c_char, c_ubyte, create_string_buffer
+                   c_void_p, c_char_p, c_char, create_string_buffer
 c_uchar_p = c_char_p # POINTER(c_ubyte)
 c_uint8_p = c_char_p # POINTER(c_uint8)
 c_uint32_p = POINTER(c_uint32)
 
-from ..types import StructureImproved
-
-try:
-    warnings
-    #print("We are reloading this module, no need to add the filter again")
-except NameError:
-    import warnings
-    # The RE are done with match (they have to match from the start of the string)
-    # This filters a warning when using ctypeslib as_array on a ctypes array.
-    #  http://stackoverflow.com/questions/4964101/pep-3118-warning-when-using-ctypes-array-as-numpy-array
-    warnings.filterwarnings('ignore', 'Item size computed from the PEP 3118 buffer format string does not match the actual item size.', RuntimeWarning, r'numpy\.ctypeslib')
+from ..types import StructureImproved, StructureImproved_extend, _ctypes_array_metabase_fix
 
 ziDoubleType = c_double
 ziIntegerType = c_int64
@@ -1723,119 +1715,7 @@ class AsyncReply(StructureImproved):
                 ('tag', ziAsyncTag) ]
 AsyncReply_commands = {1: 'ziAPIAsyncSetDoubleData', 2: 'ziAPIAsyncSetIntegerData',
                        3: 'ziAPIAsyncSetByteArray', 4: 'ziAPIAsyncSubscribe',
-                       5: 'ziAPIAsyncUnSubscribe', 5: 'ziAPIAsyncGetValueAsPollData'}
-
-# ctypes in Python 2.6.2 at least has a bug that prevents
-# subclassing arrays unless _length_ and _type_ are redefined
-# create a metaclass to automatically do that transformation
-# I think this problem was fixed in 3.3 but not in 2.7
-_ctypes_array_metabase = (c_uint8*4).__class__
-class _ctypes_array_metabase_fix(_ctypes_array_metabase):
-    def __new__(mcls, name, bases, d):
-        d['_length_'] = bases[0]._length_
-        d['_type_'] = bases[0]._type_
-        return super(_ctypes_array_metabase_fix, mcls).__new__(mcls, name, bases, d)
-
-# TODO Fix the ctypes.sizeof instruction which returns the base size, not the
-# augmented size of the structure. I am not sure if it is possible
-class StructureImproved_extend(StructureImproved):
-    """
-    Adds to StructImproved a way to extend the last entry.
-    a _mask_ variable containing (src, dst), both strings
-    while replace access to src with calls to _dst_get, and assignment to src
-    with calls to _dst_set. This can be useful for structure that have a last
-    of variable length.
-    If _mask_ is just a string, it replaces that entry with
-    _mask_default_set, _mask_default_get.
-    They both use the string in _mask_lengthvar to access a size variable for
-    the mask attribute
-    They also use the type in _mask_basetype as the base type of the array.
-    And the use the _mask_get_conv to convert from the new proper ctype structure
-    to something else. By default the function tries to return a numpy array,
-    unless the basetype is c_char, in which case it returns the type as is.
-    By default c_char arrays are return with .value (zero terminated string), to have them
-    return .raw, set attribute _mask_char_raw to True
-    It will also make the set_data_size method work (assuming the variable to replace is the last one)
-    You can return the unmakes variable as _maskname_raw for a masked variable called maskname
-    """
-    _mask_ = (None, '')
-    _mask_lengthvar = ''
-    _mask_basetype = c_ubyte
-    _mask_char_raw = False
-    @staticmethod
-    def _normalize_mask(mask):
-        if isinstance(mask, string_bytes_types):
-            mask = (mask, 'mask_default')
-        return mask
-    def __setattr__(self, name, value):
-        mask = self._normalize_mask(self._mask_)
-        if name == mask[0]:
-            getattr(self, '_'+mask[1]+'_set')(value)
-        else:
-            super(StructureImproved_extend, self).__setattr__(name, value)
-    def __getattribute__(self, name):
-        mask = super(StructureImproved_extend, self).__getattribute__('_mask_')
-        normalize = super(StructureImproved_extend, self).__getattribute__('_normalize_mask')
-        mask = normalize(mask)
-        if name == mask[0]:
-            name = '_'+mask[1]+'_get'
-            return super(StructureImproved_extend, self).__getattribute__(name)()
-        elif name == '_'+mask[0]+'_raw':
-            return super(StructureImproved_extend, self).__getattribute__(mask[0])
-        else:
-            return super(StructureImproved_extend, self).__getattribute__(name)
-    def _mask_get_offset(self):
-        mask = self._normalize_mask(self._mask_)
-        return getattr(self.__class__, mask[0]).offset
-    def _mask_get_count(self):
-        # returns the number of elements, used for resize and newtype
-        return getattr(self, self._mask_lengthvar)
-    def _mask_get_conv(self, cdata):
-        # This should return an object that can be assigned to
-        cnt = self._mask_get_count()
-        if self._mask_basetype == c_char:
-            return cdata
-        if cnt > 0:
-            # this can produce the warning we filter above (about PEP 3118)
-            return as_array(cdata)
-        else:
-            return cdata
-    def set_data_size(self, n):
-        """
-        Use this instead of changing the count directly. It will properly resize
-        the structure.
-        It assumes the variable to mask is the last element of the structure.
-        """
-        mask = self._normalize_mask(self._mask_)
-        if mask[1] != 'mask_default':
-            raise NotImplementedError('This function is only implemented when using the default mask. Subclasses should overwrite this.')
-        setattr(self, self._mask_lengthvar, n)
-        offset = self._mask_get_offset()
-        cnt = self._mask_get_count()
-        t = self._mask_basetype
-        newsize = offset + cnt * sizeof(t)
-        minsize = sizeof(self)
-        newsize = max(minsize, newsize)
-        resize(self, newsize)
-    def _mask_default_get(self):
-        #print)'Get called')
-        cnt = self._mask_get_count()
-        #cnt = min(cnt, 1024*1024)
-        newtype = self._mask_basetype * cnt
-        if self._mask_basetype == c_char:
-            # we now deal with character arrays.
-            if self._mask_char_raw:
-                # define a new class that shows the raw data when displayed with repr
-                newtype = _ctypes_array_metabase_fix('tmp_array_class', (newtype,), dict(__repr__= lambda s: repr(s.raw)))
-            else:
-                # define a new class that shows the value data when displayed with repr
-                newtype = _ctypes_array_metabase_fix('tmp_array_class', (newtype,), dict(__repr__= lambda s: repr(s.value)))
-        offset = self._mask_get_offset()
-        cdata = newtype.from_address(addressof(self) + offset)
-        return self._mask_get_conv(cdata)
-    def _mask_default_set(self, val):
-        #print('set called')
-        self._mask_default_get()[:] = val
+                       5: 'ziAPIAsyncUnSubscribe', 6: 'ziAPIAsyncGetValueAsPollData'}
 
 class ByteArrayData(StructureImproved_extend):
     _fields_ = [('length', c_uint32),

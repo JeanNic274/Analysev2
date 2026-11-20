@@ -31,7 +31,7 @@ from ..instruments_base import visaInstrument, visaInstrumentAsync,\
                             BaseDevice, scpiDevice, MemoryDevice, ReadvalDev,\
                             ChoiceBase, ChoiceLimits, ChoiceStrings, ChoiceDevDep,\
                             locked_calling, visa_wrap, _decode_block_auto, ChoiceSimpleMap,\
-                            ChoiceMultiple
+                            ChoiceMultiple, _repr_or_string
 from ..instruments_registry import register_instrument, register_usb_name, register_idn_alias
 
 from ..comp2to3 import string_bytes_types, string_upper
@@ -89,7 +89,7 @@ class ChoiceMultipleStrings(ChoiceBase):
         return ChoiceMultipleStrings(self.choice_strings[index])
 
 def decode_block_auto(s, t=np.float64):
-    return _decode_block_auto(s, t, skip='\n')
+    return _decode_block_auto(s, t, skip=b'\n')
 
 #######################################################
 ##    Keithley 245S SourceMeter
@@ -923,7 +923,7 @@ class keithley_2450_smu(visaInstrumentAsync):
             raise ValueError(self.perror('level is outside current range'))
     def _src_level_setdev(self, val, mode=None):
         mode = self.src_mode.getcache()
-        self.write('SOURce:{mode} {val!r}'.format(mode=mode, val=val))
+        self.write('SOURce:{mode} {val}'.format(mode=mode, val=_repr_or_string(val)))
 
 #       Timing test for not using the trigger system:
 #         The fastest transfer of data to instrument memory is with
@@ -1532,4 +1532,4 @@ class keithley_2400_smu(visaInstrumentAsync):
             raise ValueError(self.perror('level is outside current range'))
     def _src_level_setdev(self, val, mode=None):
         mode = self.src_mode.getcache()
-        self.write('SOURce:{mode} {val!r}'.format(mode=mode, val=val))
+        self.write('SOURce:{mode} {val}'.format(mode=mode, val=_repr_or_string(val)))

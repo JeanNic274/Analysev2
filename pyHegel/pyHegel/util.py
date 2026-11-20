@@ -42,6 +42,9 @@ This module contains many utilities:
     read_blueforsRTF
     read_blueforsGauges
     read_blueforsChannels
+    read_blueforsStatus
+    read_blueforsHeaters
+    extract_entry_array
     read_iceoxford
     sort_file
     find_index_closest
@@ -100,6 +103,7 @@ def read_comments(filename, comments='#', pick=None, before=False, skiprows=0, e
         (comments can also be a list of symbols)
         pick are the start string of comments to find. Can be a string or a list of strings.
         Or if it is None, will be automatic to find comment pyHegel saves in files.
+        For simple comments, it can be the same thing as the comments parameter.
         It returns a list of tuple of (comments, prev_line_count, timestamp)
          and the final count. The timestamp is None if it is not known.
         where timestamp is extracted from the comment header when pick is None and
@@ -834,98 +838,117 @@ def _read_bluefors_select(start_date, stop_date=None):
         date += datetime.timedelta(days=1)
     return dirs
 
-def read_blueforsTlog(start_date, stop_date=None, channels=[1,2,5,6], logdir='C:/BlueFors/Logs', merge_if_possible=True, missing_ok=True, quiet=False):
+def _merge_helper(vs, error_msg="", missing=np.nan, pre_sorted=False):
+    """
+    Takes a list of arrays vs, where the 0th column of each arrray is time.
+    If the time match, merges the vs together.
+    Otherwise combine together, replacing unavailable values with missing.
+    error_msg is used when warning about merging difficulty.
+    if pre_sorted is True, it will skip the sorting.
+    """
+    lengths = [v.shape[1] for v in vs]
+    if all(lengths[0] == np.array(lengths[1:])):
+        times = [v[0] for v in vs]
+        if all([all(t==times[0]) for t in times[1:]]):
+            # all the times are the same, simply join all the data into an array
+            data = [v[1:] for v in vs]
+            col_sh = [d.shape[0] for d in data]
+            cols = 1 + sum(col_sh)
+            ar = np.empty((lengths[0], cols), dtype=times[0].dtype)
+            c = 1
+            ar[:, 0] = times[0]
+            for nc, d in zip(col_sh, data):
+                ar[:, c:c+nc] = d.T
+                c += nc
+            return np.array(ar)
+    if not pre_sorted:
+        vals = [v[:, v[0].argsort()] for v in vs]
+    else:
+        vals = vs
+    time_sets = [set(v[0]) for v in vals]
+    unions = set.union(*time_sets)
+    inters = set.intersection(*time_sets)
+    if len(inters) == 0:
+        # We can have partial instersection. Here we check that at least one
+        # time is present in all the vs arrays.
+        print('Merging data with no full intersections '+error_msg)
+    elif len(unions) != max(map(len, time_sets)):
+        # if one of the vs contains all the times, then this will be false.
+        print('Merging data with no complete set '+error_msg)
+    else:
+        print('Merging data with partial overlap '+error_msg)
+    ns = np.array([v.shape[1] for v in vals])
+    ar = []
+    N = len(vs)
+    index = np.zeros(N, dtype=int)
+    missings = [[missing]*(v.shape[0]-1) for v in vs]
+    time_i = np.empty(N)
+    while np.any(index < ns):
+        time_i[:] = [v[0, i] if i<n else np.nan for v, i, n in zip(vals, index, ns)]
+        val_i = [v[1:, i] if i<n else missing for v, i, n in zip(vals, index, ns)]
+        if np.all(time_i[0] == time_i[1:]):
+            r = [time_i[0]]
+            for v in val_i:
+                r.extend(v)
+            ar.append(r)
+            index += 1
+        else:
+            min_t = np.nanmin(time_i)
+            idx = np.where(time_i == min_t)[0]
+            r = [min_t]
+            for i, v in enumerate(val_i):
+                if i in idx:
+                    r.extend(v)
+                    index[i] += 1
+                else:
+                    r.extend(missings[i])
+            ar.append(r)
+    return np.array(ar)
+
+def read_blueforsTlog(start_date, stop_date=None, channels=[1,2,5,6], logdir='C:/BlueFors/Logs', merge_if_possible=True, missing_ok=True, power=False, missing=np.nan, quiet=False):
     """
     Reads and combines the data files for temperature channels selected.
     It looks for the files under date directories under logdir.
     start_date and stop_date are either epoch values (number of days since jan 1st 1970)
     or strings giving the date '20150921' '2015-09-21', '2015-9-21', '150921', '15-09-21',
     '15-9-21' or replace '-' with '/'
-    It returns a list of arrays (one for each channel). The arrays contain the
+    It returns a list of arrays (one for each channel). The arrays
     are shaped (3, n) where the 3 columns stand for time since the epoch, the temperature
-    and the resistance.
+    and the resistance, or (4, n) when power is True (power as the last column)
     When merge_if_possible is True (default), it checks if all the channels have the same date, if so
-    it combines them in a single (1+2*Nch, n) array. If it can't it outputs a warning and returns the list.
+    it combines them in a single (1+2*Nch, n) or (1+3*Nch, n) array.
+    If it can't it outputs a warning and returns the list.
     if stop_day is None, then today's date is used.
     If start_date is an ndarray, it uses the minimum as start_date and maximum as stop_date.
     If start_date is a list, it is used directly.
     missing_ok, when True which is the default, just skip missing files without producing an exception (but prints it, unless quiet is True).
+    missing is the value to use to replace missing ones.
     """
-    results = []
-    for ch in channels:
-        results.append(np.ndarray((0,3)))
-    for dirname in _read_bluefors_select(start_date, stop_date):
+    results = [ [] for ch in channels]
+    dir_list = _read_bluefors_select(start_date, stop_date)
+    for dirname in dir_list:
         Tfile = 'CH%i T {}.log'.format(dirname)
         Rfile = 'CH%i R {}.log'.format(dirname)
+        Pfile = 'CH%i P {}.log'.format(dirname)
         for i,ch in enumerate(channels):
             Tvals = read_blueforsRTF(os.path.join(logdir, dirname, Tfile%ch), missing_as_empty=missing_ok, quiet=quiet)
             Rvals = read_blueforsRTF(os.path.join(logdir, dirname, Rfile%ch), missing_as_empty=missing_ok, quiet=quiet)
-            if Tvals.shape[1] == 0 and Rvals.shape[1] == 0:
-                continue
-            if Tvals.shape[1] == 0:
-                Tvals = Rvals.copy()
-                Tvals[1] = np.nan
-            elif Rvals.shape[1] == 0:
-                Rvals = Tvals.copy()
-                Rvals[1] = np.nan
-            if Tvals.shape[1] == Rvals.shape[1] and np.all(Rvals[0] == Tvals[0]):
-                ar = np.empty((Tvals.shape[1],3), dtype=Tvals.dtype)
-                ar[:,:2] = Tvals.T
-                ar[:,2] = Rvals[1]
-                results[i] = np.concatenate((results[i], ar))
+            if power:
+                Pvals = read_blueforsRTF(os.path.join(logdir, dirname, Pfile%ch), missing_as_empty=missing_ok, quiet=quiet)
+                ar = _merge_helper([Tvals, Rvals, Pvals], error_msg="between T, R and P (%i, %s)"%(ch, dirname), missing=missing)
             else:
-                Ts = set(Tvals[0])
-                Rs = set(Rvals[0])
-                Us = Ts.union(Rs)
-                if len(Ts.intersection(Rs)) == 0:
-                    print('Merging data with no intersection between R and T (%i, %s)'%(ch, dirname))
-                elif len(Us) != max(len(Ts), len(Rs)):
-                    print('Merging data with no complete set between R and T (%i, %s)'%(ch, dirname))
-                else:
-                    print('Merging data with partial overlap between R and T (%i, %s)'%(ch, dirname))
-                # make sure the values are in increasing time order
-                Tvals = Tvals[:,Tvals[0].argsort()]
-                Rvals = Rvals[:,Rvals[0].argsort()]
-                Tn = Tvals.shape[1]
-                Rn = Rvals.shape[1]
-                ar = []
-                j = k = 0
-                while j<Tn or k<Rn:
-                    if j == Tn:
-                        ar.append([Rvals[0, k], np.nan, Rvals[1, k]])
-                        k += 1
-                        continue
-                    if k == Rn:
-                        ar.append([Tvals[0, j], Tvals[1, j], np.nan])
-                        j += 1
-                        continue
-                    ti = Tvals[0,j]
-                    tj = Rvals[0,k]
-                    if ti == tj:
-                        ar.append([ti, Tvals[1, j], Rvals[1, k]])
-                        j += 1
-                        k += 1
-                    elif ti < tj:
-                        ar.append([ti, Tvals[1, j], np.nan])
-                        j += 1
-                    elif ti > tj:
-                        ar.append([tj, np.nan, Rvals[1, k]])
-                        k += 1
-                results[i] = np.concatenate((results[i], np.array(ar)))
-    results = [r.T for r in results]
+                ar = _merge_helper([Tvals, Rvals], error_msg="between T and R (%i, %s)"%(ch, dirname), missing=missing)
+            results[i].append(ar)
     if merge_if_possible:
-        for i in range(len(channels)-1):
-            if results[i+1].shape != results[0].shape or np.all(results[i+1][0] != results[0][0]):
-                print('WARNING: unable to merge the data. Returning a list instead of a numpy array.')
-                break
-        else:
-            # did not break so all times are the same
-            merged = np.empty((1+2*len(channels), results[0].shape[1]), dtype=results[0].dtype)
-            merged[0] = results[0][0]
-            for i in range(len(channels)):
-                j = 1 + 2*i
-                merged[j:j+2] = results[i][1:]
-            results = merged
+        # merge all channels per day.
+        new_results = []
+        for i in range(len(results[0])):
+            day_results = [r[i].T for r in results]
+            res = _merge_helper(day_results, error_msg="between channels %r (%s)"%(channels, dir_list[i]), missing=missing)
+            new_results.append(res)
+        results = np.concatenate(new_results, axis=0).T
+    else:
+        results = [np.concatenate(r, axis=0).T for r in results]
     return results
 
 
@@ -1030,19 +1053,55 @@ def read_blueforsStatus(filename):
     d = [(t,dict(zip(s[0::2], [float(ss.strip()) for ss in s[1::2]]))) for t,s in v]
     return d
 
-def read_blueforsGauges(filename):
+def read_blueforsHeaters(filename):
+    """
+    Reads a bluefors log filename that contains Heater information.
+    It returns an array with shape (1+8, nlines).
+    where the columns alternate between enable status and power.
+    The pairs are for mixing heater, still heater, the mxc heat switch and the still
+    heat switch. When not available the heat switch data pair is set to 0,-1
+    """
+    v = read_bluefors(filename)
+    v = [ [t] + list(map(float, vals)) for t, vals in v]
+    no_hs = [0, -1]*2
+    def clean(v):
+        if len(v) == 5:
+            v.extend(no_hs)
+        return v
+    v = list(map(clean, v))
+    return np.array(v).T
+
+def read_blueforsGauges(filename, status=False, enabled=False, other=False):
     """
     Reads a bluefors log filename that contains Maxi Gauge info
     information.
-    returns an array of shape (ngages+1, nlines). The +1 is for the time
-    column which comes first.
+    if any of status, enabled, other are True, extra columns will be added to the
+    return (nvals can be 1 with all off to 4 with all True.
+    returns an array of shape (ngages*nvals+1, nlines). The +1 is for the time
+    column which comes first. Then comes groups for every channnels that
+    start with pressure and then include in the order status, enabled, other any of the
+    enabled values.
+    The status are:
+      0:OK, 1:underange, 2:Overange, 3:SensorError, 4:SensorOFf,
+      5:NoSensor, 6: identificationError
+    The other column is probably always 1.
     """
     v = read_bluefors(filename)
     # The file data is "CH1,P1  ,1, 7.25E-6,0,1" which repeats for every channel
     # the fields are CHn, channel name, enabled, value, status, always 1??
-    # status: 0:OK, 1:underange, 2:Overange, 3:SensorError, 4:SensorOFf, 5:NoSensor, 6: identificationError
     # unit: 0:mbar, 1:Torr, 2:Pascal
-    v = [[t]+[float(x) for x in vals[3::6]] for t, vals in v]
+    n = len(v[0][1])
+    ii = []
+    chs_val = range(3, n, 6)
+    for c in chs_val:
+        ii.append(c)
+        if status:
+            ii.append(c+1)
+        if enabled:
+            ii.append(c-1)
+        if other:
+            ii.append(c+2)
+    v = [[t]+[float(vals[i]) for i in ii] for t, vals in v]
     return np.array(v).T
 
 
@@ -1061,10 +1120,10 @@ def _filename_build_check(file_base, logdir, dirname, quiet=False, missing_ok=Tr
         return None
     return filename
 
-def read_bluefors_all(start_date, stop_date=None, logdir='C:/BlueFors/Logs', flow=True, gauges=True, channels=False, missing_ok=True, quiet=False):
+def read_bluefors_all(start_date, stop_date=None, logdir='C:/BlueFors/Logs', flow=True, gauges=True, channels=False, status=False, heaters=False, missing_ok=True,  gauges_params={}, quiet=False):
     """
-    Reads bluefors log for flow, gauges and channels depending on the boolean values.
-    Returns the arrays read in the order flow, gauges, channels. For emptry flow, gauges, returns None.
+    Reads bluefors log for flow, gauges, channels, status and heaters depending on the boolean values.
+    Returns the arrays read in the order flow, gauges, channels, status, heaters. For empty flow, gauges, status, returns None.
     start_date and stop_date are either epoch values (number of days since jan 1st 1970)
     or strings giving the date '20150921' '2015-09-21', '2015-9-21', '150921', '15-09-21',
     '15-9-21' or replace '-' with '/'
@@ -1073,12 +1132,15 @@ def read_bluefors_all(start_date, stop_date=None, logdir='C:/BlueFors/Logs', flo
     If start_date is a list, it is used directly.
     missing_ok, when True which is the default, just skip missing files without producing an exception (but prints it, unless quiet is True).
                 It is always on for channels (and quiet is on for it also).
+    gauges_params is a dictionnary of parameters that is passed on to read_blueforsGauges
     """
     data_flow = []
     data_gauges = []
     data_channels = []
-    if flow == gauges == channels == False:
-        raise ValueError('At least one of flow, gauges or channels should be True.')
+    data_status = []
+    data_heaters = []
+    if flow == gauges == channels == status == heaters == False:
+        raise ValueError('At least one of flow, gauges, channels, status or heaters should be True.')
     filename_build_check = lambda file_base, quiet=quiet, missing_ok=missing_ok: _filename_build_check(file_base, logdir, dirname, quiet, missing_ok)
     for dirname in _read_bluefors_select(start_date, stop_date):
         if flow:
@@ -1090,11 +1152,19 @@ def read_bluefors_all(start_date, stop_date=None, logdir='C:/BlueFors/Logs', flo
             # These are not the same under case sensitive filesystems (like linux).
             filename = filename_build_check(['maxigauge %s.log', 'Maxigauge %s.log'])
             if filename is not None:
-                data_gauges.append(read_blueforsGauges(filename))
+                data_gauges.append(read_blueforsGauges(filename, **gauges_params))
         if channels:
             filename = filename_build_check('Channels %s.log', missing_ok=True, quiet=True)
             if filename is not None:
                 data_channels += read_blueforsChannels(filename)
+        if status:
+            filename = filename_build_check('Status_%s.log', missing_ok=True, quiet=True)
+            if filename is not None:
+                data_status += read_blueforsStatus(filename)
+        if heaters:
+            filename = filename_build_check('Heaters %s.log', missing_ok=True, quiet=True)
+            if filename is not None:
+                data_heaters.append(read_blueforsHeaters(filename))
     ret = ()
     if flow:
         if len(data_flow):
@@ -1108,9 +1178,30 @@ def read_bluefors_all(start_date, stop_date=None, logdir='C:/BlueFors/Logs', flo
             ret += (None,)
     if channels:
         ret += (data_channels, )
+    if status:
+        if len(data_status):
+            t = [x[0] for x in data_status]
+            d = [x[1] for x in data_status]
+            ret += ([np.array(t), np.array(d)], )
+        else:
+            ret += (None,)
+    if heaters:
+        if len(data_heaters):
+            ret += (np.concatenate(data_heaters, axis=1), )
+        else:
+            ret += (None,)
     if len(ret) == 1:
         ret = ret[0]
     return ret
+
+def extract_entry_array(v, selector, missing=np.nan):
+    """
+    This extracts an entry (selector) from an array of dictionnaries.
+    It returns a numpy array of the resulting data.
+    It is useful for status data from bluefors.
+    If the selector is not in v, then replace the value with missing.
+    """
+    return np.array([x.get(selector, missing) for x in v])
 
 #########################################################
 # Read ICE oxford NI data files
@@ -1118,6 +1209,8 @@ def read_bluefors_all(start_date, stop_date=None, logdir='C:/BlueFors/Logs', flo
 
 _ICEoxford_n2i_default = dict(t4k=0, time_raw=1, htr2=2, htr1=3, t50k=4, t1k=7, pcirc=8, s1k=10, s4k=11, s50k=12,
                               nv1=13, pdump=21, dt=22) # dt is time since start of file in s.
+_ICEoxford_n2i_default2 = dict(t4k=0, time_raw=1, htr2=2, htr1=3, t50k=4, t1k=7, pcirc=8, s1k=10, s4k=11, s50k=12,
+                              nv1=13, pdump=22, dt=23, tmag=21, smag=17) # dt is time since start of file in s.
 #_ICEoxford_n2i_default = dict(t4k=0, time=1, htr2=2, htr1=3, t50k=4, mag_field=5, heat_ex_50k=6, t1k=7,
 #                              pcirc=8, mag_current=9, s1k=10, s4k=11, s50k=12,
 #                              nv1=13, nv2=14,
@@ -1175,6 +1268,11 @@ _full_columns = ["/'Data'/'4k Stage'",  "/'Data'/'Unix Timestamp'",  "/'Data'/'H
                  "/'Data'/'Dump Pressure'", "/'Data'/'Elapsed (s)'", "/'Data'/'Output Current'", "/'Data'/'Sample'",
                  "/'Data'/'Dynamic Heat Exchanger'", "/'Data'/'Sample 2'"]
 
+_full_columns2 = _full_columns[:]
+_full_columns2[20:] = ["/'Data'/'1k Heat Exchanger'", "/'Data'/'Magnet'",
+                        "/'Data'/'Dump Pressure'", "/'Data'/'Elapsed (s)'", "/'Data'/'Output Current'",
+                        "/'Data'/'Sample'", "/'Data'/'Sample 2'"]
+
 def read_iceoxford(filenames_or_glob, prepend=None, tz_offset=None):
     """ Read one or many files (either lists or globs)
     written by ICE oxford program (.tdms files).
@@ -1211,10 +1309,26 @@ def read_iceoxford(filenames_or_glob, prepend=None, tz_offset=None):
     c0 = all_columns_clean[0]
     if not all([c == c0  for c in all_columns_clean]):
             raise RuntimeError("The files don't have all the same data structure")
-    if c0 != _full_columns:
+    if len(c0) != len(_full_columns):
         print("read_iceoxford: the full_columns name are not the expected ones. Column assignment is probably wrong.")
+    def do_remap(columns, n2i):
+        # remap is to handle different versions of the library which returns the names in different order.
+        remap = []
+        failed = False
+        for n in columns:
+            if n not in c0:
+                failed = True
+                break
+            remap.append(c0.index(n))
+        return failed, remap, n2i
+    failed, remap, n2i = do_remap(_full_columns, _ICEoxford_n2i_default)
+    if failed:
+        failed, remap, n2i = do_remap(_full_columns2, _ICEoxford_n2i_default2)
+    if failed:
+        print("read_iceoxford: the full_columns name are not the expected ones. Column assignment is probably wrong.")
+    names2index = {k:remap[v] for k,v in n2i.items()}
     data = np.concatenate(all_data_clean, axis=-1)
-    return ICEoxford_Data(data, c0, filelist, [f for s, f in zip(all_sel, filelist) if s], tz_offset=tz_offset)
+    return ICEoxford_Data(data, c0, filelist, [f for s, f in zip(all_sel, filelist) if s], names2index=names2index, tz_offset=tz_offset)
 
 
 #########################################################
@@ -1231,7 +1345,7 @@ def A2dB(A):
     """ Returns the corresponding dB value for an amplitude ratio A
         see also: dB2A, dB2P, P2dB
     """
-    return 20.*np.log10(A)
+    return 20.*np.log10(abs(A))
 
 def dB2P(dB):
     """ Returns the power ratio that corresponds to the input in dB
@@ -1243,7 +1357,7 @@ def P2dB(P):
     """ Returns the corresponding dB value for a power ratio P
         see also: dB2A, dB2P, A2dB
     """
-    return 10.*np.log10(P)
+    return 10.*np.log10(abs(P))
 
 
 def rt2xy(r, phase=None, deg=True, cmplx=False, dB=True):
@@ -1271,14 +1385,20 @@ def rt2xy(r, phase=None, deg=True, cmplx=False, dB=True):
     y = r*np.sin(phase)
     return np.array([x,y])
 
-def phase_unwrap(phase, deg=True, axis=-1):
+def phase_unwrap(phase_z, deg=True, axis=-1, z=False):
     """ This removes large discontinuities in the phase. It is useful when
         many adjacent points have normally small changes of phase except when the
         phase wraps around (changes of 2 pi rad or 360 deg)
         axis: the axis (dimension) to operate on.
         deg: when True the phase is in degrees, otherwise it is in radians
+        z: when True, accept complex numbers as input (internaly converted to
+           phase using the angle function)
         See also: phase_wrap, scipy.signal.detrend
     """
+    if z:
+        phase = np.angle(phase_z, deg=deg)
+    else:
+        phase = phase_z
     if deg:
         phase = np.deg2rad(phase)
     phase = np.unwrap(phase, axis=axis)
@@ -1380,7 +1500,7 @@ def o2dBm(v, o='W', ro=50):
         w = v*ro
     else:
         raise ValueError("o needs to be 'W', 'A' or 'V'")
-    return 10.*np.log10(w/Pref)
+    return 10.*np.log10(abs(w)/Pref)
 
 def vswr2g(v):
     """
@@ -1532,3 +1652,21 @@ def tc_to_enbw_3dB(tc, order=1, enbw=True):
     else:
         # This is solving 1/2 = (1/(1+(2*pi*f*tc)**2)**order
         return np.sqrt(2.**(1./order) -1) / tcp
+
+def format_time(seconds):
+    units = [
+        ('w', 7*24*3600),
+        ('d', 24*3600),
+        ('h', 3600),
+        ('m', 60),
+        ('s', 1),
+    ]
+    seconds = int(seconds)
+    parts = []
+    for name, length in units:
+        if seconds >= length:
+            value, seconds = divmod(seconds, length)
+            parts.append("{value}{name}".format(value=value, name=name))
+    return ' '.join(parts) if parts else "0s"
+
+

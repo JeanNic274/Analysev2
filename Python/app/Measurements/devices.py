@@ -10,6 +10,8 @@ from Python.app.Measurements.Fake_instruments import *
 temp_msg('starting pyHegel')
 from pyHegel.pyHegel import commands as cmds # pyright: ignore[reportMissingImports]
 
+
+
 def close_device_all(sn=None, amc=None,showcmd=True, daq=None, t_ch1=None, t_ch2=None, spectro=None, camera=None,laser=None):
     try:
         if amc:
@@ -64,14 +66,14 @@ class Scanner():
             if axe =='AttoY':
                 if self.NanoPos is None:
                     self.NanoPos = Fake_NanoPositionner()
-                fns[axe] = lambda v: piezoMove(1,v)
+                fns[axe] = lambda v: piezoMove(2,v)
             if axe =='AttoZ':
                 if self.NanoPos is None:
                     self.NanoPos = Fake_NanoPositionner()
-                fns[axe] = lambda v: piezoMove(2,v)
+                fns[axe] = lambda v: piezoMove(1,v)
             
             def piezoMove(axe,coord):
-                self.NanoPos.move.setControlTargetPosition(axe,coord)
+                self.NanoPos.move.setControlTargetPosition(axe,str(coord))
                 self.wait_until_stable(axe)
                 return self.NanoPos.move.getPosition(axe)
             
@@ -81,10 +83,13 @@ class Scanner():
         timeout = 10
         start = time.time()
         while True:
-            if self.NanoPos.status.getStatusMoving(axis) == 0 and self.NanoPos.status.getStatusTargetRange(axis):
+            if self.NanoPos.status.getStatusMoving(axis) == 0:
+                print(time.time() - start)
                 break
-            self.NanoPos.control.setControlOutput(axis, True)
-            self.NanoPos.control.setControlMove(axis, True)
+            if not self.NanoPos.control.setControlOutput(axis, True):
+                self.NanoPos.control.getControlOutput(axis)
+            if not self.NanoPos.control.getControlMove(axis):
+                self.NanoPos.control.setControlMove(axis, True)
             if time.time() - start > timeout:
                 print(f"Timeout waiting for stage axis {axis}")
                 break
@@ -102,4 +107,5 @@ class Scanner():
             return device_handler.getSpectrum
         else:
             raise Exception(f'Could not find detection for {self.name_detection}')
-        
+   
+   

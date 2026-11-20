@@ -38,7 +38,7 @@ import time
 import numpy as np
 from numpy import sign, abs, sqrt, sin, cos, pi, arctan2
 from scipy.optimize import brentq
-from scipy.spatial.transform import Rotation
+#from scipy.spatial.transform import Rotation
 
 from ..comp2to3 import string_bytes_types
 
@@ -63,6 +63,11 @@ from ..comp2to3 import string_bytes_types
 #      INDuctance?
 #      CONFigure:CURRent:RATING, CURRent:RATING?
 #      CONFigure:LOCK:CURRent:RATING, LOCK:CURRent:RATING? # Note this is wrong in rev9 of the manual (it is present but does not work)
+
+#  New Stuff >= 3.14 or >= 2.64
+#   CURRent:REFerence?
+#   FIELD:REFerence?
+
 
 @register_instrument('AMERICAN MAGNETICS INC.', 'MODEL 430')
 #@register_instrument('AMERICAN MAGNETICS INC.', 'MODEL 430', '2.59')
@@ -146,6 +151,9 @@ class AmericanMagnetics_model430(visaInstrument):
         self.field_target_kG = ScalingDevice(self.current_target, scalekG, quiet_del=True, max=max_fieldkG, min=min_fieldkG)
         self.field_T = ScalingDevice(self.current_magnet, scaleT, quiet_del=True, doc='Field in magnet (even in persistent mode)')
         self.field_kG = ScalingDevice(self.current_magnet, scalekG, quiet_del=True, doc='Field in magnet (even in persistent mode)')
+        if self._new_firmware2:
+            self.field_ref_T = ScalingDevice(self.current_magnet_ref, scaleT, quiet_del=True, doc='Request current converted to field (even in persistent mode).')
+            self.field_ref_kG = ScalingDevice(self.current_magnet_ref, scalekG, quiet_del=True, doc='Request current converted to field (even in persistent mode).')
         rmin, rmax = self._min_ramp_rate, self._max_ramp_rate
         self.ramp_rate_field_T.choices.fmts_lims[0].choices['min'].min = rmin*scaleT*60
         self.ramp_rate_field_T.choices.fmts_lims[0].choices['min'].max = rmax*scaleT*60
@@ -178,6 +186,16 @@ class AmericanMagnetics_model430(visaInstrument):
         opts += ['conf_manget=%s'%self.conf_magnet()]
         opts += ['conf_supply=%s'%self.conf_supply()]
         return opts + self._conf_helper(options)
+
+    def reset_quench_state(self, force_quench=False):
+        """
+        This command will reset the quench state or simulate one if
+        force_quench is set to True.
+        """
+        if force_quench:
+            self.write('QUench 1')
+        else:
+            self.write('QUench 0')
 
     def set_state(self, state):
         """ Available states: ['ramp', 'pause', 'incr', 'decr', 'zero'] """
@@ -225,8 +243,11 @@ class AmericanMagnetics_model430(visaInstrument):
         type = int(self.ask('SUPPly:TYPE?'))
         type = ['AMI 12100PS', 'AMI 12200PS', 'AMI 4Q05100PS', 'AMI 4Q06125PS', 'AMI 4Q06250PS', # 0-4
                 'AMI 4Q12125PS', 'AMI 10100PS', 'AMI 10200PS', 'HP 6260B', 'Kepco BOP 20-5M',  # 5-9
-                'Kepco BOP 20-10M', 'Xantrex XFR 7.5-140', 'Custom', 'AMI Model 05100PS-430-601', 'AMI Model 05200PS-430-601', # 10-14
-                'AMI Model 05300PS-430-601', 'AMI Model 05400PS-430-601', 'AMI Model 05500PS-430-601'][type]
+                'Kepco BOP 20-10M', 'Xantrex XFR 7.5-140', 'Custom', 'AMI 08100PS', 'AMI 05120PS', # 10-14
+                'AMI 05240PS', 'AMI 05360PS', 'AMI 05600PS', 'AMI 03300PS', 'Accel Instruments TS250-8', # 15-19
+                'AMI 4Q10120PS 5V/120A', 'AMI 4Q10120PS 6V/100A', 'AMI 4Q10120PS 8V/75A', 'AMI 4Q10120PS 10V/60A', 'MagnaPower SL10-150', # 20-24
+                'MagnaPower SL10-250', 'MagnaPower XR10-600' # 25-26
+                ][type]
         volt_min = float(self.ask('SUPPly:VOLTage:MINimum?'))
         volt_max = float(self.ask('SUPPly:VOLTage:MAXimum?'))
         current_min = float(self.ask('SUPPly:CURRent:MINimum?'))
@@ -294,6 +315,63 @@ class AmericanMagnetics_model430(visaInstrument):
         del ret['use_cache']
         self._conf_magnet_cache = ret
         return ret
+
+    @locked_calling
+    def _get_file_helper(self, op, filename=None, backup_file=False, show=True, pre=None):
+        d = self.ask(op)
+        ret = [d+'\n']
+        if pre is not None:
+            ret = [pre] + ret
+        while d != '':
+            ret.append(d+'\n')
+            d = self.read()
+        if filename is None:
+            if show:
+                print(''.join(ret), end=None)
+            else:
+                return ret
+        else:
+            with open(filename, 'w') as f:
+                f.writelines(ret)
+
+    def quench_file_data(self, filename=None, backup_file=False, show=True):
+        """
+        Download the quench_file data (or the backup file if backup_file is True).
+        When filename is None the data is displayed (when show=True) or returned
+        as a list of strings (if show is False)
+        When filename is given, it is saved into that file.
+        When asking for the backup_file, the command might time out because
+        the file does not exist. In that case get_error() will show the error message.
+        """
+        op = 'QUenchBackup?' if backup_file else 'QUenchFile?'
+        self._get_file_helper(op, filename, backup_file, show)
+
+    def rampdown_file_data(self, filename=None, backup_file=False, show=True):
+        """
+        Download the rampdown_file data (or the backup file if backup_file is True).
+        When filename is None the data is displayed (when show=True) or returned
+        as a list of strings (if show is False)
+        When filename is given, it is saved into that file.
+        When asking for the backup_file, the command might time out because
+        the file does not exist. In that case get_error() will show the error message.
+        """
+        op = 'RAMPDownFile?' if backup_file else 'RAMPDownBackup?'
+        self._get_file_helper(op, filename, backup_file, show)
+
+    @locked_calling
+    def settings_file_data(self, filename=None, show=True):
+        """
+        Download the rampdown_file data (or the backup file if backup_file is True).
+        When filename is None the data is displayed (when show=True) or returned
+        as a list of strings (if show is False)
+        When filename is given, it is saved into that file.
+        """
+        # To behave like MagnetDAQ application
+        ret = self.ask('MODE?')
+        pre = 'Internal Switch S2 State: %#x\n\n'%int(ret)
+        op = 'SETTINGS?'
+        backup_file = False
+        self._get_file_helper(op, filename, backup_file, show, pre)
 
     def _led_state_getdev(self):
         val = int(self.ask('*LED?'))
@@ -502,13 +580,14 @@ class AmericanMagnetics_model430(visaInstrument):
                 raise RuntimeError('Did not receive second expected message from instrument')
         fw_version = float(self.idn_split()['firmware'])
         self._new_firmware = True if fw_version >= 2.59 else False
+        self._new_firmware2 = True if (fw_version >= 2.64 and fw_version < 3) or fw_version >3.14 else False
         self.ramp_wait_after = MemoryDevice(10., min=0.)
         self.persistent_wait_before = MemoryDevice(30., min=30., doc='This time is used to wait after a ramp but before turning persistent off')
         self.volt = scpiDevice(getstr='voltage:supply?', str_type=float)
         self.volt_magnet = scpiDevice(getstr='voltage:magnet?', str_type=float, doc='This is the voltage on the magnet if the proper connection are present.')
         self.volt_limit = scpiDevice(getstr='VOLTage:LIMit?', str_type=float)
-        self.current = scpiDevice(getstr='current:supply?', str_type=float, doc='This is the current output by the supply. See also current_magnet.')
-        self.current_magnet = scpiDevice(getstr='current:magnet?', str_type=float, doc='This is the current in the magnet even when in persistent mode. See also current.')
+        self.current = scpiDevice(getstr='current:supply?', str_type=float, doc='This is the current output by the supply. See also current_magnet, current_ref.')
+        self.current_magnet = scpiDevice(getstr='current:magnet?', str_type=float, doc='This is the current in the magnet even when in persistent mode. See also current, current_ref.')
         self.current_target = scpiDevice('CONFigure:CURRent:TARGet', 'CURRent:TARGet?', str_type=float, setget=True)
         #self.field = scpiDevice(getstr='FIELD:MAGnet?', str_type=float,
         #                        doc='This is the field in the magnet even when in persistent mode (units are T or kG depending on field_unit device). See also current_magnet')
@@ -557,6 +636,10 @@ class AmericanMagnetics_model430(visaInstrument):
             self._devwrap('led_state')
             #self.op_limit_ic = scpiDevice(getstr='OPLimit:IC?', str_type=float)
             #self.op_limit_temp = scpiDevice(getstr='OPLimit:TEMP?', str_type=float)
+        if self._new_firmware2:
+            self.current_magnet_ref = scpiDevice(getstr='CURRent:REFerence?', str_type=float, doc=
+                            'This is the current requested for the magnet even when in persistent mode. See also current_magnet, current.')
+            #self.field_ref = scpiDevice(getstr='FIELD:REFerence?', str_type=float)
 
         # This needs to be last to complete creation
         super(AmericanMagnetics_model430, self)._create_devs()
@@ -855,7 +938,7 @@ class AmericanMagnetics_vector(BaseInstrument):
         return [m.state.get() for m in self._magnets]
 
     def _field_T_getdev(self):
-        return [m.field_T.get() for m in self._magnets]
+        return [m.field_T.get()[0] for m in self._magnets]
     def _fieldx_T_getdev(self):
         if self._magnet_x is not None:
             return self._magnet_x.field_T.get()
@@ -1016,7 +1099,7 @@ class AmericanMagnetics_vector(BaseInstrument):
                     break
                 continue
             #print('ramping done')
-            wait(wait_after, progress_base='')
+            wait(wait_after, progress_base=None)
             return
 
         self.stop_ramping_event = threading.Event() # event to tell the thread to stop there: mag.stop_ramping_event.set()
@@ -1026,7 +1109,9 @@ class AmericanMagnetics_vector(BaseInstrument):
             with mainStatusLine.new(priority=10, timed=1) as progress:
                 while self.thread.is_alive:
                     wait(.1)
-                    progress(prog_base.format(Bx=mx.field_T.get(), By=my.field_T.get(), Bz=mz.field_T.get()))
+                    progress(prog_base.format(Bx=float(mx.field_T.get()[0]),
+                                              By=float(my.field_T.get()[0]),
+                                              Bz=float(mz.field_T.get()[0])))
                     if 'quench' in [m.state.get() for m in self._magnets]:
                         raise RuntimeError(self.perror('The magnet QUENCHED!!!'))
                     if self.all_stable():
@@ -1090,6 +1175,7 @@ class AmericanMagnetics_vector(BaseInstrument):
             If num is not set, it uses self.nb_points, if it is set, it update self.nb_points
             xyz in cartesian and angle in degrees.
         """
+        from scipy.spatial.transform import Rotation
         if num is not None:
             self.nb_points.set(num)
         else:
@@ -1171,9 +1257,12 @@ class AmericanMagnetics_vector(BaseInstrument):
         return True if [m.is_stable() for m in self._magnets] == [True]*3 else False
 
     def stop_ramping(self):
-        if not hasattr(self, 'thread') or not self.thread.isAlive():
+        if not hasattr(self, 'thread') or not self.thread.is_alive():
             raise ValueError('Magnet is not ramping.')
         self.stop_ramping_event.set()
+    
+    def start_ramping(self):
+        self.ramp_to.set(self.field_target.get())
 
     def _sequence_checkdev(self, arr):
         if 3 not in arr.shape:

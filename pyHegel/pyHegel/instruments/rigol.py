@@ -2,7 +2,7 @@
 
 ########################## Copyrights and license ############################
 #                                                                            #
-# Copyright 2018-2023  Christian Lupien <christian.lupien@usherbrooke.ca>    #
+# Copyright 2018-2025  Christian Lupien <christian.lupien@usherbrooke.ca>    #
 #                                                                            #
 # This file is part of pyHegel.  http://github.com/lupien/pyHegel            #
 #                                                                            #
@@ -25,16 +25,22 @@
 from __future__ import absolute_import, print_function, division
 
 import numpy as np
-import scipy
-import os.path
+import re
 
-from ..instruments_base import visaInstrument, visaInstrumentAsync,\
-                            scpiDevice, MemoryDevice, ReadvalDev, BaseDevice,\
-                            ChoiceMultiple, Choice_bool_OnOff, Choice_bool_YesNo, _repr_or_string,\
-                            ChoiceStrings, ChoiceDevDep, ChoiceDev, ChoiceDevSwitch, ChoiceIndex,\
-                            ChoiceLimits, quoted_string, _fromstr_helper, ProxyMethod, decode_float64,\
-                            locked_calling, _encode_block, _decode_block
-from ..instruments_registry import register_instrument, register_usb_name, register_idn_alias
+from ..instruments_base import visaInstrument, scpiDevice, MemoryDevice, BaseDevice,\
+                            ChoiceSimpleMap, Choice_bool_OnOff, ChoiceStrings, ChoiceDevDep,\
+                            ChoiceLimits, quoted_string, ProxyMethod, decode_float64,\
+                            locked_calling, _encode_block
+from ..instruments_registry import register_instrument, register_usb_name, add_to_instruments
+
+from ..comp2to3 import string_upper
+
+Choice_bool_OnOff_dp = ChoiceSimpleMap({'ON':True, 'OFF':False, '1':True, '0':False},
+                                       keys_values_lists=(['OFF', 'ON'], [False, True]),
+                                       filter=string_upper)
+Choice_bool_YesNo = ChoiceSimpleMap({'YES':True, 'NO':False, '1':True, '0':False},
+                                       keys_values_lists=(['NO', 'YES'], [False, True]),
+                                       filter=string_upper)
 
 register_usb_name('Rigol Technologies', 0x1AB1)
 
@@ -42,9 +48,22 @@ register_usb_name('Rigol Technologies', 0x1AB1)
 ##    Rigol Programmable DC Power Supply DP831A
 #######################################################
 
+class float_ms(object):
+    def __call__(self, input_str):
+        if input_str.lower().endswith('ms'):
+            input_str = input_str[:-2]
+        return int(float(input_str))
+    def tostr(self, val):
+        return '%d'%int(val)
+
+
 #@register_instrument('RIGOL TECHNOLOGIES', 'DP831A', '00.01.14')
+#Rigol Technologies,DP2031,DP2A26AM00066,00.01.01.00.22
+@add_to_instruments('rigol_power_dp831a')
+@register_instrument('Rigol Technologies', 'DP2031', usb_vendor_product=[0x1AB1, 0xA4A8], skip_add=True)
+@register_instrument('Rigol Technologies', 'DP932A', usb_vendor_product=[0x1AB1, 0xA4A8], skip_add=True)
 @register_instrument('RIGOL TECHNOLOGIES', 'DP831A', usb_vendor_product=[0x1AB1, 0x0E11])
-class rigol_power_dp831a(visaInstrument):
+class rigol_power(visaInstrument):
     """
     This is the driver for the RIGOL programmable DC power supply DP831A.
     Channels 1, 2, 3 are respectively the 8V/5A, +30V/2A and -30V/2A.
@@ -55,19 +74,40 @@ class rigol_power_dp831a(visaInstrument):
     def _current_config(self, dev_obj=None, options={}):
         chs = self.channel_en_list()
         opts = ['enabled_channels=%r'%chs ]
-        cch = self.current_meas_channel.get()
+        #cch = self.current_meas_channel.get()
         opt_c = []
+        orig_ch = self.current_channel.get()
+        var_list = ['output_en', 'current', 'voltage', 'output_mode',
+                    'voltage_protection_en', 'voltage_protection_level', 'voltage_protection_tripped',
+                    'current_protection_en', 'current_protection_level', 'current_protection_tripped']
+        if self._is_9xx_2xxx:
+            var_list.append('output_over_current_delay_ms')
+        if self._is_2xxx:
+            var_list.append('output_remote_sense_en')
         for c in [1, 2, 3]:
             self.current_channel.set(c)
-            r = self._conf_helper('output_en', 'current', 'voltage', 'output_mode', 'voltage_protection_en', 'voltage_protection_level', 'voltage_protection_tripped', 'current_protection_en', 'current_protection_level', 'current_protection_tripped', 'output_track_en')
+            r = self._conf_helper(*var_list)
             opt_c.append(r)
+        self.current_channel.set(orig_ch)
         titles =  [ t.split('=', 1)[0] for t in opt_c[0] ]
         data = [ [o.split('=', 1)[1] for o in ol] for ol in opt_c]
         for i, t in enumerate(titles):
             d = '%s=[%s]'%(t, ','.join([data[j][i] for j in range(3)]))
             opts.append(d)
-        opts += self._conf_helper('on_off_sync', 'over_temperature_protection_en' , 'track_mode')
+        if self._is_83x:
+            opts += self._conf_helper('on_off_sync', 'over_temperature_protection_en', 'track_mode')
+        elif self._is_9xx_2xxx:
+            opts += self._conf_helper('on_off_sync', 'track_mode', 'output_pair')
+        if hasattr(self, 'output_off_mode'):
+            opts += self._conf_helper('output_off_mode')
+        if self._is_2xxx:
+            opts += self._conf_helper('current_sampling_mode')
         return opts + self._conf_helper(options)
+
+    def read_unlocked(self, raw=False, encoding=None, count=None, chunk_size=None):
+        ret = super(rigol_power, self).read_unlocked(raw=raw, encoding=encoding, count=count, chunk_size=chunk_size)
+        # DP2000 returns extra spaces. Removed them
+        return ret.rstrip(' ')
 
     def _fetch_getformat(self, **kwarg):
         ch = kwarg.get('ch', None)
@@ -132,7 +172,8 @@ class rigol_power_dp831a(visaInstrument):
 
     def get_questionable_status(self):
         def do_ch(ch):
-            return dict(voltage_control=bool(ch&1), current_control=bool(ch&2), ovp_tripped=bool(ch&4), ocp_tripped=bool(ch&8))
+            return dict(voltage_control=bool(ch&1), current_control=bool(ch&2),
+                        ovp_tripped=bool(ch&4), ocp_tripped=bool(ch&8), over_temp=bool(ch&16))
         ch1 = int(self.ask('STATus:QUEStionable:INSTrument:ISUMmary1?'))
         ch2 = int(self.ask('STATus:QUEStionable:INSTrument:ISUMmary2?'))
         ch3 = int(self.ask('STATus:QUEStionable:INSTrument:ISUMmary3?'))
@@ -143,6 +184,22 @@ class rigol_power_dp831a(visaInstrument):
         return dict(fan_problem=fan, temperature_problem=temp, ch1=do_ch(ch1), ch2=do_ch(ch2), ch3=do_ch(ch3))
 
     def _create_devs(self):
+        idn_split = self.idn_split()
+        model = idn_split['model'].upper()
+        fw_version = idn_split['firmware']
+        fw_version_N = [int(n) for n in fw_version.split('.')[:3]]
+        model_re = re.match(r'DP(\d*)', model)
+        if model_re is not None:
+            model_N = int(model_re.group(1))
+            self._is_83x = 831 <= model_N <= 832
+            self._is_9xx = 900 <= model_N <= 999
+            self._is_2xxx = 2000 <= model_N <= 2999
+            self._is_9xx_2xxx = self._is_9xx or self._is_2xxx
+            is_fw_012 = fw_version_N[0]>=0 and fw_version_N[1]>=1 and fw_version_N[2]>=2
+        else:
+            self._is_83x = self._is_9xx = self._is_2xxx = self._is_9xx_2xxx = False
+            is_fw_012 = False
+
         # TODO: add analyzer, delay, Memory, Monitor, output:timer, Preset, Recall, Recorder, Store, Timer, Trigger
         self.current_channel = MemoryDevice(choices=[1, 2, 3], initval=1)
         def devChOption(setstr=None, getstr=None,  **kwarg):
@@ -166,34 +223,45 @@ class rigol_power_dp831a(visaInstrument):
         self.meas_current = devChMeasOption(getstr='MEASure:CURRent? CH{ch}', str_type=float, autoinit=False)
         self.meas_voltage = devChMeasOption(getstr='MEASure:VOLTage? CH{ch}', str_type=float, autoinit=False)
         self.meas_power = devChMeasOption(getstr='MEASure:POWEr? CH{ch}', str_type=float, autoinit=False)
-        self.output_en = devChOption('OUTPut', choices=Choice_bool_OnOff)
+        self.output_en = devChOption('OUTPut', choices=Choice_bool_OnOff_dp)
         self.output_mode = devChOption(getstr='OUTPut:MODE? CH{ch}', choices=ChoiceStrings('CC', 'CV', 'UR'))
+        if self._is_9xx_2xxx:
+            self.output_over_current_delay_ms = devChOption('OUTPut:OCP:DELay', str_type=float_ms())
         # output:ocp, output:ovp are the same as source:current:protection, source:voltage:protection
-        chs = [2,3] #for dp831a
-        self.output_track_en = devChOption('OUTPut:TRACk', choices=Choice_bool_OnOff, options_lim=dict(ch=chs))
-        #self.output_track_en = devChOption('OUTPut:TRACk', choices=Choice_bool_OnOff, options_lim=dict(ch=chs), autoinit=False)
-        #self.output_sense_en = devChOption('OUTPut:SENSe', choices=Choice_bool_OnOff)
+        #chs = [2,3] #for dp831a
+        #self.output_track_en = devChOption('OUTPut:TRACk', choices=Choice_bool_OnOff_dp, options_lim=dict(ch=chs))
+        #self.output_track_en = devChOption('OUTPut:TRACk', choices=Choice_bool_OnOff_dp, options_lim=dict(ch=chs), autoinit=False)
+        #self.output_sense_en = devChOption('OUTPut:SENSe', choices=Choice_bool_OnOff_dp)
         lims = [self._get_dev_min_max('SOURce{ch}:CURRent?'.format(ch=i)) for i in range(1,4)]
         current_lims = ChoiceDevDep(self.current_channel, {i+1:ChoiceLimits(min=lims[i][0], max=lims[i][1]) for i in range(3) })
         self.current = devChOption('SOURce{ch}:CURRent', str_type=float, choices=current_lims)
         self.current_protection_level = devChOption('SOURce{ch}:CURRent:PROTection', str_type=float)
-        self.current_protection_en = devChOption('SOURce{ch}:CURRent:PROTection:STATe', choices=Choice_bool_OnOff)
+        self.current_protection_en = devChOption('SOURce{ch}:CURRent:PROTection:STATe', choices=Choice_bool_OnOff_dp)
         self.current_protection_tripped = devChOption(getstr='SOURce{ch}:CURRent:PROTection:TRIPped?', choices=Choice_bool_YesNo)
         lims = [self._get_dev_min_max('SOURce{ch}:VOLTage?'.format(ch=i)) for i in range(1,4)]
         lims[2] = sorted(lims[2]) # instrument returns min/max incorrectly for the negative channel
         voltage_lims = ChoiceDevDep(self.current_channel, {i+1:ChoiceLimits(min=lims[i][0], max=lims[i][1]) for i in range(3) })
         self.voltage = devChOption('SOURce{ch}:VOLTage', str_type=float, choices=voltage_lims)
         self.voltage_protection_level = devChOption('SOURce{ch}:VOLTage:PROTection', str_type=float)
-        self.voltage_protection_en = devChOption('SOURce{ch}:VOLTage:PROTection:STATe', choices=Choice_bool_OnOff)
+        self.voltage_protection_en = devChOption('SOURce{ch}:VOLTage:PROTection:STATe', choices=Choice_bool_OnOff_dp)
         self.voltage_protection_tripped = devChOption(getstr='SOURce{ch}:VOLTage:PROTection:TRIPped?', choices=Choice_bool_YesNo)
-        self.on_off_sync = scpiDevice('SYSTem:ONOFFSync', choices=Choice_bool_OnOff)
-        self.over_temperature_protection_en = scpiDevice('SYSTem:OTP', choices=Choice_bool_OnOff)
-        self.track_mode = scpiDevice('SYSTem:TRACKMode', choices=ChoiceStrings('SYNC', 'INDE'))
+        if self._is_83x:
+            self.over_temperature_protection_en = scpiDevice('SYSTem:OTP', choices=Choice_bool_OnOff_dp)
+            self.on_off_sync = scpiDevice('SYSTem:ONOFFSync', choices=Choice_bool_OnOff_dp)
+            self.track_mode = scpiDevice('SYSTem:TRACKMode', choices=ChoiceStrings('SYNC', 'INDE'))
+        elif self._is_9xx_2xxx:
+            self.on_off_sync = scpiDevice('SYSTem:SYNC', choices=Choice_bool_OnOff_dp)
+            self.track_mode = scpiDevice('SYSTem:TMODe', choices=ChoiceStrings('SYNChronous', 'INDEpendent'))
+            self.output_pair = scpiDevice('OUTPut:PAIR', choices=ChoiceStrings('OFF', 'PARallel', 'SERies'))
+        if self._is_9xx_2xxx and is_fw_012:
+            self.output_off_mode = scpiDevice('OUTPut:OFFMode', choices=ChoiceStrings('0V', 'IMMEOFF', 'DELAYOFF'))
+        if self._is_2xxx:
+            self.current_sampling_mode = scpiDevice('SYSTem:SAMPling', choices=ChoiceStrings('AUTO', 'HIGH', 'LOW'))
+            self.output_remote_sense_en = devChOption('SYSTem:SENSe', choices=Choice_bool_OnOff_dp)
         self._devwrap('fetch', autoinit=False)
         self.alias = self.voltage
         # This needs to be last to complete creation
-        super(rigol_power_dp831a, self)._create_devs()
-
+        super(rigol_power, self)._create_devs()
 
 #######################################################
 ##    Rigol AWG DG812

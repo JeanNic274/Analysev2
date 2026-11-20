@@ -24,21 +24,24 @@
 from __future__ import absolute_import, print_function, division
 
 import numpy as np
-import scipy
 import os.path
 
 from ..instruments_base import visaInstrument, visaInstrumentAsync,\
                             BaseDevice, scpiDevice, MemoryDevice, ReadvalDev,\
-                            ChoiceMultiple, Choice_bool_OnOff, _repr_or_string,\
-                            quoted_string, quoted_list, quoted_dict, ChoiceLimits,\
+                            ChoiceMultiple, Choice_bool_OnOff, _repr_or_string, ChoiceValMap,\
+                            quoted_string, quoted_list, quoted_dict, ChoiceLimits, ChoiceBase,\
                             ChoiceStrings, ChoiceDevDep, ChoiceDev, ChoiceDevSwitch, ChoiceIndex,\
-                            decode_float64, decode_float64_avg, decode_float64_meanstd,\
+                            decode_float64, decode_float64_avg, decode_float64_meanstd, decode_int32,\
                             decode_uint16_bin, _decode_block_base, _decode_block_auto, decode_float64_2col,\
                             decode_complex128, sleep, locked_calling, visa_wrap, _encode_block,\
-                            ChoiceSimple, _retry_wait, Block_Codec, ChoiceSimpleMap, ProxyMethod
-from ..instruments_registry import register_instrument, register_usb_name, register_idn_alias
+                            ChoiceSimple, _retry_wait, Block_Codec, ChoiceSimpleMap, ProxyMethod,\
+                            _fromstr_helper, _tostr_helper, _general_check, resource_info, wait
 
-from ..comp2to3 import fb
+from ..instruments_registry import register_instrument, register_usb_name, register_idn_alias, add_to_instruments
+
+from ..util import phase_wrap, phase_unwrap
+
+from ..comp2to3 import fb, string_upper
 
 register_usb_name('Agilent Technologies', 0x0957)
 register_usb_name('Keysight Technologies', 0x2A8D)
@@ -466,6 +469,122 @@ class agilent_PowerMeter(visaInstrumentAsync):
         self.alias = self.readval
         # This needs to be last to complete creation
         super(agilent_PowerMeter, self)._create_devs()
+
+#######################################################
+##    Keysight U8480 power meter
+#######################################################
+
+#@register_instrument('Keysight Technologies', 'U8481A', 'A1.02.05')
+@register_instrument('Keysight Technologies', 'U8481A', usb_vendor_product=[0x2A8D, 0x8018], alias='U8481A power meter')
+class keysight_U8480(visaInstrumentAsync):
+    """
+    This instrument is for Agilent U8480 series USB power meter.
+
+    Get data with readval (force read of new data) or fetch (gets possibly old data)
+
+    gain_ch_{dB,en} applies a correction to the channel data.
+    cset2_en is a second manual calibration (called FDO table in channel/offsets)
+             to compensate for the circuit used. It also depends on the frequency.
+             You can read this correction value with freq_offset
+    Available method:
+        calibrate_now
+    """
+    def __init__(self, visa_addr):
+        self._status_use_stb = False # Used for init
+        super(keysight_U8480, self).__init__(visa_addr)
+        self._reset_async_trigger_helper_string()
+    @locked_calling
+    def _current_config(self, dev_obj=None, options={}):
+        return self._conf_helper('unit', 'config',
+                                 'average_en', 'average_cnt', 'average_cnt_auto', 'average_step_detection',
+                                 'freq', 'freq_offset',
+                                 'cset2_en', 'cset2_name', 'trig_src', 'trig_delay_en', 'cont_trigger',
+                                 'calibration_type', 'calibration_auto_en',
+                                 'sensor_calib_date', 'sensor_type', 'sensor_serialno',
+                                 'meas_rate',
+                                 'gain_ch_dB', 'gain_ch_en',
+                                 'temperature', 'temperature_interal',
+                                 'duty_cycle_percent', 'duty_cycle_en',
+                                 options)
+
+    def _reset_async_trigger_helper_string(self):
+        self._async_trigger_helper_string = 'INITiate;*OPC'
+
+    def _async_trigger_helper(self):
+        async_string = self._async_trigger_helper_string
+        self.write(async_string)
+
+    @locked_calling
+    def _async_trig(self):
+        if self._async_trigger_helper_string == 'INITiate;*OPC':
+            self.trig_delay_en.set(True)
+            self.cont_trigger.set(False)
+        super(keysight_U8480, self)._async_trig()
+
+    @locked_calling
+    def calibrate_now(self, cal='both'):
+        """
+        request a calibration.
+        The cal parameter can be 'both', 'zero' or 'ref'
+        zero means no power applied, ref is 1 mW (0 dBm) at 50 MHz.
+        both means both zero and ref. It can only be selected when calibration type is internal.
+        """
+        if cal not in ['both', 'zero', 'ref']:
+            raise ValueError("cal needs to be one of 'both', 'zero', 'ref'")
+        if cal == 'both':
+            if self.calibration_type.get() != 'internal':
+                raise ValueError("cal cannot be 'both' when calibration type is not internal")
+            cmd = 'CALibration:ALL;*OPC'
+        elif cal == 'zero':
+            cmd = 'CALibration:ZERO:AUTO ONCE;*OPC'
+        else:
+            cmd = 'CALibration:AUTO ONCE;*OPC'
+        curr_cont_trig = self.cont_trigger.get()
+        try:
+            self._async_trigger_helper_string = cmd
+            # continuous trigger is required for calibration
+            self.cont_trigger.set(True)
+            self.run_and_wait()
+        finally:
+            self._reset_async_trigger_helper_string()
+            self.cont_trigger.set(curr_cont_trig)
+    def _create_devs(self):
+        # voltage unit depends on front panel/remote selection (sourc1:voltage:unit) vpp, vrms, dbm
+        self.config = scpiDevice('CONFigure1')
+        self.unit = scpiDevice('UNIT:POWer', choices=ChoiceStrings('DBM', 'W'))
+        #SENSE subsystem
+        self.average_cnt = scpiDevice('AVERage:COUNt', str_type=int, min=1, max=1024)
+        self.average_cnt_auto = scpiDevice('AVERage:COUNt:AUTO', str_type=bool)
+        self.average_step_detection = scpiDevice('AVERage:SDETect', str_type=bool)
+        self.average_en = scpiDevice('AVERage', str_type=bool)
+        self.calibration_type = scpiDevice('CALibration:TYPE', choices=ChoiceStrings('EXTernal', 'INTernal'))
+        self.calibration_auto_en = scpiDevice('CALibration:AUTO', str_type=bool, doc='Can only be enabled if calibration type is internal')
+        self.cset2_en = scpiDevice('CORRection:CSET2:STATe', str_type=bool)
+        self.cset2_name = scpiDevice('CORRection:CSET2')
+        self.freq = scpiDevice('FREQuency', str_type=float, min=1e3, max=1e12)
+        self.freq_offset = scpiDevice(getstr='CORRection:FDOFfset?', str_type=float)
+        self.duty_cycle_percent = scpiDevice('CORRection:DCYCle', str_type=float, min=.001, max=99.999)
+        self.duty_cycle_en = scpiDevice('CORRection:DCYCle:STATe', str_type=bool)
+        self.gain_ch_dB = scpiDevice('CORRection:GAIN2', str_type=float, min=-100, max=100)
+        self.gain_ch_en = scpiDevice('CORRection:GAIN2:STATe', str_type=bool)
+        self.meas_rate = scpiDevice('MRATe', choices=ChoiceStrings('NORMal', 'DOUBle', 'FAST'))
+        self.sensor_calib_date = scpiDevice(getstr='SERVice:SENSor:CDATe?')
+        self.sensor_calib_place = scpiDevice(getstr='SERVice:SENSor:CPLace?')
+        self.sensor_type = scpiDevice(getstr='SERVice:SENSor:TYPE?')
+        self.sensor_serialno = scpiDevice(getstr='SERVice:SENSor:SNUMber?')
+        self.raw_reading = scpiDevice(getstr='SERVice:SENSor:RADC?', autoinit=False, trig=True)
+        self.temperature = scpiDevice(getstr='TEMPerature?', str_type=float)
+        self.temperature_interal = scpiDevice(getstr='TEMPerature:INTernal?', str_type=float)
+        #TRIGGER block
+        self.trig_src = scpiDevice('TRIGger:SOURce', choices=ChoiceStrings('BUS', 'EXTernal', 'HOLD', 'IMMediate'))
+        self.trig_delay_en = scpiDevice('TRIGger:DELay:AUTO', str_type=bool)
+        self.cont_trigger = scpiDevice('INITiate:CONTinuous', str_type=bool)
+        #READ, FETCH
+        self.fetch = scpiDevice(getstr='FETCh?',str_type=float, autoinit=False, trig=True) #You need to read some data first.
+        self.readval = ReadvalDev(self.fetch)
+        self.alias = self.readval
+        # This needs to be last to complete creation
+        super(keysight_U8480, self)._create_devs()
 
 
 #######################################################
@@ -939,6 +1058,8 @@ class agilent_multi_34410A(visaInstrumentAsync):
         aper_min = float(self.ask('volt:aper? min'))
         # TODO handle freq, period where valid values are .001, .010, .1, 1 (between .001 and 1 can use setget)
         self.aperture = devOption(ch_aper, '{mode}:APERture', str_type=float, min = aper_min, max = aper_max, setget=True)
+        # self.aperture2 = devOption(ch_aper, '{mode}:APERture', str_type=float, min = aper_min, max = aper_max,
+        #                            cache_as_get=(['mode'], .11, lambda v, op: np.round(v, 2)), autoget=False)
         self.aperture_en = devOption(ch_aper_nplc, '{mode}:APERture:ENabled', str_type=bool)
         if not model_new:
             nplc_list = [0.006, 0.02, 0.06, 0.2, 1, 2, 10, 100]
@@ -1210,6 +1331,7 @@ class agilent_rf_Attenuator(visaInstrument):
 ##    Agilent infiniiVision Scopes
 #######################################################
 
+@add_to_instruments("agilent_infiniiVision_3000")
 #@register_instrument('AGILENT TECHNOLOGIES', 'MSO-X 3054A', '02.37.2014052001', usb_vendor_product=[0x0957, 0x17a2])
 #@register_instrument('AGILENT TECHNOLOGIES', 'DSO-X 2024A', '01.10.2011031600', usb_vendor_product=[0x0957, 0x1796])
 #@register_instrument('AGILENT TECHNOLOGIES', 'DSO-X 3054A', '01.10.2011031600', usb_vendor_product=[0x0957, 0x17a2])
@@ -1229,6 +1351,11 @@ class infiniiVision_3000(visaInstrumentAsync):
        snap_png
        use_single_trig  (note that single mode requires a trigger, it cannot use auto trigger mode
                          only normal mode)
+     To acquire the high resolution values, you need points_mode to be 'normal' and it will
+     limit the data length to 62500 pts.
+     For longer acquisitions, select points_mode to 'maximum', and either zoom out (it will take
+      as many points as it can), or enable acq_digitizer_en (set both acq_samplerate, acq_npoints)
+     and either select the horizontal time scale to the max available or set acq_view to 'ALL'.
      With use_single_trig set to True, the display will update during acquisition but
          the overall operation takes a little longer.
      See also the setup_trig_detection method.
@@ -1245,8 +1372,8 @@ class infiniiVision_3000(visaInstrumentAsync):
          but the header in the scope files should be correct.
     It is faster to save the data in .npy format, but there will not be any headers.
     """
-    def __init__(self, visa_addr, poll='force_handler'):
-        super(infiniiVision_3000, self).__init__(visa_addr, poll)
+    def __init__(self, visa_addr, poll='force_handler', **kwargs):
+        super(infiniiVision_3000, self).__init__(visa_addr, poll, **kwargs)
     def init(self, full=False):
         self.write(':WAVeform:FORMat WORD') # can be WORD BYTE or ASCii
         self.write(':WAVeform:BYTeorder LSBFirst') # can be LSBFirst pr MSBFirst
@@ -1280,7 +1407,7 @@ class infiniiVision_3000(visaInstrumentAsync):
     def _current_config(self, dev_obj=None, options={}):
         if self.is_running():
             # This is to prevent preamble, scal and count below from timing out
-            # if it acq is long. But it means we get date from the previous scan.
+            # if it acq is long. But it means we get data from the previous scan.
             self.stop_trig()
         orig_src = self.source.getcache()
         orig_ch = self.current_channel.get()
@@ -1293,7 +1420,11 @@ class infiniiVision_3000(visaInstrumentAsync):
             opts += ['ch%i=%r'%(ch, dict(mode=mode, preamble=preamble, scale=scale, count=count))]
         self.current_channel.set(orig_ch)
         self.source.set(orig_src)
-        opts += self._conf_helper('timebase_mode', 'timebase_pos', 'timebase_range', 'timebase_reference', 'timebase_reference_custom', 'timebase_scale',
+        if hasattr(self, 'timebase_reference_custom'):
+            opts += self._conf_helper('timebase_mode', 'timebase_pos', 'timebase_range', 'timebase_reference', 'timebase_reference_custom', 'timebase_scale',
+                                 'acq_type', 'acq_mode', 'average_count', 'acq_samplerate', 'acq_npoints')
+        else:
+            opts += self._conf_helper('timebase_mode', 'timebase_pos', 'timebase_range', 'timebase_reference', 'timebase_scale',
                                  'acq_type', 'acq_mode', 'average_count', 'acq_samplerate', 'acq_npoints')
         if self._touchscreen:
             opts += self._conf_helper('acq_digitizer_en', 'acq_antialias_mode')
@@ -1447,6 +1578,7 @@ class infiniiVision_3000(visaInstrumentAsync):
         if touchscreen:
             self.acq_digitizer_en = scpiDevice(':ACQuire:DIGitizer', str_type=bool)
             self.acq_antialias_mode = scpiDevice(':ACQuire:DAALias', choices=ChoiceStrings('DISable', 'AUTO'))
+            self.acq_view = scpiDevice(':WAVeform:VIEW', choices=ChoiceStrings('MAIN', 'ALL'))
         self.acq_samplerate = scpiDevice(':ACQuire:SRATe', str_type=float, setget=True)
         self.acq_npoints = scpiDevice(':ACQuire:POINts', str_type=int, setget=True)
         self.current_channel = MemoryDevice(1, min=1, max=4)
@@ -1464,7 +1596,9 @@ class infiniiVision_3000(visaInstrumentAsync):
         self.timebase_pos= scpiDevice(':TIMebase:POSition', str_type=float) # in seconds from trigger to display ref
         self.timebase_range= scpiDevice(':TIMebase:RANGe', str_type=float) # in seconds, full scale
         self.timebase_reference= scpiDevice(':TIMebase:REFerence', choices=ChoiceStrings('LEFT', 'CENTer', 'RIGHt', 'CUSTom'))
-        self.timebase_reference_custom = scpiDevice(':TIMebase:REFerence:LOCation', str_type=float, min=0, max=1., setget=True)
+        if touchscreen:
+            # This does not work on A series scope
+            self.timebase_reference_custom = scpiDevice(':TIMebase:REFerence:LOCation', str_type=float, min=0, max=1., setget=True)
         self.timebase_scale= scpiDevice(':TIMebase:SCALe', str_type=float) # in seconds, per div
         #TODO: add a bunch of CHANNEL commands, Then MARKER and MEASure, TRIGger
         self._devwrap('fetch', autoinit=False, trig=True)
@@ -1472,6 +1606,416 @@ class infiniiVision_3000(visaInstrumentAsync):
         self.readval = ReadvalDev(self.fetch)
         # This needs to be last to complete creation
         super(infiniiVision_3000, self)._create_devs()
+
+
+#######################################################
+##    Agilent infiniium Scopes
+#######################################################
+
+#@register_instrument('Agilent Technologies', 'DSO9254A', '04.20.0017', usb_vendor_product=[0x0957, 0x900A])
+@register_instrument('Agilent Technologies', 'DSO9254A', usb_vendor_product=[0x0957, 0x900A])
+class agilent_infiniium_scope(visaInstrumentAsync):
+    """
+     To use this instrument, the most useful devices are probably:
+       fetch  (Also it does not works well when in Run State. Avoid it if possible.)
+       readval (press run/stop on scope to terminate it, or use clear_dev method.
+                You probably want to start in the stop mode, or use the skip_force_get option
+                of get)
+       snap_png
+       use_single_trig  (note that single mode requires a trigger, it cannot use auto trigger mode
+                         only normal mode)
+       acq_view  (set it to all to download all the data)
+     Useful methods:
+        clear_dev
+        stop_trig
+        single
+        setup_trig_detection
+     With use_single_trig set to True, the display will update during acquisition but
+         the overall operation takes a little longer.
+     Trying to get with a filename will probably fail because it tries to get headers
+     which will force a stop (it can also fail because of the force_get but that can
+     be skipped with with the skip_force_get option of get). When the scope is stopped,
+     there is no problem.
+     To stop a regular readval you can use clear_dev. stop_trig will work for use_single_trig
+     type acquistions only.
+     Another way is to start an acq with single_trig, check the acq with is_running
+     and then fetch it (see setup_trig_detection).
+     When performing a sweep/record with this device, the header in the main save file will
+         include preamble information from the last acquisition, not for the ones of the sweep
+         but the header in the scope files should be correct.
+    It is faster to save the data in .npy format, but there will not be any headers.
+
+    WARNING: for usb connections, the normal read_status_byte is not working so we are
+             force to use polling, however this will hang python while waiting for data.
+             This is at least for firmware 04.20.0017. You can disble that fix with the
+             parameter usb_stb_fix
+    """
+    def __init__(self, visa_addr, poll=False, usb_stb_fix=True, **kwargs):
+        cnsts = visa_wrap.constants
+        rsrc_info = resource_info(visa_addr)
+        if rsrc_info.interface_type == cnsts.InterfaceType.usb and usb_stb_fix:
+            # since read_status_byte does not work properly
+            # the handling of SRQ also does not work
+            # So we poll instead.
+            self._usb_stb_fix = True
+            poll = True
+        else:
+            self._usb_stb_fix = False
+        super(agilent_infiniium_scope, self).__init__(visa_addr, poll, **kwargs)
+    def init(self, full=False):
+        self.write(':WAVeform:FORMat BINary') # can be WORD BYTE BINARY FLOAT or ASCii. Binary is the same as WORD for analog data but also works for others
+        self.write(':WAVeform:BYTeorder LSBFirst') # can be LSBFirst pr MSBFirst
+        self.write(':WAVeform:STReaming ON') # ON,1 or OFF,0. This allows more than 1GB of data
+        super(agilent_infiniium_scope, self).init(full=full)
+    # This is commented out because triggering on the trig status does not work
+    # properly (see below in _async_trigger_helper)
+#    def _async_trig_cleanup(self):
+#        # reset trig_status
+#        self.trig_status.get()
+#        super(agilent_infiniium_scope, self)._async_trig_cleanup()
+    def read_status_byte(self):
+        if self._usb_stb_fix:
+            # For some reason, the regular read_status_byte fails on usb. So downgrade to
+            # reading *stb?. However this will not work correctly for the async stuff
+            ret =  int(self.ask('*stb?'))
+            return ret
+        return super(agilent_infiniium_scope, self).read_status_byte()
+
+    def _async_trigger_helper(self):
+        if self.use_single_trig.get():
+            # triggering on *sre 1 does not work since
+            #  it when it returns, the acquisition is not fully complete so
+            #  that asking for the preamble starts a new acquisition.
+            #self.write('*sre 1')
+            self.single_trig(skip_trig_status=True)
+            # *POC does not work here.
+        else:
+            # need to make sure it is stopped before starting,
+            # otherwise it sometimes stays long enough in run at end of acq
+            # to cause another trig when reading headers.
+            if self.is_running():
+                self.stop_trig()
+                #sleep(.1)
+            self.write('*sre 32')
+            self.digitize()
+            if not self._usb_stb_fix:
+                #self.write(':DIGitize;*OPC')
+               self.write('*OPC')
+
+    def  _async_detect_poll_func(self):
+        if self.use_single_trig.get():
+            # We could be sing ADER? or PDER?
+            # But I see PDER return 1 after a single trig but before it is actually finished
+            # ADER seems better, but will not show completed processing.
+            # So instead use run_status
+            return self.run_state.get().lower() == 'stop'
+        if self._usb_stb_fix:
+            # we digitize we are in a blocking mode and any calls
+            # ends up timing out. So we catch this with a try except.
+            # Note that python will freeze during this period.
+            try:
+                return bool(int(self.ask('*OPC?')))
+            except visa_wrap.VisaIOError as exc:
+                if exc.error_code == visa_wrap.constants.VI_ERROR_TMO:
+                    return False
+                raise
+        return super(agilent_infiniium_scope, self)._async_detect_poll_func()
+
+    def _async_trig(self):
+        if not self.use_single_trig.getcache():
+            return super(agilent_infiniium_scope, self)._async_trig()
+        orig_ap = self._async_polling
+        try:
+            self._async_polling = True
+            return super(agilent_infiniium_scope, self)._async_trig()
+        finally:
+            self._async_polling = orig_ap
+
+    def _async_detect(self, max_time=.5):
+        if not self.use_single_trig.getcache():
+            return super(agilent_infiniium_scope, self)._async_detect(max_time)
+        orig_ap = self._async_polling
+        try:
+            self._async_polling = True
+            return super(agilent_infiniium_scope, self)._async_detect(max_time)
+        finally:
+            self._async_polling = orig_ap
+
+    @locked_calling
+    def _current_config(self, dev_obj=None, options={}):
+        if self.is_running():
+            # This is to prevent preamble, scal and count below from timing out
+            # if it acq is long. But it means we get data from the previous scan.
+            self.stop_trig()
+        orig_src = self.source.getcache()
+        orig_ch = self.current_channel.get()
+        opts = []
+        for ch in self.find_all_active_channels():
+            rangev = self.channel_range.get(ch=ch)
+            scale = self.channel_scale.get()
+            inputv = self.channel_input.get()
+            bwlim = self.channel_bandwidth_limit_en.get()
+            preamble = self.preamble.get(src='Channel%i'%ch)
+            count = self.waveform_count.get()
+            opts += ['ch%i=%r'%(ch, dict(input=inputv, scale=scale, range=rangev, bandwidth_limit_en=bwlim,
+                                         preamble=preamble, count=count))]
+        self.current_channel.set(orig_ch)
+        self.source.set(orig_src)
+        opts += self._conf_helper('timebase_reference', 'timebase_pos', 'timebase_range', 'timebase_scale', 'timebase_roll_en',
+                                  'use_single_trig',
+                                 'acq_mode', 'acq_highres_resolution', 'acq_interpolate', 'acq_npoints', 'acq_npoints_auto_en',
+                                 'acq_samplerate', 'acq_samplerate_auto_en', 'acq_segment_count',
+                                 'acq_bandwidth', 'average_count', 'average_en')
+        opts += self._conf_helper('acq_view')
+        return opts + self._conf_helper(options)
+
+    def clear_dev(self):
+        """ This will stop a digitize """
+        self._dev_clear()
+
+    def setup_trig_detection(self):
+        """ This setups trig detection. Only use this on one thread and not with readval (run_and_wait).
+            Undo its effect with reset_trig_detection (readval will also undo it)
+            After calling this use:
+              s.single_trig()
+              get(s.trig_status) # when True there was a trig event
+              get(s.lasttrig_time) # if not 0. then it is the last trig time
+            The trig time accuracy is probably within 100 ms.
+            Note that at least for DSOX3014T (but probably all of them),
+            the trig state seem to only be transferred to the SRQ line at the end of
+            the acquisition. Therefore the lasttrig_time is actually the time at the end of
+            the acquisition.
+        """
+        # lets presume we were started with poll='force_handler'
+        self.write('*sre 1')
+        self.visa.enable_event(visa_wrap.constants.VI_EVENT_SERVICE_REQ,
+                               visa_wrap.constants.VI_HNDLR)
+
+    def reset_trig_detection(self):
+        self.visa.disable_event(visa_wrap.constants.VI_EVENT_SERVICE_REQ, visa_wrap.constants.VI_ALL_MECH)
+        self.write('*sre 32')
+
+    def digitize(self):
+        """
+        Starts an acquisition
+        Can be stopped with clear_dev.
+        """
+        self.write(':DIGitize')
+
+    def run_trig(self):
+        """
+        The same as pressing run
+        """
+        self.write(':RUN')
+
+    def stop_trig(self):
+        """
+        The same as pressing stop
+        """
+        self.write(':STOP')
+
+    def single_trig(self, skip_trig_status=False):
+        """
+        The same as pressing single
+        """
+        if not skip_trig_status:
+            self.trig_status.get() # reset trig
+        self._async_last_status_time = 0.
+        self.write(':SINGle')
+
+    def is_running(self):
+        status = int(self.ask('OPERegister:condition?'))
+        # OPERregister[:event]? is a latch of 0-> from OPERegister:condition?
+        # it goes through OPEE (mask) to affect OPER bit7 (128) of *STB
+        # OPER has bits 11(Overload), 9(masks), 5(arm, see AER?), 3(run state)
+        run_state = 8 # 2**3
+        return bool(status&run_state)
+
+    def _lasttrig_time_getdev(self):
+        return self._async_last_status_time
+
+    def _fetch_ch_helper(self, ch):
+        if ch is None:
+            ch = self.find_all_active_channels()
+        if not isinstance(ch, (list)):
+            ch = [ch]
+        return ch
+
+    def _fetch_getformat(self, **kwarg):
+        raw = kwarg.get('raw', False)
+        xaxis = kwarg.get('xaxis', True)
+        absx = kwarg.get('absx', False)
+        ch = kwarg.get('ch', None)
+        ch = self._fetch_ch_helper(ch)
+        if xaxis and not raw and not absx:
+            multi = ['time(s)']
+        else:
+            multi = []
+        for c in ch:
+            multi.append('ch%i'%c)
+        fmt = self.fetch._format
+        multi = tuple(multi)
+        fmt.update(multi=multi, graph=[], xaxis=xaxis)
+        return BaseDevice.getformat(self.fetch, **kwarg)
+
+    def _fetch_getdev(self, ch=None, xaxis=True, raw=False, absx=False):
+        """
+           Options available: ch, xaxis
+            -ch:    a single value or a list of values for the channels to capture
+                    a value of None selects all the active ones.(1-4)
+            -xaxis: Set to True (default) to return the timebase as the first column
+                    It will be the timebase calculated from the first ch.
+                    Different ch can have different offsets.
+            -raw: don't do conversions to floats (also disables xaxis)
+                  data is signed 16 bit for analog
+            -absx: instead of the data get the x origin for all the segmentsm (also disables xaxis)
+                   raw has no effect (data is doubles anyway)
+        """
+        ch = self._fetch_ch_helper(ch)
+        if ch is None:
+            ch = self.find_all_active_channels()
+        if not isinstance(ch, (list)):
+            ch = [ch]
+        ret = []
+        first = True
+        for c in ch:
+            self.source.set('chan%i'%c)
+            if absx:
+                data_real = self.data_segment_abs_time.get(mode='absx')
+            else:
+                data = self.data.get()
+                if raw:
+                    data_real = data
+                else: # not raw
+                    wait(.1)
+                    pream = self.preamble.get()
+                    data = data*1. # make it floats
+                    data_real = (data - pream['yref']) * pream['yinc'] + pream['yorig']
+                    if xaxis and first:
+                        xs_base = (np.arange(pream['points'])- pream['xref']) * pream['xinc']
+                        first = False
+                        xs = (np.arange(pream['points'])- pream['xref']) * pream['xinc'] + pream['xorig']
+                        if 'segments' in pream:
+                            absx_data = self.data_segment_abs_time.get(mode='absx')
+                            xs = xs_base + absx_data[:, np.newaxis]
+                            xs = xs.flatten()
+                        else:
+                            xs = xs_base+pream['xorig']
+                        ret = [xs]
+            ret.append(data_real)
+        ret = np.asarray(ret)
+        if ret.shape[0]==1:
+            ret=ret[0]
+        return ret
+
+    @locked_calling
+    def find_all_active_channels(self):
+        orig_ch = self.current_channel.get()
+        ret = []
+        for i in range(1,5):
+            if self.channel_display.get(ch=i):
+                ret.append(i)
+        self.current_channel.set(orig_ch)
+        return ret
+
+    def _create_devs(self):
+        fw_str = self.idn_split()['firmware']
+        fw_1, fw_2, fw_3 = fw_str.split('.', 2)
+        fw = float(fw_1+'.'+fw_2)
+        self.use_single_trig = MemoryDevice(False, choices=[True, False], doc="Use either Run/stop (when False) or single_trig when True")
+        self.snap_png = scpiDevice(getstr=':DISPlay:DATA? PNG,{view}', raw=True, str_type=_decode_block_base, autoinit=False,
+                                   options=dict(view='screen'),
+                                   options_lim=dict(view=ChoiceStrings('SCReen', 'GRATicule')),
+                                   doc="Use like this: get(s500.snap_png, filename='testname.png')\nThe .png extensions is optional. It will be added if necessary.")
+        self.snap_png._format['bin']='.png'
+        #self.inksaver = scpiDevice(':HARDcopy:INKSaver', str_type=bool, doc='This control whether the graticule colors are inverted or not.') # ON, OFF 1 or 0
+         # :waveform:DATA? returns block of data (always header# for asci byte and word)
+         # with chunk_size = 1024*1024 it seems to lower the frequency of transfer error that lock up
+         # the communication to the scope (requiring a power cycle; clear_dev is not sufficient,
+         #  writing to the scope still works but reading always times out.)
+         #  The default is 20*1024, which requires multiple visa read requests and
+         #  and one of them (often in the 70's) would hang (as seen with io monitor).
+         # The above observation were with either NI or Keysight visa lib and with the
+         #   DSO-X 3014T,MY61500174,07.50.2021102830
+        self.data = scpiDevice(getstr=':waveform:DATA?', raw=True, str_type=lambda x: _decode_block_auto(x, t='<i2', skip=b'\n'), autoinit=False, chunk_size=1024*1024)
+          # also read :WAVeform:PREamble?, which provides, format(byte,word,ascii),
+          #  type (Normal, peak, average, HRes), #points, #avg, xincr, xorg, xref, yincr, yorg, yref
+          #  xconv = xorg+x*xincr, yconv= (y-yref)*yincr + yorg
+        sources_names = ['CHANnel%d'%i for i in range(1, 4+1)] +\
+                        ['DIFF%d'%i for i in range(1, 2+1)] +\
+                        ['COMMonmode%d'%i for i in range(3, 4+1)] +\
+                        ['FUNCtion%d'%i for i in range(1, 16+1)] +\
+                        ['WMEMory%d'%i for i in range(1, 4+1)] +\
+                        ['WMEMory%d'%i for i in range(1, 4+1)] +\
+                        ['BUS%d'%i for i in range(1, 4+1)] +\
+                        ['HISTogram', 'CLOCk', 'MTRend', 'MSPectrum', 'EQUalized', 'POD1', 'POD2', 'PODALL']
+        self.source = scpiDevice(':WAVeform:SOURce', choices=ChoiceStrings(*sources_names),
+                                 doc='This is the source channel for the waveform devices (points*, preamble, waveform_count)')
+        def devSrcOption(*arg, **kwarg):
+            options = kwarg.pop('options', {}).copy()
+            options.update(src=self.source)
+            app = kwarg.pop('options_apply', ['src'])
+            kwarg.update(options=options, options_apply=app)
+            return scpiDevice(*arg, **kwarg)
+        self.points = devSrcOption(':WAVeform:POINts', str_type=int, autoinit=False, doc='Do not use when in run state.')
+        self.points_max_possible = devSrcOption(getstr=':WAVeform:POINts? MAX', str_type=int, autoinit=False)
+        self.preamble = devSrcOption(getstr=':waveform:PREamble?', choices=ChoiceMultiple(['format', 'type', 'points', 'count', 'xinc', 'xorig', 'xref', 'yinc', 'yorig', 'yref',
+                                                                                           'coupling', 'xdisprng', 'xdisporig', 'ydisprng', 'ydisporig', 'date', 'time', 'model_name_serial',
+                                                                                           'acq_mode','completion', 'xunit', 'yunit', 'mxbwlim', 'minbwlim', 'segments'],
+                                                                                          [int, int, int, int, float, float, float, float, float, float,
+                                                                                           int, float, float, float, float, quoted_string(), quoted_string(), quoted_string(),
+                                                                                           int, int, int, int, float, float, int], allow_short_read=1),
+                                     autoinit=False)
+        self.waveform_count = devSrcOption(getstr=':WAVeform:COUNt?', str_type=int, autoinit=False)
+        self.acq_mode= scpiDevice(':ACQuire:MODE', choices=ChoiceStrings('ETIMe', 'RTIMe', 'PDETect', 'HRESolution', 'SEGMented', 'SEGPdetect', 'SEGHres'))
+        self.acq_bandwidth = scpiDevice(':ACQuire:BANDwidth', choices=ChoiceValMap({'AUTO':0., 'MAX':np.inf}), setget=True, doc="0 makes it use auto bandwidth, inf to make it go to max")
+        self.acq_highres_resolution = scpiDevice(':ACQuire:HRESolution', choices=ChoiceStrings('AUTO', 'BITS9', 'BITS10', 'BITS11', 'BITS12', 'BITF11', 'BITF12', 'BITF13', 'BITF14', 'BITF15', 'BITF16'))
+        self.acq_interpolate = scpiDevice(':ACQuire:INTerpolate',
+                                          choices=ChoiceStrings('ON', 'OFF', 'INT1', 'INT2', 'INT4', 'INT8', 'INT16', redirects={'0':'off', '1':'on'}),
+                                          doc='ON means auto')
+        self.average_en = scpiDevice(':ACQuire:AVERage', str_type=bool)
+        self.average_count = scpiDevice(':ACQuire:COUNt', str_type=int, min=2, max=65534)
+        self.acq_segment_count = scpiDevice(':ACQuire:SEGMented:COUNt', str_type=int)
+        self.data_segment_abs_time = scpiDevice(getstr=':waveform:SEGMented:XLISt? {mode}', raw=True, str_type=lambda x: _decode_block_auto(x, t='<f8', skip=b'\n'),
+                                                options=dict(mode='ttag'), options_lim=dict(mode=ChoiceStrings('RELXorigin', 'ABSXorigin', 'TTAG')), autoinit=False, chunk_size=1024*1024)
+        self.acq_view = scpiDevice(':WAVeform:VIEW', choices=ChoiceStrings('MAIN', 'ALL'))
+        self.acq_samplerate = scpiDevice(':ACQuire:SRATe', str_type=float, setget=True)
+        self.acq_samplerate_auto_en = scpiDevice(':ACQuire:SRATe:AUTO', str_type=bool)
+        self.acq_npoints = scpiDevice(':ACQuire:POINts', str_type=int, setget=True)
+        self.acq_npoints_auto_en = scpiDevice(':ACQuire:POINts:AUTO', str_type=bool)
+        self.current_channel = MemoryDevice(1, min=1, max=4)
+        self.trig_status = scpiDevice(getstr=':TERegister?', str_type=bool, autoinit=False, doc="This returns True after the instrument has been triggered. It also resets the trig state.")
+        def devChannelOption(*arg, **kwarg):
+            options = kwarg.pop('options', {}).copy()
+            options.update(ch=self.current_channel)
+            app = kwarg.pop('options_apply', ['ch'])
+            kwarg.update(options=options, options_apply=app)
+            return scpiDevice(*arg, **kwarg)
+        self.channel_display = devChannelOption('CHANnel{ch}:DISPlay', str_type=bool)
+        self.channel_range = devChannelOption('CHANnel{ch}:RANGe', str_type=float, setget=True)
+        self.channel_scale = devChannelOption('CHANnel{ch}:SCALe', str_type=float, setget=True)
+        self.channel_input = devChannelOption('CHANnel{ch}:INPut', choices=ChoiceStrings('DC', 'DC50', 'AC', 'LFR1', 'LFR2'))
+        if fw >= 5.7:
+            self.channel_invert_en = devChannelOption('CHANnel{ch}:INVert', str_type=bool)
+        self.channel_bandwidth_limit_en = devChannelOption('CHANnel{ch}:BWLimit', str_type=bool)
+        self.timebase_roll_en = scpiDevice(':TIMebase:ROLL:ENABLE', str_type=bool)
+        self.timebase_pos = scpiDevice(':TIMebase:POSition', str_type=float) # in seconds from trigger to display ref
+        self.timebase_range = scpiDevice(':TIMebase:RANGe', str_type=float) # in seconds, full scale
+        if fw >= 5:
+            ch_tb_ref = ChoiceStrings('LEFT', 'CENTer', 'RIGHt', 'PERCent')
+            self.timebase_reference= scpiDevice(':TIMebase:REFerence:PERCent', str_type=int, min=0, max=100)
+        else:
+            ch_tb_ref = ChoiceStrings('LEFT', 'CENTer', 'RIGHt')
+        self.timebase_reference = scpiDevice(':TIMebase:REFerence', choices=ch_tb_ref)
+        self.timebase_scale = scpiDevice(':TIMebase:SCALe', str_type=float) # in seconds, per div
+        #self.run_state = scpiDevice(getstr='RSTate?', choices=ChoiceStrings('RUN', 'STOP', 'SING'))
+        self.run_state = scpiDevice(getstr='RSTate?')
+        #TODO: add a bunch of CHANNEL commands, Then MARKER and MEASure, TRIGger
+        self._devwrap('fetch', autoinit=False, trig=True)
+        self._devwrap('lasttrig_time', trig=False)
+        self.readval = ReadvalDev(self.fetch)
+        # This needs to be last to complete creation
+        super(agilent_infiniium_scope, self)._create_devs()
 
 
 #######################################################
@@ -1538,7 +2082,7 @@ class agilent_EXA_mode_base(visaInstrumentAsync):
     def user_reset(self):
         self.write('SYSTem:PRESet:USER')
     @locked_calling
-    def do_alignememt(self, mode='all'):
+    def do_alignement(self, mode='all'):
         # could add external_mixer
         """ mode should be one of 'all', 'not_RF', 'only_RF'. 'expired'
             Returns True upon success.
@@ -1967,6 +2511,10 @@ class agilent_EXA_mode_SA(agilent_EXA_mode_base):
             offset = self.freq_offset.get()
         npts = self.sweep_npoints.get()
         return np.linspace(start+offset, stop+offset, npts)
+
+    def presel_adjust_now(self):
+        self.ask('POWer:PCENter;*OPC?')
+
     def _create_devs(self):
         self._create_devs_pre()
         self.attenuation_db = scpiDevice(':POWer:ATTenuation', str_type=float, setget=True)
@@ -2061,6 +2609,8 @@ class agilent_EXA_mode_SA(agilent_EXA_mode_base):
         self.noise_source_type = scpiDevice(':SOURce:NOISe:TYPE', choices=ChoiceStrings('NORMal', 'SNS'))
         self.noise_source_en = scpiDevice(':SOURce:NOISe', str_type=bool)
         self.noise_source_sns_attached = scpiDevice(getstr='SOURce:NOISe:SNS:ATTached?', str_type=bool)
+
+        self.presel_adjust = scpiDevice('POWer:PADJust', str_type=float, autoinit=False)
 
         # initial hack for list sweep measurement
         self.fetch_list = scpiDevice(getstr=':FETCh:LIST?', str_type=decode_float64, autoinit=False, trig=True)
@@ -2458,6 +3008,7 @@ class agilent_PNAL(visaInstrumentAsync):
         abort
         create_measurement
         delete_measurement
+        delete_window
         restart_averaging
         phase_unwrap, phase_wrap, phase_flatten
         get_file
@@ -2507,6 +3058,8 @@ class agilent_PNAL(visaInstrumentAsync):
         reps = 1
         for ch in ch_list:
             if self.average_en.get(ch=ch):
+                if self.average_mode.get() == 'point':
+                    continue
                 self.restart_averaging(ch) # so instrument displays shows the restart
                 count = self.average_count.get()
                 reps = max(reps, count)
@@ -2533,7 +3086,7 @@ class agilent_PNAL(visaInstrumentAsync):
     def abort(self):
         self.write('ABORt')
     @locked_calling
-    def create_measurement(self, name, param, ch=None):
+    def create_measurement(self, name, param=None, window=None, ch=None):
         """
         name: any unique, non-empty string. If it already exists, we change its param
         param: Any S parameter as S11 or S1_1 (second form only for double-digit port numbers S10_1)
@@ -2543,30 +3096,79 @@ class agilent_PNAL(visaInstrumentAsync):
                Ratio and non-ratio can also use logical receiver notation
                ADC measurement: ADC receiver, then , then source por like AI1,2
                Balanced measurment: ...
+               if not given, will not change it (useful to only set it to a window)
+        window: an integer, if given, will add the measurement to a new trace to a window and activate that window.
+                it will not work if the measurement is already in some trace.
+        The result should change the result of the channel_list device (which lists all measurement of a channel)
         """
         ch_list = self.channel_list.get(ch=ch)
-        ch=self.current_channel.getcache()
-        if name in ch_list:
-            self.select_trace.set(name)
-            command = 'CALCulate{ch}:PARameter:MODify:EXTended "{param}"'.format(ch=ch, param=param)
-        else:
-            command = 'CALCulate{ch}:PARameter:EXTended "{name}","{param}"'.format(ch=ch, name=name, param=param)
-        self.write(command)
+        ch = self.current_channel.getcache()
+        if param is not None:
+            if name in ch_list:
+                self.select_trace.set(name)
+                command = 'CALCulate{ch}:PARameter:MODify:EXTended "{param}"'.format(ch=ch, param=param)
+            else:
+                command = 'CALCulate{ch}:PARameter:EXTended "{name}","{param}"'.format(ch=ch, name=name, param=param)
+            self.write(command)
+        if window is not None:
+            base = "DISPLay:WINDow{}".format(window)
+            self.write(base+" 1")
+            tnum = int(self.ask(base+":TRACe:NEXT?"))
+            self.write(base+':TRACe{tnum}:FEED "{name}"'.format(tnum=tnum, name=name))
     @locked_calling
-    def delete_measurement(self, name=None, ch=None):
+    def delete_measurement(self, name=None, ch=None, only_trace=False):
         """ delete a measurement.
             if name=None: delete all measurements for ch
             see channel_list for the available measurments
+            only_trace when True and when a name is given, will only remove
+              the trace, not the measurement definition.
+              Because the GUI list trace as measurement, the trace will seem to still
+              be active but there will not be any graphic associated with it.
         """
         ch_list = self.channel_list.get(ch=ch)
         ch=self.current_channel.getcache()
         if name is not None:
-            if name not in ch_list:
+            if only_trace:
+                self.select_trace.set(name)
+                wnum = int(self.ask("CALCulate{ch}:PARameter:WNUMber?".format(ch=ch)))
+                tnum = int(self.ask("CALCulate{ch}:PARameter:TNUMber?".format(ch=ch)))
+                command = 'DISPlay:WINDow{wnum}:TRACe{tnum}:DELete'.format(wnum=wnum, tnum=tnum)
+            elif name not in ch_list:
                 raise ValueError(self.perror('Invalid Trace name'))
-            command = 'CALCulate{ch}:PARameter:DELete "{name}"'.format(ch=ch, name=name)
+            else:
+                command = 'CALCulate{ch}:PARameter:DELete "{name}"'.format(ch=ch, name=name)
         else:
             command = 'CALCulate{ch}:PARameter:DELete:ALL'.format(ch=ch)
         self.write(command)
+    @locked_calling
+    def delete_window(self, window=None, keep_meas=False):
+        """ delete a windown.
+            if window=None: delete all windows.
+                            or a number of a list of windows to delete
+            if keep_meas is True, the traces are deleted before the window
+              is removed but the measurement are kept.
+        """
+        qs = quoted_string()
+        def conv_cat(s):
+            ret = qs(s)
+            if ret.lower() == 'empty':
+                v = []
+            else:
+                v = decode_int32(ret)
+            return v
+        if window is None:
+            windows = conv_cat(self.ask("DISPlay:CATalog?"))
+        elif not isinstance(window, (list, tuple, np.ndarray)):
+            windows = [window]
+        else:
+            windows = window
+        for w in windows:
+            base = "DISPLay:WINDow{}".format(w)
+            if keep_meas:
+                traces = conv_cat(self.ask(base+":CATalog?"))
+                for t in traces:
+                    self.write(base+":TRACe{}:DELete".format(t))
+            self.write(base+' 0')
     @locked_calling
     def restart_averaging(self, ch=None):
         #sets ch if necessary
@@ -2778,10 +3380,10 @@ class agilent_PNAL(visaInstrumentAsync):
         return ret
     @staticmethod
     def phase_unwrap(phase_deg):
-        return scipy.rad2deg( scipy.unwrap( scipy.deg2rad(phase_deg) ) )
+        return phase_unwrap(phase_deg, deg=True)
     @staticmethod
     def phase_wrap(phase_deg):
-        return (phase_deg +180.) % 360 - 180.
+        return phase_wrap(phase_deg, deg=True)
     @staticmethod
     def phase_flatten(phase_deg, freq, delay=0., ratio=[0,-1]):
         """
@@ -2876,6 +3478,9 @@ class agilent_PNAL(visaInstrumentAsync):
                 4=YIG cal failed
                 5=Ramp cal failed""")
         self.current_channel = MemoryDevice(1, min=1, max=200)
+        domains_all = ChoiceIndex(['full']+['user%d'%i for i in range(1, 16+1)])
+        domains_user = ChoiceIndex(['user%d'%i for i in range(1, 16+1)], offset=1)
+        self.current_domain = MemoryDevice('user1', choices=domains_user)
         self.active_channels_list = scpiDevice(getstr='SYSTem:CHANnels:CATalog?', str_type=quoted_list(element_type=int))
         def devChOption(*arg, **kwarg):
             options = kwarg.pop('options', {}).copy()
@@ -3003,6 +3608,23 @@ class agilent_PNAL(visaInstrumentAsync):
         self.marker_en = devMkrOption('CALC{ch}:MARKer{mkr}', str_type=bool, autoinit=5)
         marker_funcs = ChoiceStrings('NONE', 'MAXimum', 'MINimum', 'RPEak', 'LPEak', 'NPEak', 'TARGet', 'LTARget', 'RTARget', 'COMPression')
         self.marker_trac_func = devMkrEnOption('CALC{ch}:MARKer{mkr}:FUNCtion', choices=marker_funcs)
+        # make a copy here so the following lambda does not capture self (and prevent deleting)
+        traceN = self.select_trace_N
+        self.marker_domain = devMkrEnOption('CALC{ch}:MEASure{trace}:MARKer{mkr}:FUNCtion:DOMain:USER', choices=domains_all, autoinit=False,
+                                            options_conv=dict(trace=lambda s1, s2: traceN.get()))
+        def devChDomOption(*arg, **kwarg):
+            options = kwarg.pop('options', {}).copy()
+            options.update(domain=self.current_domain)
+            app = kwarg.pop('options_apply', ['ch', 'domain'])
+            kwarg.update(options=options, options_apply=app)
+            return devChOption(*arg, **kwarg)
+
+        # Measure1 can be MEASure{trace} but I think here it does not matter
+        self.domain_stop = devChDomOption('CALCulate{ch}:MEASure1:FUNCtion:DOMain:USER:STOP {domain},{val}',
+                                           'CALCulate{ch}:MEASure1:FUNCtion:DOMain:USER:STOP? {domain}', str_type=float, autoinit=False)
+        self.domain_start = devChDomOption('CALCulate{ch}:MEASure1:FUNCtion:DOMain:USER:STARt {domain},{val}',
+                                          'CALCulate{ch}:MEASure1:FUNCtion:DOMain:USER:STARt? {domain}', str_type=float, autoinit=False)
+
         # This is set only
         self.marker_exec = devMkrOption('CALC{ch}:MARKer{mkr}:FUNCTION:EXECute', choices=marker_funcs, autoget=False)
         self.marker_target = devMkrEnOption('CALC{ch}:MARKer{mkr}:TARGet', str_type=float)
@@ -3350,7 +3972,9 @@ class agilent_ENA(agilent_PNAL):
 ##    Agilent FieldFox network analyzer
 #######################################################
 
+#@register_instrument('Keysight Technologies', 'A.08.19)
 #@register_instrument('Agilent Technologies', 'N9916A', 'A.07.29,2014-02-20.14:09')
+@register_instrument('Keysight Technologies', 'N9916A', alias='N9916A FieldFox')
 @register_instrument('Agilent Technologies', 'N9916A', alias='N9916A FieldFox')
 class agilent_FieldFox(agilent_PNAL):
     """
@@ -3443,9 +4067,11 @@ class agilent_FieldFox(agilent_PNAL):
         extra += ['selected_trace=%r'%traces]
         if cook:
             extra += ['trace_format=%r'%fmts]
-        base = self._conf_helper('installed_options', 'current_mode',
-                                 'bias_en', 'bias_volt', 'bias_src_state', 'bias_volt_meas', 'bias_curr_meas',
-                                 'power_mode_port1', 'power_dbm_port1',
+        base = self._conf_helper('installed_options', 'current_mode')
+        if self._bias_option_installed:
+            base += self._conf_helper('bias_en', 'bias_volt', 'bias_src_state',
+                                      'bias_volt_meas', 'bias_curr_meas')
+        base += self._conf_helper('power_mode_port1', 'power_dbm_port1',
                                  'calib_en', 'freq_start', 'freq_stop', 'ext_ref',
                                  'npoints', 'sweep_time',
                                  'bandwidth', 'cont_trigger', 'trig_source',
@@ -3507,7 +4133,9 @@ class agilent_FieldFox(agilent_PNAL):
         return super(agilent_FieldFox, self)._fetch_getdev(ch=None, traces=traces, unit=unit, mem=mem, xaxis=xaxis)
     def _create_devs(self):
         # Similar commands to ENA or PNAL but without channels
+        self._bias_option_installed = '309' in self.ask('*OPT?').split(',')
         self.installed_options = scpiDevice(getstr='*OPT?', str_type=quoted_string())
+        fw_version = int(self.idn_split()['firmware'].split('.')[1]) # Firmware are something like A.07....
         self.available_modes = scpiDevice(getstr='INSTrument:CATalog?', str_type=quoted_list(sep='","'))
         # INSTRUMENT only accepts the upper version CAT and NA (not cat or na)
         if self.ask('INSTrument?') != '"NA"':
@@ -3516,14 +4144,18 @@ class agilent_FieldFox(agilent_PNAL):
         self.ext_ref = scpiDevice(getstr='SENSe:ROSCillator:SOURce?', str_type=str)
         self.cont_trigger = scpiDevice('INITiate:CONTinuous', str_type=bool)
        # Here we only handle the NA mode
-        # DC bias (option 309)
-        #self._bias_en = scpiDevice('SYSTem:VVS:ENABle', str_type=bool, autoget=False)
-        self._devwrap('bias_en')
-        self.bias_volt = scpiDevice('SYSTem:VVS:VOLTage', str_type=float, min=1., max=32., setget=True)
-        self.bias_volt_meas = scpiDevice(getstr='SYSTem:VVS:MVOLtage?', str_type=float)
-        self.bias_curr_meas = scpiDevice(getstr='SYSTem:VVS:CURRent?', str_type=float)
-        self.bias_src_state = scpiDevice(getstr='SYSTem:VVS?', doc="can be on, off or tripped. To clear toggle the enable.")
-        # end of Bias
+        if self._bias_option_installed:
+            # DC bias (option 309)
+            #self._bias_en = scpiDevice('SYSTem:VVS:ENABle', str_type=bool, autoget=False)
+            self._devwrap('bias_en')
+            if fw_version >= 8:
+                self.bias_volt = scpiDevice('SYSTem:VVS:VOLTage', 'SYSTem:VVS:RVOLtage?', str_type=float, min=1., max=32., setget=True)
+            else:
+                self.bias_volt = scpiDevice('SYSTem:VVS:VOLTage', str_type=float, min=1., max=32., setget=True)
+            self.bias_volt_meas = scpiDevice(getstr='SYSTem:VVS:MVOLtage?', str_type=float)
+            self.bias_curr_meas = scpiDevice(getstr='SYSTem:VVS:CURRent?', str_type=float)
+            self.bias_src_state = scpiDevice(getstr='SYSTem:VVS?', doc="can be on, off or tripped. To clear toggle the enable.")
+            # end of Bias
         #self.power_en = scpiDevice('SOURce:ENABle', str_type=bool)
         self.power_dbm_port1 = scpiDevice(':SOURce:POWer', str_type=float, min=-45., max=3., setget=True, doc="""
                        Note that the power set by this device is not leveled. The instrument can
@@ -3568,7 +4200,7 @@ class agilent_FieldFox(agilent_PNAL):
                 Select the trace using the trace number (1-4).""")
         #self.select_trace3 = scpiDevice('CALCulate:PARameter{val}:SELect', autoinit=8, str_type=int, min=1, max=4,  autoget=False,
         #                                 doc="""Select the trace using the trace number (1-4).""")
-        #self.select_trace4 = scpiDevice('CALCulate:PARameter{val}:SELect', autoinit=False, autoget=False, get_cached_init=1,
+        #self.select_trace4 = scpiDevice('CALCulate:PARameter{val}:SELect', autoinit=False, autoget=False, cache_init=1, cache_as_get=True,
         #                                choices=select_trace_choices2, str_type=int)
         def devCalcOption(*arg, **kwarg):
             extra='CALCulate:PARameter{trace}:SELect;:'

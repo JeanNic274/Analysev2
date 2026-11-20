@@ -517,11 +517,12 @@ class QuantumDesign_PPMS(BaseInstrument):
                           approach  one of {}, defaults to current_field_approach
                           mode      one of {}, defaults to current_field_mode
                       """.format(self.current_field_approach.choices, self.current_field_mode.choices))
-        self._devwrap('temp', setget=True, min=1.7, max=402., doc="""\
+        self._devwrap('temp', setget=True, min=0.01, max=402., doc="""\
                       Units are K
                       Options:
                           rate      in K/min (defaults to temp_rate)
                           approach  one of {}, defaults to current_temp_approach
+                      Minimum is 1.6 K for regular system, 0.35 K for He3 and 0.050 K for dilution.
                       """.format(self.current_temp_approach.choices))
         self._devwrap('position', setget=True, doc="""\
                       Options:

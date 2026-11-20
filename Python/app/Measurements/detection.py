@@ -1,4 +1,4 @@
-# import time
+import time
 # from pathlib import Path
 # import pyvisa
 import numpy as np
@@ -22,9 +22,13 @@ from pyHegel.pyHegel import commands as cmds # pyright: ignore[reportMissingImpo
 class Det_MH150():
     def __init__(self,device):
         self.device = device
-        self.channels = (1,2)
+        self.channels = (3,4)
+
+        
+    
     
     def countRates(self):
+        time.sleep(0.1)
         counts = self.device.getCountRates()
         counts_reduced = [counts[i] for i in self.channels] 
         return counts_reduced + [np.sum(counts_reduced)]

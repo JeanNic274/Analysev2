@@ -189,10 +189,24 @@ def load_Qt5():
 
     return QtCore, QtGuiCompat, 'pyqt5'
 
+def load_Qt6():
+    from PyQt6 import QtGui, QtCore, QtWidgets
+
+    # Alias PyQt-specific functions for PySide compatibility.
+    QtCore.Signal = QtCore.pyqtSignal
+    QtCore.Slot = QtCore.pyqtSlot
+
+    # Join QtGui and QtWidgets for Qt4 compatibility.
+    QtGuiCompat = types.ModuleType('QtGuiCompat')
+    QtGuiCompat.__dict__.update(QtGui.__dict__)
+    QtGuiCompat.__dict__.update(QtWidgets.__dict__)
+
+    return QtCore, QtGuiCompat, 'pyqt6'
+
 
 def load_Side():
-    from PySide6 import QtGui, QtCore, QtWidgets
-    return QtCore, QtGui, QtWidgets, 'pyside'
+    from PySide import QtGui, QtCore
+    return QtCore, QtGui, 'pyside'
 
 
 def processEvents(events_flags=None, max_time_ms=None):
@@ -204,7 +218,10 @@ def processEvents(events_flags=None, max_time_ms=None):
         QtGui.QApplication.processEvents()
     else:
         if events_flags is None:
-            events_flags = QtCore.QEventLoop.AllEvents
+            if api == 'pyqt6':
+                events_flags = QtCore.QEventLoop.ProcessEventsFlag.AllEvents
+            else:
+                events_flags = QtCore.QEventLoop.AllEvents
         if max_time_ms is None: # process all events_flags events
             QtGui.QApplication.processEvents(events_flags)
         else:
@@ -231,7 +248,9 @@ def check_qt(base):
     return False
 
 def load_qt():
-    if check_qt('PyQt5'):
+    if check_qt('PyQt6'):
+        ret = load_Qt6()
+    elif check_qt('PyQt5'):
         ret = load_Qt5()
     elif check_qt('PyQt4'):
         ret = load_Qt4()
@@ -244,7 +263,10 @@ def load_qt():
             try:
                 ret = load_Side()
             except ImportError:
-                ret = load_Qt5()
+                try:
+                    ret = load_Qt5()
+                except ImportError:
+                    ret = load_Qt6()
     return ret
 
 def sleep(sec):
@@ -267,5 +289,5 @@ def sleep(sec):
                 return
             _sleep(min(.1, dif))
 
-QtCore, QtGui, QtWidgets, api = load_Side()
+QtCore, QtGui, api = load_qt()
 

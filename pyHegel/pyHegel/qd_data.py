@@ -13,6 +13,7 @@ from numpy import genfromtxt, isnan, where, array
 import datetime
 import dateutil.tz
 import io
+import warnings
 
 def timestamp_offset(year=None):
     """ Returns the timestamp offset to add to the timestamp column
@@ -93,7 +94,7 @@ def quoted_split(string):
     reader = csv.reader([string])
     return list(reader)[0]
 
-def read_one_ppms_dat(filename, sel_i=0, nbcols=None, encoding='latin1'):
+def read_one_ppms_dat(filename, sel_i=0, nbcols=None, encoding='latin1', comments=';', force_cols=False, no_warnings=False):
     hdrs = []
     titles = []
     i = 0
@@ -101,6 +102,9 @@ def read_one_ppms_dat(filename, sel_i=0, nbcols=None, encoding='latin1'):
     if nbcols is not None:
         kwargs['usecols'] = list(range(nbcols))
         kwargs['invalid_raise'] = False
+    else:
+        # force_cols is only valie when nbcols is given
+        force_cols = False
     with io.open(filename, 'r', encoding=encoding) as f:
         while True:
             line = f.readline().rstrip()
@@ -114,8 +118,28 @@ def read_one_ppms_dat(filename, sel_i=0, nbcols=None, encoding='latin1'):
         i += 1
         hdrs.append(line)
         titles = quoted_split(line)
+        if force_cols:
+            txts = []
+            for line in f:
+                splits = line.split(comments, 2)
+                if len(splits[0].strip()) > 0:
+                    nc = splits[0].count(',')
+                    if nc < nbcols:
+                        line = splits[0] + ','*(nbcols-nc)
+                        if len(splits) == 2:
+                            line += splits[1]
+                txts.append(line)
+            filename = txts
+            i = 0
     titles = np.array(titles)
-    v = genfromtxt(filename, skip_header=i, delimiter=',', encoding=encoding, **kwargs).T
+    # Comments=None disables it. Needed because I have seen data
+    #  given as 1.#QNAN and -1.#QNAN
+    # This way, it is handle like any bad or empty strings and returns the dafault nan
+    # In 2026-07-27 I changed the default to be ';'
+    with warnings.catch_warnings():
+        if no_warnings:
+            warnings.simplefilter('ignore', category=np.lib._iotools.ConversionWarning)
+        v = genfromtxt(filename, skip_header=i, delimiter=',', comments=comments, encoding=encoding, **kwargs).T
     if v.ndim == 1:
         # There was only one line:
         v = v[:, np.newaxis]
@@ -158,19 +182,23 @@ def _glob(filename):
 
 class QD_Data(object):
     def __init__(self, filename_or_data, sel_i=0, titles=None, qd_data=None, concat=False, nbcols=None, timestamp='auto',
-                 encoding='latin1'):
+                 encoding='latin1', comments=';', force_cols=False, no_warnings=False):
         """ provide either a numpy data array a filename or a list of filenames,
             of a Quantum Design .dat file. The filenames can have glob patterns (*,?).
             When multiple files are provided, either they are concatenated if
             concat is True (last axis) or they are combined in a 3D array
             with the middle dimension the file number, but only if they
             all have the same shape.
+            comment is the comment character to use. It used to be set to None.
+             Mpms raw data files use ';' and it is used in headers so it is
+             the new default as of 2027-07-27
             When providing data, you should also provide titles
             sel_i, when not None, will select columns that are not NaN.
              It is only applied on the first file.
             The object returned can be indexed directly,
             you can also use the v attribute which refers the the data
               with selected colunmns or vr which is the raw data.
+            no_warnings when True will skip showing invalid number of columns.
             The t attribute will be the converted timestamp.
             The trel attribute is the timestamp column minus the first value.
             timestamp is the parameter used for do_timestamp.
@@ -182,6 +210,8 @@ class QD_Data(object):
             nbcols when not None, forces to load that particular number of column and
                     skip lines without enough elements.
                     Use it if you receive ValueError with showing the wrong number of columns.
+                    You can combine it with the force_cols=True option to prevent the error
+                    when columns are missing and read what is already there.
 
             Use show_titles to see the selected columns.
             Use do_sel and do_timestamp to change the column selection or the t attribute.
@@ -209,7 +239,8 @@ class QD_Data(object):
             hdrs_all = []
             vr_all = []
             for f in filenames:
-                v, _titles, hdrs, sel = read_one_ppms_dat(f, sel_i=None, nbcols=nbcols, encoding=encoding)
+                v, _titles, hdrs, sel = read_one_ppms_dat(f, sel_i=None, nbcols=nbcols, encoding=encoding,
+                                             comments=comments, force_cols=force_cols, no_warnings=no_warnings)
                 if titles is None:
                     titles = _titles
                 if first:

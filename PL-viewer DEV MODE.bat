@@ -2,11 +2,11 @@
 
 REM Edit base path to work:
 
-set DIRECTORY="C:...\Analysev2"
+set DIRECTORY="D:\JHoule\Code\AnalyseV2"
 
 
 cd /d %DIRECTORY%
 
 :restart
-"AnalyseV2\Scripts\python.exe" "main.py"
+".venv-Houle\Scripts\python.exe" "main.py"
 goto restart
